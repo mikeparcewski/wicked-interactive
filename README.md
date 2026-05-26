@@ -10,7 +10,7 @@ then navigate versions, fork, and export to self-contained HTML or PDF.
 
 ## Status
 
-Increments 1–3 done. Remaining: LLM structural path, FIFO queue + fork UI, HTML/PDF export.
+Increments 1–4 done. Remaining: FIFO queue + fork UI, HTML/PDF export.
 
 **Increment 1 — core engine.** Pure, browser-free logic:
 
@@ -28,6 +28,12 @@ regenerates, and pushes `html-updated`. The `serve` CLI is the one command a use
 **Increment 3 — React frontend** (`frontend/`). Block hover-select keyed to `data-wid`,
 feedback panel, pending-edit overlay, the UPDATE button, SSE iframe-swap hot-reload
 (ADR-0006), and the version navigation strip. The service serves the built app at `/`.
+
+**Increment 4 — structural delegation** (`src/service/structural.js`). The service is
+model-free: deterministic edits apply immediately (partial version), and
+`structural-change` items are delegated to the **supervising agent** (ADR-0010) via a
+request/response file protocol under `requests/`. The agent edits the fragment preserving
+every `data-wid`; the service applies it through the INV-2 gate as a follow-on version.
 
 ## Develop
 

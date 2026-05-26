@@ -19,6 +19,10 @@ loss — the council's single highest-rated risk.
 - `structural-change` → send **only the serialized fragment** of the targeted element
   to the LLM with a strict system prompt ("edit only this element; preserve every
   `data-wid` verbatim"); swap the returned fragment back into the document.
+  **The "LLM" here is the supervising agent, reached by delegation — not an embedded
+  model client. See ADR-0010** for the request/response-file protocol and the
+  partial-now/finalize-on-reply async behavior. The engine's `opts.llm` hook is the seam:
+  in production it is satisfied by an agent-supplied fragment; in tests by a fake.
 - After any LLM edit, run a **blocking assertion (INV-2):** every `data-wid` present in
   the input fragment must be present and unchanged in the output. On violation, the
   regeneration is **rejected** — not displayed — and the offending item is surfaced to

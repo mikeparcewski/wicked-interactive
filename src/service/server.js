@@ -6,9 +6,10 @@ import express from "express";
 import chokidar from "chokidar";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
 import { writeFeedback, processFeedbackFile, loadManifest, readVersionHtml } from "./workspace.js";
+import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -19,7 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * @param {Function} [opts.llm]     structural-change LLM (increment 4)
  * @param {boolean} [opts.watch]    enable chokidar processing (default true)
  */
-export function createServer({ dir, documentId = "doc", llm, watch = true, frontendDir } = {}) {
+export function createServer({ dir, documentId = "doc", watch = true, frontendDir } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
   const sseClients = new Set();
@@ -80,25 +81,37 @@ export function createServer({ dir, documentId = "doc", llm, watch = true, front
   if (existsSync(staticDir)) app.use(express.static(staticDir));
 
   let watcher;
-  const FEEDBACK_FILE = /^_v\d+\.md$/; // chokidar v4 dropped globs — watch the dir, filter here
+  const root = resolve(dir);
+  const FEEDBACK_FILE = /^_v\d+\.md$/;             // feedback batch, in the workspace root
+  const RESPONSE_FILE = /^_v\d+\.response\.json$/; // agent's structural reply, in requests/
   function startWatching() {
-    watcher = chokidar.watch(dir, { ignoreInitial: true, depth: 0 });
+    mkdirSync(resolve(dir, REQUESTS_DIR), { recursive: true }); // so depth:1 sees responses
+    // chokidar v4 dropped globs — watch the tree (depth 1) and route by path here.
+    watcher = chokidar.watch(dir, { ignoreInitial: true, depth: 1 });
     watcher.on("add", async (p) => {
-      const mdFile = basename(p);
-      if (!FEEDBACK_FILE.test(mdFile)) return;
+      const name = basename(p);
       try {
-        const result = await processFeedbackFile(dir, mdFile, { emit, llm, documentId });
-        if (!result.idempotent) {
+        if (FEEDBACK_FILE.test(name) && resolve(dirname(p)) === root) {
+          const result = await processFeedbackFile(dir, name, { emit, documentId });
+          if (!result.idempotent) {
+            broadcast("processed", {
+              version: result.version, applied: result.applied,
+              rejected: result.rejected, stale: result.stale,
+              awaiting_structural: result.awaiting_structural,
+            });
+          }
+        } else if (RESPONSE_FILE.test(name)) {
+          const result = await applyStructuralResponse(dir, name, { emit, documentId });
           broadcast("processed", {
-            version: result.version, applied: result.applied,
-            rejected: result.rejected, stale: result.stale,
+            version: result.version, parent: result.parent,
+            applied: result.applied, rejected: result.rejected, structural: true,
           });
         }
       } catch (e) {
-        broadcast("error", { file: mdFile, error: e.message });
+        broadcast("error", { file: name, error: e.message });
       }
     });
-    return new Promise((resolve) => watcher.on("ready", resolve));
+    return new Promise((res) => watcher.on("ready", res));
   }
 
   let server;
