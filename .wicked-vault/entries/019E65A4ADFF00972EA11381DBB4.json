@@ -18,7 +18,7 @@
   "payload_ref": "payloads/e55a110e421c06bbb0febd15847c265ad0a180e3f354e1b24a651c9254b5be86",
   "envelope_hash": "a89f2cd6197326f41b716369b37471e34ac5a92c186861a22de8d46f9c717074",
   "status_at_record": "pass",
-  "state": "active",
+  "state": "superseded",
   "supersedes": null,
   "contract_version": "589502d008c8db1a",
   "created_at": "2026-05-26T18:55:51.808Z",

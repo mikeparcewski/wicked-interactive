@@ -54,6 +54,31 @@ export function addVersion(manifest, { parent = manifest.head, feedbackFile = nu
 }
 
 /**
+ * Record a version with an explicit number (used by the feedback flow, which allocates
+ * the number when it writes `_v{n}.md` — before the HTML exists). Write-once: refuses to
+ * overwrite an existing version. Advances head to the recorded version.
+ */
+export function recordVersion(manifest, { version, parent, feedbackFile = null }) {
+  if (getVersion(manifest, version) != null) throw new Error(`recordVersion: v${version} already exists`);
+  if (parent != null && getVersion(manifest, parent) == null) {
+    throw new Error(`recordVersion: parent v${parent} does not exist`);
+  }
+  const entry = {
+    version,
+    parent,
+    feedback_file: feedbackFile,
+    html_file: `_v${version}.html`,
+    created_at: now(),
+  };
+  return { manifest: { head: version, versions: [...manifest.versions, entry] }, version };
+}
+
+/** Next version number that would be allocated (max + 1). */
+export function nextVersionNumber(manifest) {
+  return nextNumber(manifest);
+}
+
+/**
  * Fork from an existing version (AC-21): non-destructive — creates a new head whose
  * parent is `from`; all existing versions remain. "Start again from here".
  */
