@@ -30,3 +30,15 @@ export async function postFork(from) {
   if (!r.ok) throw new Error(body.error || "fork failed");
   return body;
 }
+
+// Export the given version to self-contained HTML or PDF (ADR-0009).
+export async function postExport(version, format) {
+  const r = await fetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version, format }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || "export failed");
+  return body;
+}

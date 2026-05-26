@@ -21,7 +21,11 @@ exports the working-head `_vN.html`.
 - **HTML export:** inline all CSS, JS, fonts, and images (data-URI) into a single
   `.html` that renders and retains interactivity directly from the filesystem (no
   server).
-- **PDF export:** render via wicked-prezzie's Chrome-headless render/PDF primitives.
+- **PDF export:** render the self-contained HTML via Chrome-headless `--print-to-pdf`.
+  *(Build-phase note, 2026-05-26: `wicked-prezzie` is a plugin/skill, not an importable
+  npm library, so we call the underlying primitive — headless Chrome — directly. This is
+  the same engine prezzie wraps. The renderer is injectable, so a prezzie library API can
+  be swapped in later without touching callers.)*
 - The resulting file path is surfaced back to the UI (AC-26).
 - **PPTX is explicitly out of v1 scope.**
 

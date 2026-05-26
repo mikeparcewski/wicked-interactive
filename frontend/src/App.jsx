@@ -3,7 +3,7 @@ import Overlay from "./components/Overlay.jsx";
 import FeedbackPanel from "./components/FeedbackPanel.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport } from "./lib/api.js";
 import { emptyFeedback, upsertItem, removeItem, clearItems } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
 
@@ -115,6 +115,17 @@ export default function App() {
     }
   }
 
+  async function exportAs(format) {
+    if (viewing == null) return;
+    setStatus({ kind: "ok", text: `Exporting v${viewing} as ${format.toUpperCase()}…` });
+    try {
+      const { path } = await postExport(viewing, format);
+      setStatus({ kind: "ok", text: `Exported ${format.toUpperCase()}: ${path}` });
+    } catch (e) {
+      setStatus({ kind: "error", text: e.message });
+    }
+  }
+
   const existingFor = (sel) => feedback.items.find((i) => i.selector === sel);
   const viewingIsHead = manifest && viewing === manifest.head;
 
@@ -131,6 +142,8 @@ export default function App() {
         <button className="wi-btn wi-btn--primary" disabled={feedback.items.length === 0 || busy} onClick={update}>
           {busy ? "Updating…" : `UPDATE${feedback.items.length ? ` (${feedback.items.length})` : ""}`}
         </button>
+        <button className="wi-btn" disabled={viewing == null} onClick={() => exportAs("html")}>Export HTML</button>
+        <button className="wi-btn" disabled={viewing == null} onClick={() => exportAs("pdf")}>Export PDF</button>
       </header>
 
       {status && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}

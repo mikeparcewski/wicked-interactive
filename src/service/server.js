@@ -10,6 +10,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
 import { writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
+import { exportHtml, exportPdf } from "./export.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -82,6 +83,21 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
         document_id: documentId, version, html_file: `_v${version}.html`, prev_version: parent, ts: new Date().toISOString(),
       });
       res.json({ version, parent });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Export to self-contained HTML or PDF (ADR-0009), triggered from the browser.
+  app.post("/api/export", (req, res) => {
+    const version = Number(req.body?.version);
+    const format = String(req.body?.format || "html").toLowerCase();
+    if (!Number.isInteger(version)) return res.status(400).json({ error: "version (number) required" });
+    if (format !== "html" && format !== "pdf") return res.status(400).json({ error: "format must be html or pdf" });
+    try {
+      const result = format === "pdf" ? exportPdf(dir, version) : exportHtml(dir, version);
+      busEmit(EVENTS.EXPORT_REQUESTED, { document_id: documentId, version, format, ts: new Date().toISOString() });
+      res.json({ format, ...result });
     } catch (e) {
       res.status(400).json({ error: e.message });
     }

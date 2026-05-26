@@ -10,7 +10,7 @@ then navigate versions, fork, and export to self-contained HTML or PDF.
 
 ## Status
 
-Increments 1–5 done. Remaining: HTML/PDF export, acceptance test.
+Increments 1–6 done. Remaining: acceptance test (browser-driven E2E).
 
 **Increment 1 — core engine.** Pure, browser-free logic:
 
@@ -39,6 +39,11 @@ every `data-wid`; the service applies it through the INV-2 gate as a follow-on v
 UPDATEs never race the manifest (ADR-0007); `writeFeedback` reserves distinct version
 numbers across rapid writes. `forkVersion` + `POST /api/fork` implement non-destructive
 "start again from here" (ADR-0008), surfaced as a button when viewing a non-head version.
+
+**Increment 6 — export** (`src/service/export.js`). `POST /api/export` produces a
+self-contained interactive HTML (local CSS/JS/images and `url()` refs inlined as
+data-URIs) or a PDF (headless Chrome `--print-to-pdf` — the primitive wicked-prezzie
+wraps; ADR-0009). The renderer is injectable. Export HTML / Export PDF buttons in the UI.
 
 ## Develop
 
