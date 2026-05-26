@@ -18,3 +18,15 @@ export async function postFeedback(items) {
   if (!r.ok) throw new Error(body.error || "feedback failed");
   return body;
 }
+
+// Fork / "start again from here" (ADR-0008): non-destructive.
+export async function postFork(from) {
+  const r = await fetch("/api/fork", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || "fork failed");
+  return body;
+}

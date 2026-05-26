@@ -8,7 +8,7 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, mkdirSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
-import { writeFeedback, processFeedbackFile, loadManifest, readVersionHtml } from "./workspace.js";
+import { writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +35,11 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     busEmit(EVENTS[key], payload);
     if (key === "HTML_UPDATED") broadcast("html-updated", payload);
   }
+
+  // FIFO serialization (ADR-0007): process watcher events one at a time so concurrent
+  // regenerations never race on the manifest.
+  let queue = Promise.resolve();
+  const enqueue = (task) => { queue = queue.then(task).catch(() => {}); return queue; };
 
   app.get("/api/versions", (_req, res) => {
     try { res.json(loadManifest(dir)); } catch (e) { res.status(404).json({ error: e.message }); }
@@ -67,6 +72,21 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     }
   });
 
+  // Fork / "start again from here" (ADR-0008, AC-21): non-destructive.
+  app.post("/api/fork", (req, res) => {
+    const from = Number(req.body?.from);
+    if (!Number.isInteger(from)) return res.status(400).json({ error: "from (version number) required" });
+    try {
+      const { version, parent } = forkVersion(dir, from);
+      emit("HTML_UPDATED", {
+        document_id: documentId, version, html_file: `_v${version}.html`, prev_version: parent, ts: new Date().toISOString(),
+      });
+      res.json({ version, parent });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
   app.get("/events", (req, res) => {
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.flushHeaders?.();
@@ -88,7 +108,7 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     mkdirSync(resolve(dir, REQUESTS_DIR), { recursive: true }); // so depth:1 sees responses
     // chokidar v4 dropped globs — watch the tree (depth 1) and route by path here.
     watcher = chokidar.watch(dir, { ignoreInitial: true, depth: 1 });
-    watcher.on("add", async (p) => {
+    watcher.on("add", (p) => enqueue(async () => {
       const name = basename(p);
       try {
         if (FEEDBACK_FILE.test(name) && resolve(dirname(p)) === root) {
@@ -110,7 +130,7 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
       } catch (e) {
         broadcast("error", { file: name, error: e.message });
       }
-    });
+    }));
     return new Promise((res) => watcher.on("ready", res));
   }
 

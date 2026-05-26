@@ -1,0 +1,26 @@
+{
+  "id": "019E6637623AF6F93CC654F9732B",
+  "scope": "wicked-interactive",
+  "phase": "build",
+  "claim_id": "tests-pass",
+  "kind": "test-run",
+  "source": "npm test",
+  "verifier": {
+    "kind": "exit_code_eq",
+    "params": {
+      "code": 0
+    }
+  },
+  "criteria_sha256": "8b2c1b919c202ffc65295c63069082a06ea344a4a9e31d389720edc3ade33327",
+  "payload_sha256": "a4456e00482cfdaebd2ab9426db22e560d5381904badcdab0c2e632fd3ca1dde",
+  "acceptance_criteria": "node --test exits 0; 61 tests pass (core, service pipeline, frontend logic, structural delegation, FIFO queue + fork).",
+  "criteria_authored_by": "record",
+  "payload_ref": "payloads/a4456e00482cfdaebd2ab9426db22e560d5381904badcdab0c2e632fd3ca1dde",
+  "envelope_hash": "a462e0415c6b7a93cd8315716517280eead76b073f36bac1e555de43eecce6d7",
+  "status_at_record": "pass",
+  "state": "active",
+  "supersedes": "019E65C8C72D7BD81C5CDD4C58A3",
+  "contract_version": "c6fcfc094e77d7a2",
+  "created_at": "2026-05-26T21:36:06.203Z",
+  "created_by": "michael.parcewski"
+}

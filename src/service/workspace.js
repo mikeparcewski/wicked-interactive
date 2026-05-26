@@ -10,7 +10,7 @@
 // watcher never reads a half-written file. Deterministic edits apply immediately;
 // structural edits are delegated to the supervising agent (ADR-0010).
 
-import { readFileSync, mkdirSync } from "node:fs";
+import { readFileSync, mkdirSync, readdirSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { instrument } from "../core/instrument.js";
 import { parseFeedback, serializeFeedback } from "../core/feedback-schema.js";
@@ -23,6 +23,17 @@ import { splitItems, writeStructuralRequest } from "./structural.js";
 export { loadManifest, readVersionHtml } from "./fsstore.js";
 
 const versionFromHtmlFile = (f) => Number(/_v(\d+)\.html$/.exec(f)?.[1]);
+
+// Highest _v{n}.{md,html} on disk — so rapid writes reserve distinct numbers even before
+// the manifest is updated (two quick UPDATEs must not both grab _v1.md).
+function highestVersionOnDisk(dir) {
+  let max = -1;
+  for (const f of readdirSync(dir)) {
+    const m = /^_v(\d+)\.(md|html)$/.exec(f);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
 
 /**
  * Initialise a workspace from an HTML draft. Instruments it with data-wid (unless
@@ -45,7 +56,7 @@ export function initWorkspace(dir, html, opts = {}) {
 export function writeFeedback(dir, { items, author }) {
   const manifest = loadManifest(dir);
   const base = getVersion(manifest, manifest.head);
-  const version = nextVersionNumber(manifest);
+  const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
   const feedback = {
     frontmatter: {
       version, base_html: base.html_file, timestamp: new Date().toISOString(),
@@ -58,6 +69,22 @@ export function writeFeedback(dir, { items, author }) {
   const file = `_v${version}.md`;
   atomicWrite(join(dir, file), md);
   return { version, file };
+}
+
+/**
+ * Fork from an existing version (AC-21): non-destructive "start again from here". Copies
+ * _v{from}.html to a new write-once version whose parent is `from`; the new version becomes
+ * the head. Nothing is removed (AC-22).
+ * @returns {{ version: number, parent: number }}
+ */
+export function forkVersion(dir, from) {
+  let manifest = loadManifest(dir);
+  if (getVersion(manifest, from) == null) throw new Error(`fork: v${from} does not exist`);
+  const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
+  copyFileSync(join(dir, `_v${from}.html`), join(dir, `_v${version}.html`));
+  ({ manifest } = recordVersion(manifest, { version, parent: from, feedbackFile: null }));
+  saveManifest(dir, manifest);
+  return { version, parent: from };
 }
 
 /**

@@ -3,7 +3,7 @@ import Overlay from "./components/Overlay.jsx";
 import FeedbackPanel from "./components/FeedbackPanel.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork } from "./lib/api.js";
 import { emptyFeedback, upsertItem, removeItem, clearItems } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
 
@@ -106,13 +106,28 @@ export default function App() {
     }
   }
 
+  async function startAgainFrom(version) {
+    setStatus(null);
+    try {
+      await postFork(version);           // new head arrives via SSE
+    } catch (e) {
+      setStatus({ kind: "error", text: e.message });
+    }
+  }
+
   const existingFor = (sel) => feedback.items.find((i) => i.selector === sel);
+  const viewingIsHead = manifest && viewing === manifest.head;
 
   return (
     <div className="wi-app">
       <header className="wi-header">
         <span className="wi-logo">wicked-interactive</span>
         <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
+        {manifest && !viewingIsHead && (
+          <button className="wi-btn wi-btn--ghost" onClick={() => startAgainFrom(viewing)}>
+            ↳ Start again from v{viewing}
+          </button>
+        )}
         <button className="wi-btn wi-btn--primary" disabled={feedback.items.length === 0 || busy} onClick={update}>
           {busy ? "Updating…" : `UPDATE${feedback.items.length ? ` (${feedback.items.length})` : ""}`}
         </button>

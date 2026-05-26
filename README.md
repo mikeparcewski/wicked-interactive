@@ -10,7 +10,7 @@ then navigate versions, fork, and export to self-contained HTML or PDF.
 
 ## Status
 
-Increments 1–4 done. Remaining: FIFO queue + fork UI, HTML/PDF export.
+Increments 1–5 done. Remaining: HTML/PDF export, acceptance test.
 
 **Increment 1 — core engine.** Pure, browser-free logic:
 
@@ -34,6 +34,11 @@ model-free: deterministic edits apply immediately (partial version), and
 `structural-change` items are delegated to the **supervising agent** (ADR-0010) via a
 request/response file protocol under `requests/`. The agent edits the fragment preserving
 every `data-wid`; the service applies it through the INV-2 gate as a follow-on version.
+
+**Increment 5 — queue + fork.** A FIFO queue serializes watcher processing so concurrent
+UPDATEs never race the manifest (ADR-0007); `writeFeedback` reserves distinct version
+numbers across rapid writes. `forkVersion` + `POST /api/fork` implement non-destructive
+"start again from here" (ADR-0008), surfaced as a button when viewing a non-head version.
 
 ## Develop
 
