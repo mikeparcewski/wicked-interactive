@@ -1,0 +1,27 @@
+// selection.js — map a clicked/hovered node in the (same-origin) document iframe back to
+// its data-wid anchor (ADR-0001). DOM-agnostic: works on anything with getAttribute +
+// parentElement + textContent, so it unit-tests without a browser.
+
+/** Walk up from a node to the nearest ancestor carrying a data-wid. */
+export function nearestReviewable(node) {
+  let el = node;
+  while (el) {
+    if (typeof el.getAttribute === "function" && el.getAttribute("data-wid")) return el;
+    el = el.parentElement || el.parentNode || null;
+  }
+  return null;
+}
+
+const normText = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+
+/** Describe a reviewable element for the feedback panel + the `before` snapshot (AC-10). */
+export function describe(el) {
+  if (!el || typeof el.getAttribute !== "function") return null;
+  const selector = el.getAttribute("data-wid");
+  if (!selector) return null;
+  return {
+    selector,
+    tag: String(el.tagName || "").toLowerCase(),
+    before: normText(el.textContent),
+  };
+}

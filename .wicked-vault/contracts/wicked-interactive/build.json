@@ -12,9 +12,20 @@
         }
       },
       "required": true
+    },
+    {
+      "claim_id": "frontend-build",
+      "kind": "build",
+      "verifier": {
+        "kind": "exit_code_eq",
+        "params": {
+          "code": 0
+        }
+      },
+      "required": true
     }
   ],
-  "contract_version": "589502d008c8db1a",
+  "contract_version": "c6fcfc094e77d7a2",
   "origin": "cli",
-  "declared_at": "2026-05-26T18:51:03.772Z"
+  "declared_at": "2026-05-26T19:23:04.134Z"
 }

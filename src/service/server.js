@@ -4,9 +4,13 @@
 
 import express from "express";
 import chokidar from "chokidar";
-import { basename } from "node:path";
+import { basename, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
 import { writeFeedback, processFeedbackFile, loadManifest, readVersionHtml } from "./workspace.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
  * @param {object} opts
@@ -15,7 +19,7 @@ import { writeFeedback, processFeedbackFile, loadManifest, readVersionHtml } fro
  * @param {Function} [opts.llm]     structural-change LLM (increment 4)
  * @param {boolean} [opts.watch]    enable chokidar processing (default true)
  */
-export function createServer({ dir, documentId = "doc", llm, watch = true } = {}) {
+export function createServer({ dir, documentId = "doc", llm, watch = true, frontendDir } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
   const sseClients = new Set();
@@ -69,6 +73,11 @@ export function createServer({ dir, documentId = "doc", llm, watch = true } = {}
     sseClients.add(res);
     req.on("close", () => sseClients.delete(res));
   });
+
+  // Serve the built React app at / (production). In dev, Vite serves it and proxies the
+  // API/doc/events back here. Mounted after the API routes so they take precedence.
+  const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
+  if (existsSync(staticDir)) app.use(express.static(staticDir));
 
   let watcher;
   const FEEDBACK_FILE = /^_v\d+\.md$/; // chokidar v4 dropped globs — watch the dir, filter here
