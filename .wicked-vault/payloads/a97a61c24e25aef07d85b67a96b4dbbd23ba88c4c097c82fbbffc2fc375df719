@@ -1,0 +1,1 @@
+{"captured_at":"2026-05-26T18:44:16.419Z","command":"python3 /tmp/wi-check-adr-sections.py","exit_code":0,"stderr":"","stdout":"checked 9 ADRs for Status/Context/Decision/Consequences; missing: []\n"}

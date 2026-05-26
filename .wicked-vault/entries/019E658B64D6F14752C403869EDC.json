@@ -1,0 +1,25 @@
+{
+  "id": "019E658B64D6F14752C403869EDC",
+  "scope": "requirements",
+  "phase": "specify",
+  "claim_id": "smart-acceptance-criteria",
+  "kind": "custom",
+  "verifier": {
+    "kind": "regex_match",
+    "params": {
+      "pattern": "\\*\\*(AC|INV)-\\d+"
+    }
+  },
+  "criteria_sha256": "756325ea27ed7eef2225d25b8d25e8614dd1f6e3d090b23b622ff8bef2497bec",
+  "payload_sha256": "a72f29bd3a95ef60e14284a39a08916c0101f95461387c3db26e012ed9badfb8",
+  "acceptance_criteria": "Each acceptance criterion is individually testable: AC-N lines use Given/When/Then or a measurable assertion, and INV-N lines state a measurable must-not-change invariant. The document must contain numbered, bolded AC/INV criteria.",
+  "criteria_authored_by": "record",
+  "payload_ref": "payloads/a72f29bd3a95ef60e14284a39a08916c0101f95461387c3db26e012ed9badfb8",
+  "envelope_hash": "9edd031143505507ae7b38e91e3bfb6740e5c43da788d1ddfa5e54379c40bb3e",
+  "status_at_record": "pass",
+  "state": "superseded",
+  "supersedes": "019E658B2A529770D3A55D9AA536",
+  "contract_version": null,
+  "created_at": "2026-05-26T18:28:14.679Z",
+  "created_by": "michael.parcewski"
+}

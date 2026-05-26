@@ -1,0 +1,193 @@
+# Requirements — Interactive HTML & Presentation Builder
+
+**Project:** wicked-interactive
+**Status:** DRAFT — pending user signoff on acceptance criteria (specify validate gate)
+**Date:** 2026-05-26
+**Archetype:** `specify` (elicit → structure → validate)
+
+---
+
+## 1. Context & Goal
+
+A system that lets **non-technical business users** build and iteratively refine
+interactive HTML and presentations almost entirely **in the browser**, with minimal
+CLI exposure. The user reviews a rendered draft, selects blocks, attaches plain-language
+feedback, clicks **UPDATE**, and the draft regenerates and re-displays live. The user
+can navigate the full version history, reset to any prior version, and export the result.
+
+**North-star:** the business user touches the CLI exactly once (to start a session);
+everything else happens in the browser.
+
+### Existing substrate (reuse, do not reinvent)
+- **wicked-prezzie** — HTML→PPTX conversion, Chrome-headless layout extraction, render,
+  theme, per-slide compare-and-refine. Consumed as a **library**, not via subprocess.
+- **wicked-bus** — internal event spine (at-least-once delivery, SQLite-backed).
+- **wicked-brain** — project knowledge. **wicked-testing** — verification.
+
+### Architecture constraints (decided by multi-model council, 3/3 consensus — 2026-05-26)
+These are *given*, formalized as ADRs (see `docs/adr/`). They are constraints on the
+solution, not acceptance criteria:
+- Stable element anchoring via injected `data-wid` semantic IDs (`{slide}-{role}-{ordinal}`).
+- Feedback file `_v{x}.md` = YAML frontmatter + per-element sections (selector, `type`
+  enum, instruction, `before` snapshot).
+- Determinism-first hybrid regeneration: cheerio DOM surgery for content/style;
+  fragment-scoped LLM only for structural changes.
+- Live loop: chokidar file-watch → wicked-bus → SSE → iframe `src` swap.
+- One long-running local service; wicked-bus as the event spine.
+
+### v1 scope decisions (elicited 2026-05-26)
+| # | Decision | Choice |
+|---|----------|--------|
+| A | v1 build scope | **Generate + instrument** — v1 authors HTML from a brief AND instruments it with `data-wid` |
+| B | Reset semantics | **Fork (non-destructive)** — reset copies a version as new head; nothing is destroyed |
+| C | Export | **Browser button, in v1** — self-contained HTML + PDF |
+| D | LLM in v1 | **LLM in v1** — full hybrid engine ships in v1, gated by ID-preservation invariant (INV-2) |
+
+> **Risk note (council deviation):** v1 is intentionally fatter than the council's
+> recommended zero-LLM/zero-export MVP. The council's top risk — the LLM dropping
+> `data-wid` IDs during structural edits — is mitigated, not avoided, by INV-2
+> (ID-preservation gate) and INV-3 (no collateral change). This risk is accepted by
+> the product owner and tracked for the build phase.
+
+---
+
+## 2. Glossary
+- **data-wid** — stable semantic element ID injected at build time: `{slide}-{role}-{ordinal}`.
+- **Version chain** — ordered sequence `_v0 → _v1 → _vN`; each version is one HTML artifact
+  (`_vN.html`) plus the feedback that produced it (`_vN.md`).
+- **Feedback item** — one targeted edit: `{selector, type, instruction, before}`.
+- **type enum** — `content-edit` | `style-edit` | `structural-change`.
+- **Working head** — the version currently shown and edited against.
+
+---
+
+## 3. Acceptance Criteria
+
+Tags: **[v1]** = in the first shippable version · **[later]** = deferred to a later phase.
+Form: `AC-N: Given … When … Then …` (observable, testable).
+
+### R1 — Build (generate + instrument)
+- **AC-1 [v1]:** Given a content brief, When the user runs the build skill, Then the system
+  produces an interactive HTML draft saved as `_v0.html` in the document workspace.
+- **AC-2 [v1]:** Given a generated or supplied HTML draft, When it is prepared for review,
+  Then every reviewable block carries a unique `data-wid` of the form `{slide}-{role}-{ordinal}`,
+  and no two elements share a `data-wid`.
+- **AC-3 [v1]:** Given a draft is built, When it is opened, Then it renders in the browser via
+  the React front end without the user issuing any further CLI command.
+- **AC-4 [later]:** Given an existing externally-authored HTML file (AI-generated or
+  wicked-prezzie output), When the user points the build skill at it, Then it is instrumented
+  with `data-wid` IDs and enters the same review loop.
+
+### R2 — In-browser feedback
+- **AC-5 [v1]:** Given the draft is displayed, When the user hovers a reviewable block,
+  Then that whole element is visibly outlined and selectable (block-level; arbitrary
+  text-range selection is **[later]**).
+- **AC-6 [v1]:** Given a block is selected, When the user opens the feedback control,
+  Then they can attach a plain-language instruction and choose/confirm the edit `type`.
+- **AC-7 [v1]:** Given one or more feedback items are attached, When the user views the page,
+  Then a visible indicator shows which blocks have pending feedback and how many.
+
+### R3 — UPDATE → versioned markdown
+- **AC-8 [v1]:** Given pending feedback exists, When the user clicks **UPDATE**, Then a file
+  `_v{x}.md` is written where `x` is the next integer in the chain, containing YAML frontmatter
+  (`version`, `base_html`, `timestamp`) and one section per item with `selector` (data-wid),
+  `type`, `instruction`, and `before` (original snapshot).
+- **AC-9 [v1]:** Given an UPDATE is in progress, When the user clicks UPDATE again, Then the
+  control is disabled until processing completes (no double-submit).
+- **AC-10 [v1]:** Given a feedback item references a `data-wid` whose current content differs
+  from its recorded `before`, When the file is processed, Then the stale item is flagged
+  rather than silently applied.
+
+### R4 — Monitor + regeneration
+- **AC-11 [v1]:** Given a new `_v{x}.md` appears, When the monitor detects it, Then it produces
+  `_v{x}.html` by reading the prior `_v{x-1}.html` and applying only the listed edits.
+- **AC-12 [v1]:** Given a `content-edit` or `style-edit` item, When it is processed, Then the
+  change is applied by deterministic DOM surgery (no LLM call) and only the targeted element
+  changes.
+- **AC-13 [v1]:** Given a `structural-change` item, When it is processed, Then only the serialized
+  fragment of the targeted element is sent to the LLM, and the returned fragment is swapped back
+  in place.
+- **AC-14 [v1]:** Given any regeneration completes, When the output is written, Then the prior
+  version file is left byte-unchanged on disk (write-once; never overwrite a `_vN`).
+
+### R5 — Live loop
+- **AC-15 [v1]:** Given a new `_v{x}.html` is produced, When the browser is showing the document,
+  Then the displayed content updates to `_v{x}` within **2 seconds** for deterministic edits
+  without a full page navigation.
+- **AC-16 [v1]:** Given the page updates to a new version, When the swap occurs, Then the user's
+  scroll position is preserved (within one viewport) and their in-progress annotation overlay
+  is not lost.
+- **AC-17 [v1]:** Given the monitor is processing, When regeneration has started but not finished,
+  Then the UI shows a processing indicator within 500ms of UPDATE.
+
+### R6 — Architecture / service
+- **AC-18 [v1]:** Given a fresh session, When the user runs the single start command, Then one
+  local service starts, serves the React app, watches the workspace, and opens the browser —
+  with no further CLI interaction required for the rest of the session.
+- **AC-19 [v1]:** Given the loop runs, When feedback is received, regeneration completes, and
+  export is requested, Then the service emits `presentation.feedback.received`,
+  `presentation.html.updated`, and `presentation.export.requested` events respectively to wicked-bus.
+
+### R7 — Version navigation & reset
+- **AC-20 [v1]:** Given a document with N versions, When the user views the page, Then a version
+  navigation control lists all versions and lets the user move to any one (back/forward), with
+  the current working head clearly indicated.
+- **AC-21 [v1]:** Given the user is viewing version `vK` (K < head), When they choose "start again
+  from here", Then `vK` is **forked** to a new head version; `vK` and all later versions remain on
+  disk and navigable (non-destructive).
+- **AC-22 [v1]:** Given any number of resets/forks have occurred, When the user navigates history,
+  Then no previously-produced version is unreachable (the user can never get "lost").
+- **AC-23 [v1]:** Given version metadata, When a version is created, Then it records its parent
+  version, the feedback file that produced it, and a timestamp.
+
+### R8 — Export
+- **AC-24 [v1]:** Given the working head, When the user clicks "Export → HTML", Then a single
+  self-contained `.html` file is produced with all JS, CSS, and assets inlined, which renders and
+  retains its interactivity when opened directly from the filesystem (no server).
+- **AC-25 [v1]:** Given the working head, When the user clicks "Export → PDF", Then a PDF is
+  produced via wicked-prezzie's render/PDF primitives that visually matches the rendered draft.
+- **AC-26 [v1]:** Given an export is requested, When it runs, Then it is triggered entirely from
+  the browser UI (no CLI step) and the resulting file path is surfaced to the user.
+
+---
+
+## 4. Invariants (must-not-change guarantees)
+- **INV-1:** A `data-wid` value, once assigned to an element, must remain stable for that element
+  across all regenerations within a document's life.
+- **INV-2:** No regenerated `_v{x}.html` may drop, duplicate, or alter any `data-wid` present in
+  `_v{x-1}.html` except by explicit structural removal of that element. An LLM structural edit that
+  violates this is **rejected** and not displayed (blocking gate).
+- **INV-3:** A regeneration must change only elements named in `_v{x}.md`; all other elements must be
+  byte-identical to the prior version.
+- **INV-4:** Version artifacts are write-once. `_vN.html` and `_vN.md` are never overwritten or deleted
+  by the system during a session.
+- **INV-5:** Deterministic (content/style) edits must complete the feedback→redisplay loop in under
+  **2s**; a regression above this is a defect.
+- **INV-6:** The business user must never be required to issue a CLI command after the initial start
+  command.
+
+---
+
+## 5. Non-goals (v1)
+- Arbitrary cross-node text-range selection (block-level only in v1).
+- Multi-user / concurrent reviewers on one document (single local session in v1).
+- PPTX export (HTML + PDF only in v1; PPTX deferred).
+- Multi-slide deck *navigation chrome* beyond what the source HTML provides.
+- Cloud/remote hosting — local service only.
+
+---
+
+## 6. Open questions → ADRs to formalize next (`decide` archetype)
+1. **data-wid ID namespace contract** — exact `{slide}-{role}-{ordinal}` rules; behavior when the
+   generator version changes.
+2. **Feedback schema spec** — lock `type` enum values; whether React writes the file directly or
+   POSTs to the service which writes it.
+3. **Regeneration LLM boundary** — exact fragment-scope system-prompt; the INV-2 assertion as a
+   required pipeline step; failure UX.
+4. **wicked-bus event payload schemas** — for the three event types.
+5. **Service lifecycle** — new `wicked-interactive serve` command vs a mode on wicked-prezzie;
+   auto-start/stop; port management.
+6. **Hot-reload mechanism** — commit to iframe `src` swap for v1; conditions to revisit morphdom.
+7. **Concurrent feedback serialization** — queue behavior when UPDATEs arrive mid-regeneration.
+8. **Version model** — fork data structure (parent pointers / DAG), metadata location, archival policy.
+9. **Export pipeline** — asset-inlining strategy for self-contained HTML; PDF via wicked-prezzie.

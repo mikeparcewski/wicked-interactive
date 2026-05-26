@@ -1,0 +1,20 @@
+{
+  "scope": "requirements",
+  "phase": "specify",
+  "required_evidence": [
+    {
+      "claim_id": "smart-acceptance-criteria",
+      "kind": "custom",
+      "verifier": {
+        "kind": "regex_match",
+        "params": {
+          "pattern": "\\*\\*(AC|INV)-\\d+"
+        }
+      },
+      "required": true
+    }
+  ],
+  "contract_version": "2f29b65eb1e9474c",
+  "origin": "cli",
+  "declared_at": "2026-05-26T18:28:50.557Z"
+}

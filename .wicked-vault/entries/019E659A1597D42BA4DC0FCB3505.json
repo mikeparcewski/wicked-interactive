@@ -1,0 +1,26 @@
+{
+  "id": "019E659A1597D42BA4DC0FCB3505",
+  "scope": "architecture",
+  "phase": "decide",
+  "claim_id": "decision-artifact",
+  "kind": "adr-doc",
+  "source": "python3 /tmp/wi-check-adr-chosen.py",
+  "verifier": {
+    "kind": "exit_code_eq",
+    "params": {
+      "code": 0
+    }
+  },
+  "criteria_sha256": "662a25af85e8e7490e81231a3c474796e313217a58e6fefdde703490244b72c9",
+  "payload_sha256": "0bb00cf37984f4f2dfe99dcba74f374f0b3108ffd671f46cd15ddbc11b3829ca",
+  "acceptance_criteria": "Every ADR names a chosen option (marked CHOSEN).",
+  "criteria_authored_by": "record",
+  "payload_ref": "payloads/0bb00cf37984f4f2dfe99dcba74f374f0b3108ffd671f46cd15ddbc11b3829ca",
+  "envelope_hash": "2bcbe362c452a1d6ba7c22b170475ed672e3d297fac921b56d2a63d6b1888de5",
+  "status_at_record": "pass",
+  "state": "active",
+  "supersedes": null,
+  "contract_version": null,
+  "created_at": "2026-05-26T18:44:17.431Z",
+  "created_by": "michael.parcewski"
+}

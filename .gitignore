@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+
+# wicked-vault derived query cache (source of truth is entries/ + payloads/)
+.wicked-vault/index.sqlite

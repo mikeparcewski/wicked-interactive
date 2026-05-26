@@ -1,0 +1,26 @@
+{
+  "id": "019E659A11A6F4C87E04319428C4",
+  "scope": "architecture",
+  "phase": "decide",
+  "claim_id": "adr",
+  "kind": "adr-doc",
+  "source": "python3 /tmp/wi-check-adr-sections.py",
+  "verifier": {
+    "kind": "exit_code_eq",
+    "params": {
+      "code": 0
+    }
+  },
+  "criteria_sha256": "7ecd4337fb68015be6b7f02f9fb88b9aac2cad7629a12a68ad16bc4c464f49e1",
+  "payload_sha256": "a97a61c24e25aef07d85b67a96b4dbbd23ba88c4c097c82fbbffc2fc375df719",
+  "acceptance_criteria": "Every ADR in docs/adr/ contains Status, Context, Decision, and Consequences sections.",
+  "criteria_authored_by": "record",
+  "payload_ref": "payloads/a97a61c24e25aef07d85b67a96b4dbbd23ba88c4c097c82fbbffc2fc375df719",
+  "envelope_hash": "00d4729b474de70e4dfd0728ae042e325331e27ee4cea4bb427d0ac49bcb5b96",
+  "status_at_record": "pass",
+  "state": "active",
+  "supersedes": null,
+  "contract_version": null,
+  "created_at": "2026-05-26T18:44:16.422Z",
+  "created_by": "michael.parcewski"
+}
