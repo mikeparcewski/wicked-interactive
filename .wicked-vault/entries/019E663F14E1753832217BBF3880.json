@@ -1,0 +1,26 @@
+{
+  "id": "019E663F14E1753832217BBF3880",
+  "scope": "wicked-interactive",
+  "phase": "build",
+  "claim_id": "acceptance",
+  "kind": "test-run",
+  "source": "npm run acceptance",
+  "verifier": {
+    "kind": "exit_code_eq",
+    "params": {
+      "code": 0
+    }
+  },
+  "criteria_sha256": "addbacf1289f0727ad4bdb9ef173d56d7d0747a9e279f6d3cc5d84171d1148c3",
+  "payload_sha256": "dd586c8e0fa1dbc697a835250c1a733320575fa096e3d8546d09839ad168a106",
+  "acceptance_criteria": "Browser-driven E2E in real Chrome: click block -> feedback -> UPDATE -> live hot-reload -> version strip -> export, all pass (exit 0).",
+  "criteria_authored_by": "record",
+  "payload_ref": "payloads/dd586c8e0fa1dbc697a835250c1a733320575fa096e3d8546d09839ad168a106",
+  "envelope_hash": "dadd05c0dbe961d4bfbbcb4b786f0613423f8eaf3f03c7e3d29a4b3cee2a3ba7",
+  "status_at_record": "pass",
+  "state": "active",
+  "supersedes": null,
+  "contract_version": "f6f4f0523055ae03",
+  "created_at": "2026-05-26T21:44:30.690Z",
+  "created_by": "michael.parcewski"
+}

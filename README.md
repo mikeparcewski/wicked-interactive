@@ -10,7 +10,9 @@ then navigate versions, fork, and export to self-contained HTML or PDF.
 
 ## Status
 
-Increments 1–6 done. Remaining: acceptance test (browser-driven E2E).
+**All 7 increments complete.** The full business-user loop is verified end-to-end in a
+real browser (`npm run acceptance`), and the build gate re-derives three claims —
+`tests-pass` (66), `frontend-build`, and the browser `acceptance` E2E — all PASS.
 
 **Increment 1 — core engine.** Pure, browser-free logic:
 
@@ -48,7 +50,8 @@ wraps; ADR-0009). The renderer is injectable. Export HTML / Export PDF buttons i
 ## Develop
 
 ```bash
-npm install && npm test          # core + service: node --test (51 tests)
+npm install && npm test          # core + service + frontend logic: node --test (66 tests)
+npm run acceptance               # browser-driven E2E (builds frontend, drives Chrome)
 
 cd frontend && npm install
 npm run dev                       # Vite dev server, proxies to the service on :4400
@@ -59,4 +62,13 @@ npm run build --prefix frontend
 node bin/wicked-interactive.js serve --dir /path/to/workspace --html draft.html
 ```
 
-Requires Node ≥ 20.
+Requires Node ≥ 20. PDF export and the acceptance test need a Chrome/Chromium binary
+(`WI_CHROME` to override the path).
+
+## Structural edits (the agent in the loop)
+
+`structural-change` feedback ("rework this with AI") is delegated to the supervising agent
+via files under the workspace's `requests/` dir (ADR-0010): the service writes
+`_v{n}.request.json`, the agent edits the fragment **preserving every `data-wid`** and
+writes `_v{n}.response.json`, and the service finalizes it through the INV-2 gate as a
+follow-on version. The service itself embeds no model.
