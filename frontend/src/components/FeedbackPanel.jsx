@@ -1,11 +1,13 @@
-// FeedbackPanel.jsx — the form for the selected block. Captures a schema-shaped item.
+// FeedbackPanel.jsx — the form for the selected block. Lets the user EITHER write the
+// exact replacement text (deterministic content-edit) OR give plain-language feedback that
+// the supervising agent applies (structural-change), OR restyle it (style-edit).
 import { useEffect, useState } from "react";
 import { buildItem } from "../lib/feedbackStore.js";
 
-const TYPES = [
-  { id: "content-edit", label: "Change the text" },
-  { id: "style-edit", label: "Restyle it" },
-  { id: "structural-change", label: "Rework it (AI)" },
+const MODES = [
+  { id: "content-edit", label: "Write the new text", hint: "Type exactly what this block should say." },
+  { id: "structural-change", label: "Give feedback (AI)", hint: "Describe the change in your own words — the AI rewrites just this block, preserving everything else." },
+  { id: "style-edit", label: "Restyle it", hint: "Change the text color." },
 ];
 
 export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }) {
@@ -15,14 +17,14 @@ export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }
   const [instruction, setInstruction] = useState("");
 
   useEffect(() => {
-    // Seed the form from the block's current state / any existing pending edit.
     setType(existing?.type || "content-edit");
-    setValue(existing?.value ?? selected?.before ?? "");
+    setValue(existing?.value ?? selected?.before ?? "");      // seed exact-text with current text
     setColor(existing?.style?.color ?? "");
-    setInstruction(existing?.instruction ?? "");
+    setInstruction(existing?.instruction ?? "");              // feedback starts empty
   }, [selected, existing]);
 
   if (!selected) return null;
+  const mode = MODES.find((m) => m.id === type);
 
   function submit(e) {
     e.preventDefault();
@@ -33,6 +35,11 @@ export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }
     onSubmit(buildItem(fields));
   }
 
+  const canSubmit =
+    (type === "content-edit" && value.trim().length > 0) ||
+    (type === "structural-change" && instruction.trim().length > 0) ||
+    (type === "style-edit" && !!color);
+
   return (
     <form className="wi-panel" onSubmit={submit}>
       <div className="wi-panel__head">
@@ -40,17 +47,37 @@ export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }
       </div>
       <div className="wi-panel__before">“{selected.before}”</div>
 
-      <label className="wi-field">
-        What do you want to change?
-        <select value={type} onChange={(e) => setType(e.target.value)}>
-          {TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-        </select>
-      </label>
+      <div className="wi-modes" role="tablist">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            role="tab"
+            aria-selected={type === m.id}
+            className={`wi-mode${type === m.id ? " wi-mode--on" : ""}`}
+            onClick={() => setType(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <p className="wi-mode__hint">{mode?.hint}</p>
 
       {type === "content-edit" && (
         <label className="wi-field">
           New text
-          <textarea value={value} onChange={(e) => setValue(e.target.value)} rows={3} />
+          <textarea value={value} onChange={(e) => setValue(e.target.value)} rows={4} />
+        </label>
+      )}
+      {type === "structural-change" && (
+        <label className="wi-field">
+          Your feedback
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={4}
+            placeholder="e.g. make this punchier and cut it to one line"
+          />
         </label>
       )}
       {type === "style-edit" && (
@@ -59,16 +86,9 @@ export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }
           <input type="color" value={color || "#000000"} onChange={(e) => setColor(e.target.value)} />
         </label>
       )}
-      {type === "structural-change" && (
-        <label className="wi-field">
-          Describe the change (AI will apply it)
-          <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} rows={3}
-            placeholder="e.g. make this more concise and punchy" />
-        </label>
-      )}
 
       <div className="wi-panel__actions">
-        <button type="submit" className="wi-btn">Add feedback</button>
+        <button type="submit" className="wi-btn" disabled={!canSubmit}>Add feedback</button>
         <button type="button" className="wi-btn wi-btn--ghost" onClick={onCancel}>Cancel</button>
       </div>
     </form>

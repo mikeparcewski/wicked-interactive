@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>wicked-interactive — brochure</title>
+  <style>
+    :root { --ink:#0f172a; --muted:#475569; --accent:#2563eb; --accent2:#7c3aed; --line:#e2e8f0; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); line-height:1.55; }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 0 28px; }
+
+    .hero { background: linear-gradient(135deg,#1e1b4b 0%,#2563eb 55%,#7c3aed 100%); color:#fff; padding: 84px 0 72px; }
+    .hero h1 { font-size: 46px; line-height:1.1; margin: 0 0 14px; letter-spacing:-.5px; }
+    .hero .tagline { font-size: 20px; opacity:.92; margin: 0 0 28px; max-width: 640px; }
+    .pill { display:inline-block; background: rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3);
+            color:#fff; padding:6px 14px; border-radius:999px; font-size:13px; }
+
+    section { padding: 56px 0; border-bottom: 1px solid var(--line); }
+    h2 { font-size: 30px; margin: 0 0 14px; letter-spacing:-.3px; }
+    h3 { font-size: 19px; margin: 0 0 8px; }
+    p { color: var(--muted); margin: 0 0 14px; }
+    .lead { font-size: 18px; color:#334155; }
+
+    .cards { display:grid; grid-template-columns: repeat(2,1fr); gap: 22px; margin-top: 24px; }
+    .card { border:1px solid var(--line); border-radius:14px; padding: 22px; background:#fff; }
+    .card .ico { font-size: 26px; }
+
+    ol { color: var(--muted); padding-left: 22px; }
+    ol li { margin: 10px 0; }
+
+    .cta { background:#0f172a; color:#fff; text-align:center; }
+    .cta h2 { color:#fff; }
+    .cta p { color:#cbd5e1; }
+    .btn { display:inline-block; margin-top:10px; background:var(--accent); color:#fff;
+           padding:12px 22px; border-radius:10px; text-decoration:none; font-weight:600; }
+    footer { padding: 28px 0; text-align:center; }
+    footer p { font-size: 13px; color:#94a3b8; margin:0; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <span class="pill">local-first · in-browser · agent-powered</span>
+      <h1>Edit your slides and pages by pointing at them.</h1>
+      <p class="tagline">wicked-interactive turns any HTML draft into a living document your team can refine right in the browser — highlight a block, say what you want, and watch it update.</p>
+    </div>
+  </header>
+
+  <section>
+    <div class="wrap">
+      <h2>Feedback that edits itself</h2>
+      <p class="lead">No tickets, no handoffs, no waiting on a designer. Business users review the real rendered page, point at the parts that need work, and the document regenerates in seconds.</p>
+      <p>Every change is versioned, nothing is ever lost, and you can jump back to any earlier draft and start again from there.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Why teams reach for it</h2>
+      <div class="cards">
+        <div class="card">
+          <div class="ico">🎯</div>
+          <h3>Point-and-edit</h3>
+          <p>Click any heading, paragraph, or image and leave plain-language feedback. The block you picked is exactly the block that changes.</p>
+        </div>
+        <div class="card">
+          <div class="ico">⚡</div>
+          <h3>Live regeneration</h3>
+          <p>Simple text and style edits apply in well under a second — the page hot-reloads without losing your place.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🧠</div>
+          <h3>AI for the hard parts</h3>
+          <p>Ask for a rewrite in your own words and a supervising agent reworks just that fragment, never touching anything else.</p>
+        </div>
+        <div class="card">
+          <div class="ico">🗂️</div>
+          <h3>Every version kept</h3>
+          <p>A full, navigable history. Fork from any point with "start again from here" — your work is never overwritten.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>How it works</h2>
+      <ol>
+        <li>Open your draft in the browser — it renders exactly as it will ship.</li>
+        <li>Hover to highlight a block, click it, and describe the change you want.</li>
+        <li>Hit UPDATE — the document regenerates and refreshes itself live.</li>
+        <li>When you're happy, export a self-contained HTML file or a PDF in one click.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <h2>Make your next draft editable.</h2>
+      <p>Bring the whole review loop into the browser, where your business users already live.</p>
+      <a class="btn" href="#">Get started</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <p>wicked-interactive — built local-first on wicked-prezzie, wicked-bus, and wicked-brain.</p>
+    </div>
+  </footer>
+</body>
+</html>
