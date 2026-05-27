@@ -12,6 +12,8 @@ export function useSse(url, handlers) {
     const es = connectEvents(url, {
       "html-updated": (d) => ref.current["html-updated"]?.(d),
       processed: (d) => ref.current.processed?.(d),
+      status: (d) => ref.current.status?.(d),
+      answer: (d) => ref.current.answer?.(d),
       error: (d) => ref.current.error?.(d),
       ready: (d) => ref.current.ready?.(d),
     });
