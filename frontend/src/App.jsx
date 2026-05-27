@@ -22,6 +22,10 @@ export default function App() {
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
   const submittedVersion = useRef(null);
+  const viewingRef = useRef(null);   // latest viewing, for stale-free SSE handlers
+  const headRef = useRef(null);      // latest head
+  useEffect(() => { viewingRef.current = viewing; }, [viewing]);
+  useEffect(() => { headRef.current = manifest?.head ?? null; }, [manifest]);
 
   const refreshVersions = useCallback(async () => {
     const m = await getVersions();
@@ -64,15 +68,16 @@ export default function App() {
 
   // ---- SSE: hot-reload + processing lock ----
   useSse("/events", {
-    "html-updated": async (data) => {
+    "html-updated": async () => {
+      // Follow the head whenever the user is "live" on it (i.e. not deliberately viewing an
+      // older version). Robust to version-number jumps and multi-step (partial -> finalized)
+      // edits — unlike keying off the edit's parent.
+      const wasFollowing = viewingRef.current == null || viewingRef.current === headRef.current;
       const m = await refreshVersions();
-      setViewing((cur) => {
-        if (cur == null || cur === data.prev_version) {
-          pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
-          return m.head;
-        }
-        return cur;
-      });
+      if (wasFollowing) {
+        pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
+        setViewing(m.head);
+      }
     },
     processed: (data) => {
       setStatus(summarize(data));
