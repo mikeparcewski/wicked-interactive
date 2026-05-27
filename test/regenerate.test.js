@@ -71,6 +71,18 @@ test("INV-2: a content-edit that would drop a child data-wid is reverted + rejec
   assert.match(res.html, /data-wid="child-1"/, "child wid preserved by revert");
 });
 
+test("style-edit sets a background on a section, preserving children (ADR-0011 / INV-2)", async () => {
+  const html = '<section data-wid="section-0"><h1 data-wid="slide-0-heading-1">Hi</h1><p data-wid="p1">x</p></section>';
+  const res = await regenerate(html, {
+    items: [{ selector: "section-0", type: "style-edit", style: { background: "#eef2ff" } }],
+  });
+  assert.deepEqual(res.applied, ["section-0"]);
+  const $ = cheerio.load(res.html, null, false);
+  assert.match($('[data-wid="section-0"]').attr("style"), /background:\s*#eef2ff/);
+  assert.match(res.html, /data-wid="slide-0-heading-1"/);
+  assert.match(res.html, /data-wid="p1"/);
+});
+
 test("structural-change without an llm is rejected", async () => {
   const res = await regenerate(build(), {
     items: [{ selector: "slide-0-heading-1", type: "structural-change", instruction: "make it punchy" }],

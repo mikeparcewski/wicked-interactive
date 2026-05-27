@@ -39,3 +39,19 @@ test("non-reviewable elements get no data-wid", () => {
   assert.doesNotMatch(html, /<span data-wid/);
   assert.match(html, /<p data-wid="slide-0-paragraph-1"/);
 });
+
+test("anchors section/header containers with section-{i} (ADR-0011, additive)", () => {
+  const { html, ids, sectionIds } = instrument('<header class="hero"><h1>T</h1></header><section><p>x</p></section>');
+  assert.deepEqual(sectionIds, ["section-0", "section-1"]);
+  assert.match(html, /<header[^>]*data-wid="section-0"/);
+  assert.match(html, /<section[^>]*data-wid="section-1"/);
+  // block ids are still assigned and unchanged by the section pass
+  assert.ok(ids.includes("slide-0-heading-1"));
+  assert.equal(new Set([...ids, ...sectionIds]).size, ids.length + sectionIds.length, "no id collisions");
+});
+
+test("existing ids preserved when sections are added (INV-1)", () => {
+  const { ids, sectionIds } = instrument('<section data-wid="my-section"><p data-wid="keep">x</p></section>');
+  assert.ok(ids.includes("keep"));
+  assert.ok(sectionIds.includes("my-section"), "pre-existing section anchor preserved");
+});

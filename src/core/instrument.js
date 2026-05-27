@@ -23,6 +23,8 @@ const ROLE_BY_TAG = {
 };
 
 const SLIDE_SELECTOR = "section, [data-slide], .slide";
+// Containers that can be restyled/themed as a whole (ADR-0011).
+const SECTION_SELECTOR = "section, header, [data-slide], .slide";
 
 function roleFor(tagName) {
   return ROLE_BY_TAG[tagName] || "block";
@@ -80,7 +82,23 @@ export function instrument(html, opts = {}) {
     ids.push(wid);
   });
 
-  return { html: $.html(), ids };
+  // Anchor section/slide containers (ADR-0011). Additive: a `section-{i}` namespace that
+  // never collides with the `slide-...` block ids, and pre-existing ids are preserved.
+  const sectionIds = [];
+  let sec = 0;
+  $(SECTION_SELECTOR).each((_, el) => {
+    const $el = $(el);
+    const existing = $el.attr("data-wid");
+    if (existing) { sectionIds.push(existing); return; }
+    let wid = `section-${sec}`;
+    while (seen.has(wid)) { sec += 1; wid = `section-${sec}`; }
+    sec += 1;
+    seen.add(wid);
+    $el.attr("data-wid", wid);
+    sectionIds.push(wid);
+  });
+
+  return { html: $.html(), ids, sectionIds };
 }
 
 /** All data-wid values present in an HTML string, in document order. */

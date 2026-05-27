@@ -14,6 +14,19 @@ export function nearestReviewable(node) {
 
 const normText = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
+/** The nearest ancestor section/container anchor (data-wid="section-N"), or null. */
+export function nearestSection(el) {
+  let cur = el?.parentElement || el?.parentNode || null;
+  while (cur) {
+    if (typeof cur.getAttribute === "function") {
+      const w = cur.getAttribute("data-wid");
+      if (w && w.startsWith("section-")) return w;
+    }
+    cur = cur.parentElement || cur.parentNode || null;
+  }
+  return null;
+}
+
 /** Describe a reviewable element for the feedback panel + the `before` snapshot (AC-10). */
 export function describe(el) {
   if (!el || typeof el.getAttribute !== "function") return null;
@@ -23,5 +36,6 @@ export function describe(el) {
     selector,
     tag: String(el.tagName || "").toLowerCase(),
     before: normText(el.textContent),
+    section: nearestSection(el),
   };
 }

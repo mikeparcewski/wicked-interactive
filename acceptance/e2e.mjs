@@ -1,20 +1,23 @@
 // Browser-driven acceptance test — the real business-user journey, in a real browser.
-// Drives the built React app against a live service with puppeteer-core + system Chrome.
+// Lives OUTSIDE test/ so `node --test` (the fast unit suite) doesn't run it; invoked via
+// `npm run acceptance`. Uses the DETERMINISTIC "Type exact text" mode so it asserts a
+// visible result without needing the agent (the structural/agent path is covered by
+// structural.test.js + manual smoke).
 //
-// Covers: AC-3 (renders in browser), AC-5/6 (block select + feedback), AC-8 (UPDATE writes
-// feedback), AC-11/12 (deterministic regenerate), AC-15 (hot-reload without navigation),
-// AC-20 (version strip), AC-24/26 (browser-triggered export). Exit 0 = PASS.
+// Covers AC-3 (renders), AC-5/6 (select + feedback), AC-8 (UPDATE writes), AC-11/12
+// (deterministic regenerate), AC-15 (hot-reload, no navigation), AC-20 (version strip),
+// AC-24/26 (browser-triggered export). Exit 0 = PASS.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import puppeteer from "puppeteer-core";
-import { createServer } from "../../src/service/server.js";
-import { initWorkspace, loadManifest } from "../../src/service/workspace.js";
-import { findChrome } from "../../src/service/export.js";
+import { createServer } from "../src/service/server.js";
+import { initWorkspace, loadManifest } from "../src/service/workspace.js";
+import { findChrome } from "../src/service/export.js";
 
 process.env.WICKED_NO_BUS = "1";
-const FRONTEND_DIST = resolve(import.meta.dirname, "../../frontend/dist");
+const FRONTEND_DIST = resolve(import.meta.dirname, "../frontend/dist");
 
 function step(msg) { console.log(`  • ${msg}`); }
 
@@ -33,7 +36,7 @@ try {
   const pageErrors = [];
   page.on("pageerror", (e) => pageErrors.push(e.message));
 
-  // NB: not networkidle0 — the SSE (/events) stream stays open, so the network is never idle.
+  // SSE keeps the network busy, so wait on `load`, not networkidle0.
   await page.goto(`http://localhost:${port}/`, { waitUntil: "load" });
   step("app loaded");
 
@@ -42,27 +45,28 @@ try {
   await frame.waitForSelector('[data-wid="slide-0-heading-1"]', { timeout: 10000 });
   step("document rendered with data-wid anchors (AC-3)");
 
-  // Business user clicks the heading block -> the feedback panel opens in the parent.
   await frame.click('[data-wid="slide-0-heading-1"]');
-  await page.waitForSelector(".wi-panel textarea", { timeout: 10000 });
+  await page.waitForSelector(".wi-panel", { timeout: 10000 });
   step("clicked a block -> feedback panel opened (AC-5/6)");
 
-  // Replace the text and add the feedback item.
+  // Choose the deterministic mode (default is now "Give feedback" / AI).
+  await page.evaluate(() => {
+    [...document.querySelectorAll(".wi-mode")].find((b) => b.textContent.trim() === "Type exact text").click();
+  });
+  await page.waitForSelector(".wi-panel textarea", { timeout: 5000 });
   await page.click(".wi-panel textarea", { clickCount: 3 });
   await page.keyboard.type("ACCEPTANCE HEADING");
-  await page.click(".wi-panel button[type=submit]");
+  await page.click(".wi-panel button[type=submit]");   // "Add this edit"
   await page.waitForFunction(
     () => /\(1\)/.test(document.querySelector(".wi-btn--primary")?.textContent || ""),
     { timeout: 5000 },
   );
-  step("feedback added (pending count = 1)");
+  step("staged a deterministic edit (pending = 1)");
 
-  // UPDATE -> service writes _v1.md -> watcher regenerates -> SSE -> iframe swaps.
-  await page.click(".wi-btn--primary");
+  await page.click(".wi-btn--primary");                // UPDATE
   await page.waitForFunction(() => {
     const f = document.querySelector("iframe");
-    try { return /ACCEPTANCE HEADING/.test(f.contentDocument.body.innerHTML); }
-    catch { return false; }
+    try { return /ACCEPTANCE HEADING/.test(f.contentDocument.body.innerHTML); } catch { return false; }
   }, { timeout: 12000 });
   step("UPDATE -> live hot-reload shows the edit without navigation (AC-8/11/12/15)");
 
@@ -72,7 +76,6 @@ try {
   );
   step("version strip shows v1 (AC-20)");
 
-  // Export to self-contained HTML from the browser.
   await page.evaluate(() => {
     [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Export HTML").click();
   });
