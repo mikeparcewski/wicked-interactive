@@ -1,26 +1,16 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Overlay from "./components/Overlay.jsx";
-import FeedbackPanel from "./components/FeedbackPanel.jsx";
+import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import ProcessingLock from "./components/ProcessingLock.jsx";
 import { useSse } from "./hooks/useSse.js";
 import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer } from "./lib/api.js";
-import { emptyFeedback, upsertItem, removeItem, clearItems } from "./lib/feedbackStore.js";
+import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
-
-function feedbackReducer(state, action) {
-  switch (action.type) {
-    case "upsert": return upsertItem(state, action.item);
-    case "remove": return removeItem(state, action.selector);
-    case "clear": return clearItems();
-    default: return state;
-  }
-}
 
 export default function App() {
   const [manifest, setManifest] = useState(null);
   const [viewing, setViewing] = useState(null);          // version currently shown
-  const [feedback, dispatch] = useReducer(feedbackReducer, emptyFeedback);
   const [selected, setSelected] = useState(null);        // describe() of clicked block
   const [hovered, setHovered] = useState(null);          // hovered selector
   const [rects, setRects] = useState({});                // selector -> bounding rect
@@ -31,8 +21,7 @@ export default function App() {
 
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
-  const submittedVersion = useRef(null);                 // the version this UPDATE produced
-  const pendingSelectors = new Set(feedback.items.map((i) => i.selector));
+  const submittedVersion = useRef(null);
 
   const refreshVersions = useCallback(async () => {
     const m = await getVersions();
@@ -73,13 +62,10 @@ export default function App() {
     win.addEventListener("resize", recompute);
   }, [recompute]);
 
-  useEffect(() => { recompute(); }, [feedback, recompute]);
-
-  // ---- SSE: hot-reload on new version ----
+  // ---- SSE: hot-reload + processing lock ----
   useSse("/events", {
     "html-updated": async (data) => {
       const m = await refreshVersions();
-      // If we were viewing the previous head, follow to the new head (preserve scroll).
       setViewing((cur) => {
         if (cur == null || cur === data.prev_version) {
           pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
@@ -93,7 +79,7 @@ export default function App() {
       if (data.structural) { setProcessing(false); submittedVersion.current = null; return; }
       if (submittedVersion.current != null && data.version === submittedVersion.current) {
         if (data.awaiting_structural > 0) {
-          setProcMsg(`AI is reworking ${data.awaiting_structural} block${data.awaiting_structural > 1 ? "s" : ""}…`);
+          setProcMsg(`Working on it… (${data.awaiting_structural} block${data.awaiting_structural > 1 ? "s" : ""})`);
         } else {
           setProcessing(false);
           submittedVersion.current = null;
@@ -103,7 +89,7 @@ export default function App() {
     status: (data) => {
       if (data.state === "asking") {
         setQuestion({ text: data.question, options: data.options || [], requestId: data.requestId });
-        setProcMsg(data.message || "The agent has a question");
+        setProcMsg(data.message || "A quick question");
         setProcessing(true);
       } else {
         if (data.message) setProcMsg(data.message);
@@ -118,20 +104,20 @@ export default function App() {
   });
 
   // ---- actions ----
-  function addFeedback(item) { dispatch({ type: "upsert", item }); setSelected(null); }
-  function dropFeedback(sel) { dispatch({ type: "remove", selector: sel }); }
-
-  async function update() {
-    if (feedback.items.length === 0 || processing) return;
+  async function submitComment({ comment, scope }) {
+    if (!selected) return;
+    const selector = scope === "section" ? selected.section : selected.selector;
+    const before = scope === "section" ? null : selected.before;
+    const item = buildItem({ selector, type: "structural-change", instruction: comment, before });
+    setSelected(null);
     setProcessing(true);
-    setProcMsg("Saving your edits…");
+    setProcMsg("Sending your comment…");
     setStatus(null);
     setQuestion(null);
     try {
-      const { version } = await postFeedback(feedback.items);
+      const { version } = await postFeedback([item]);
       submittedVersion.current = version;
-      setProcMsg("Applying your edits…");
-      dispatch({ type: "clear" });   // the new version arrives via SSE
+      setProcMsg("Working on it…");
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
       setProcessing(false);
@@ -148,11 +134,7 @@ export default function App() {
 
   async function startAgainFrom(version) {
     setStatus(null);
-    try {
-      await postFork(version);           // new head arrives via SSE
-    } catch (e) {
-      setStatus({ kind: "error", text: e.message });
-    }
+    try { await postFork(version); } catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
   async function exportAs(format) {
@@ -166,7 +148,6 @@ export default function App() {
     }
   }
 
-  const existingFor = (sel) => feedback.items.find((i) => i.selector === sel);
   const viewingIsHead = manifest && viewing === manifest.head;
 
   return (
@@ -179,9 +160,7 @@ export default function App() {
             ↳ Start again from v{viewing}
           </button>
         )}
-        <button className="wi-btn wi-btn--primary" disabled={feedback.items.length === 0 || processing} onClick={update}>
-          {processing ? "Working…" : `UPDATE${feedback.items.length ? ` (${feedback.items.length})` : ""}`}
-        </button>
+        <span className="wi-spacer" />
         <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("html")}>Export HTML</button>
         <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>Export PDF</button>
       </header>
@@ -196,7 +175,13 @@ export default function App() {
             src={viewing == null ? "about:blank" : docUrl(viewing)}
             onLoad={onIframeLoad}
           />
-          <Overlay rects={rects} pending={pendingSelectors} hovered={hovered} selected={selected?.selector} />
+          <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} />
+          <InlineComment
+            selected={selected}
+            rect={selected ? rects[selected.selector] : null}
+            onSubmit={submitComment}
+            onCancel={() => setSelected(null)}
+          />
           <ProcessingLock
             active={processing}
             message={procMsg}
@@ -206,26 +191,16 @@ export default function App() {
             onDismiss={() => { setProcessing(false); setQuestion(null); }}
           />
         </div>
-
-        <aside className="wi-side">
-          {selected
-            ? <FeedbackPanel selected={selected} existing={existingFor(selected.selector)} onSubmit={addFeedback} onCancel={() => setSelected(null)} />
-            : <p className="wi-hint">Click any block in the document to give feedback.</p>}
-
-          <div className="wi-pending">
-            <h3>Pending feedback ({feedback.items.length})</h3>
-            {feedback.items.map((i) => (
-              <div key={i.selector} className="wi-pending__item">
-                <code>{i.selector}</code> <em>{i.type}</em>
-                <button className="wi-x" onClick={() => dropFeedback(i.selector)} aria-label="remove">×</button>
-              </div>
-            ))}
-          </div>
-        </aside>
       </div>
+
+      {!selected && !processing && (
+        <div className="wi-tip">Click any block to comment — say what you want in plain words, and it’ll figure out the change.</div>
+      )}
     </div>
   );
 }
+
+const EMPTY = new Set();
 
 function summarize(data) {
   const parts = [];

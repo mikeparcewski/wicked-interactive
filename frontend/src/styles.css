@@ -34,6 +34,22 @@ body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 .wi-doc { position: relative; flex: 1 1 auto; min-width: 0; }
 .wi-doc iframe { width: 100%; height: 100%; border: 0; background: #fff; }
 
+.wi-spacer { flex: 1 1 auto; }
+.wi-tip { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: #0f172a; color: #e2e8f0; font-size: 13px; padding: 8px 16px; border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+
+/* Inline comment popover (ADR-0013) */
+.wi-inline { position: absolute; z-index: 8; width: 340px; max-width: 90vw; background: #fff;
+  border: 1px solid var(--wi-line); border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.22); padding: 12px; }
+.wi-inline textarea { width: 100%; font: inherit; padding: 8px; border: 1px solid var(--wi-line);
+  border-radius: 8px; resize: vertical; box-sizing: border-box; }
+.wi-inline__scope { display: flex; gap: 4px; margin-bottom: 8px; }
+.wi-inline__scope button { flex: 1; border: 1px solid var(--wi-line); background: #fff; color: #475569;
+  font: inherit; font-size: 12px; padding: 4px; border-radius: 6px; cursor: pointer; }
+.wi-inline__scope button.on { border-color: var(--wi-accent); color: var(--wi-accent); background: #eff6ff; font-weight: 600; }
+.wi-inline__actions { display: flex; gap: 8px; margin-top: 8px; }
+
 .wi-overlay { position: absolute; inset: 0; pointer-events: none; }
 .wi-box { position: absolute; border: 2px solid transparent; border-radius: 3px; }
 .wi-box--hover { border-color: var(--wi-accent); background: rgba(37, 99, 235, .08); }
