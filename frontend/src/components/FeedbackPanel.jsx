@@ -4,20 +4,23 @@
 import { useEffect, useState } from "react";
 import { buildItem } from "../lib/feedbackStore.js";
 
+// "Give feedback" is the default: business users describe what they want and the agent
+// applies it. "Type exact text" is the literal-replace escape hatch for when you know
+// precisely what it should say.
 const MODES = [
-  { id: "content-edit", label: "Write the new text", hint: "Type exactly what this block should say." },
-  { id: "structural-change", label: "Give feedback (AI)", hint: "Describe the change in your own words — the AI rewrites just this block, preserving everything else." },
+  { id: "structural-change", label: "Give feedback", hint: "Describe what you want changed in your own words — the AI rewrites just this block." },
+  { id: "content-edit", label: "Type exact text", hint: "Set this block to exactly what you type (no AI, instant)." },
   { id: "style-edit", label: "Restyle it", hint: "Change the text color." },
 ];
 
 export default function FeedbackPanel({ selected, existing, onSubmit, onCancel }) {
-  const [type, setType] = useState("content-edit");
+  const [type, setType] = useState("structural-change");
   const [value, setValue] = useState("");
   const [color, setColor] = useState("");
   const [instruction, setInstruction] = useState("");
 
   useEffect(() => {
-    setType(existing?.type || "content-edit");
+    setType(existing?.type || "structural-change");
     setValue(existing?.value ?? selected?.before ?? "");      // seed exact-text with current text
     setColor(existing?.style?.color ?? "");
     setInstruction(existing?.instruction ?? "");              // feedback starts empty
