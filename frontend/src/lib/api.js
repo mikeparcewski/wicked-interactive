@@ -31,6 +31,18 @@ export async function postFork(from) {
   return body;
 }
 
+// Answer an agent clarifying question (ADR-0012).
+export async function postAnswer(requestId, answer) {
+  const r = await fetch("/api/answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requestId, answer }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || "answer failed");
+  return body;
+}
+
 // Export the given version to self-contained HTML or PDF (ADR-0009).
 export async function postExport(version, format) {
   const r = await fetch("/api/export", {

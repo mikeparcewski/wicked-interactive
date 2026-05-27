@@ -1,25 +1,20 @@
-// VersionStrip.jsx — navigate every version (AC-20..22). Nothing is ever unreachable.
+// VersionStrip.jsx — navigate every version via a dropdown (AC-20..22). Scales past the
+// chip strip as history grows. Nothing is ever unreachable.
 export default function VersionStrip({ manifest, viewing, onView }) {
   if (!manifest) return null;
   const versions = [...manifest.versions].sort((a, b) => a.version - b.version);
   return (
-    <div className="wi-strip" role="navigation" aria-label="version history">
-      {versions.map((v) => {
-        const classes = ["wi-chip"];
-        if (v.version === viewing) classes.push("wi-chip--active");
-        if (v.version === manifest.head) classes.push("wi-chip--head");
-        return (
-          <button
-            key={v.version}
-            className={classes.join(" ")}
-            onClick={() => onView(v.version)}
-            title={v.parent == null ? "original" : `forked/edited from v${v.parent}`}
-          >
+    <label className="wi-vsel" aria-label="version history">
+      Version
+      <select value={viewing ?? manifest.head} onChange={(e) => onView(Number(e.target.value))}>
+        {versions.map((v) => (
+          <option key={v.version} value={v.version}>
             v{v.version}
-            {v.version === manifest.head && <span className="wi-chip__head">head</span>}
-          </button>
-        );
-      })}
-    </div>
+            {v.version === manifest.head ? " — head" : ""}
+            {v.parent != null ? ` (from v${v.parent})` : " (original)"}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

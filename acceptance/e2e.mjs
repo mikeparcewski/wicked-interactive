@@ -71,11 +71,16 @@ try {
   step("UPDATE -> live hot-reload shows the edit without navigation (AC-8/11/12/15)");
 
   await page.waitForFunction(
-    () => [...document.querySelectorAll(".wi-chip")].some((c) => /v1/.test(c.textContent)),
+    () => [...document.querySelectorAll(".wi-vsel option")].some((o) => /v1/.test(o.textContent)),
     { timeout: 5000 },
   );
-  step("version strip shows v1 (AC-20)");
+  step("version dropdown shows v1 (AC-20)");
 
+  // Wait for the processing lock to clear (Export is disabled while locked).
+  await page.waitForFunction(() => {
+    const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Export HTML");
+    return b && !b.disabled;
+  }, { timeout: 8000 });
   await page.evaluate(() => {
     [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Export HTML").click();
   });

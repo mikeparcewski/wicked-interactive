@@ -6,7 +6,7 @@ import express from "express";
 import chokidar from "chokidar";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
 import { writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
@@ -101,6 +101,24 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
+  });
+
+  // Agent status channel (ADR-0012): the supervising agent posts progress / questions.
+  app.post("/api/status", (req, res) => {
+    const { state, message, version, requestId, question, options } = req.body || {};
+    broadcast("status", { state, message, version, requestId, question, options, ts: new Date().toISOString() });
+    res.json({ ok: true });
+  });
+
+  // User's answer to an agent question -> written as a file the agent reads, + broadcast.
+  app.post("/api/answer", (req, res) => {
+    const { requestId, answer } = req.body || {};
+    if (!requestId) return res.status(400).json({ error: "requestId required" });
+    mkdirSync(resolve(dir, REQUESTS_DIR), { recursive: true });
+    const file = `${requestId}.answer.json`;
+    writeFileSync(resolve(dir, REQUESTS_DIR, file), JSON.stringify({ requestId, answer, ts: new Date().toISOString() }, null, 2));
+    broadcast("answer", { requestId, answer });
+    res.json({ ok: true, file });
   });
 
   app.get("/events", (req, res) => {

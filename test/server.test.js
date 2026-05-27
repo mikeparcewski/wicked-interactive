@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 // Keep the suite side-effect-free: the regen pipeline must not spawn real bus processes.
 process.env.WICKED_NO_BUS = "1";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "../src/service/server.js";
@@ -82,6 +82,43 @@ test("POST /api/feedback with an invalid item type is rejected", async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: [{ selector: "x", type: "teleport" }] }),
+    });
+    assert.equal(res.status, 400);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/status accepts an agent progress/question post (ADR-0012)", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/status`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: "processing", message: "reworking the hero", version: 5 }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).ok, true);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/answer writes an answer file the agent can read", async () => {
+  const { base, dir, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/answer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestId: "_v5", answer: "lighter background" }),
+    });
+    assert.equal(res.status, 200);
+    assert.ok(existsSync(join(dir, "requests", "_v5.answer.json")));
+    const saved = JSON.parse(readFileSync(join(dir, "requests", "_v5.answer.json"), "utf-8"));
+    assert.equal(saved.answer, "lighter background");
+  } finally { await cleanup(); }
+});
+
+test("POST /api/answer without requestId is rejected", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/answer`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer: "x" }),
     });
     assert.equal(res.status, 400);
   } finally { await cleanup(); }

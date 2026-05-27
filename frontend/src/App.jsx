@@ -2,8 +2,9 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import Overlay from "./components/Overlay.jsx";
 import FeedbackPanel from "./components/FeedbackPanel.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
+import ProcessingLock from "./components/ProcessingLock.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer } from "./lib/api.js";
 import { emptyFeedback, upsertItem, removeItem, clearItems } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
 
@@ -24,10 +25,13 @@ export default function App() {
   const [hovered, setHovered] = useState(null);          // hovered selector
   const [rects, setRects] = useState({});                // selector -> bounding rect
   const [status, setStatus] = useState(null);            // last processed/rejected notice
-  const [busy, setBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);   // stage locked while an edit lands
+  const [procMsg, setProcMsg] = useState("");            // lock message
+  const [question, setQuestion] = useState(null);        // agent clarifying question
 
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
+  const submittedVersion = useRef(null);                 // the version this UPDATE produced
   const pendingSelectors = new Set(feedback.items.map((i) => i.selector));
 
   const refreshVersions = useCallback(async () => {
@@ -84,8 +88,33 @@ export default function App() {
         return cur;
       });
     },
-    processed: (data) => setStatus(summarize(data)),
-    error: (data) => setStatus({ kind: "error", text: data.error || "regeneration failed" }),
+    processed: (data) => {
+      setStatus(summarize(data));
+      if (data.structural) { setProcessing(false); submittedVersion.current = null; return; }
+      if (submittedVersion.current != null && data.version === submittedVersion.current) {
+        if (data.awaiting_structural > 0) {
+          setProcMsg(`AI is reworking ${data.awaiting_structural} block${data.awaiting_structural > 1 ? "s" : ""}…`);
+        } else {
+          setProcessing(false);
+          submittedVersion.current = null;
+        }
+      }
+    },
+    status: (data) => {
+      if (data.state === "asking") {
+        setQuestion({ text: data.question, options: data.options || [], requestId: data.requestId });
+        setProcMsg(data.message || "The agent has a question");
+        setProcessing(true);
+      } else {
+        if (data.message) setProcMsg(data.message);
+        if (data.state === "complete") { setProcessing(false); setQuestion(null); submittedVersion.current = null; }
+        if (data.state === "error") { setProcessing(false); setStatus({ kind: "error", text: data.message || "error" }); }
+      }
+    },
+    error: (data) => {
+      setProcessing(false);
+      setStatus({ kind: "error", text: data.error || "regeneration failed" });
+    },
   });
 
   // ---- actions ----
@@ -93,17 +122,28 @@ export default function App() {
   function dropFeedback(sel) { dispatch({ type: "remove", selector: sel }); }
 
   async function update() {
-    if (feedback.items.length === 0 || busy) return;
-    setBusy(true);
+    if (feedback.items.length === 0 || processing) return;
+    setProcessing(true);
+    setProcMsg("Saving your edits…");
     setStatus(null);
+    setQuestion(null);
     try {
-      await postFeedback(feedback.items);
+      const { version } = await postFeedback(feedback.items);
+      submittedVersion.current = version;
+      setProcMsg("Applying your edits…");
       dispatch({ type: "clear" });   // the new version arrives via SSE
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
-    } finally {
-      setBusy(false);
+      setProcessing(false);
     }
+  }
+
+  async function answerQuestion(answer) {
+    const q = question;
+    setQuestion(null);
+    setProcMsg("Thanks — continuing…");
+    try { await postAnswer(q.requestId, answer); }
+    catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
   async function startAgainFrom(version) {
@@ -139,11 +179,11 @@ export default function App() {
             ↳ Start again from v{viewing}
           </button>
         )}
-        <button className="wi-btn wi-btn--primary" disabled={feedback.items.length === 0 || busy} onClick={update}>
-          {busy ? "Updating…" : `UPDATE${feedback.items.length ? ` (${feedback.items.length})` : ""}`}
+        <button className="wi-btn wi-btn--primary" disabled={feedback.items.length === 0 || processing} onClick={update}>
+          {processing ? "Working…" : `UPDATE${feedback.items.length ? ` (${feedback.items.length})` : ""}`}
         </button>
-        <button className="wi-btn" disabled={viewing == null} onClick={() => exportAs("html")}>Export HTML</button>
-        <button className="wi-btn" disabled={viewing == null} onClick={() => exportAs("pdf")}>Export PDF</button>
+        <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("html")}>Export HTML</button>
+        <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>Export PDF</button>
       </header>
 
       {status && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
@@ -157,6 +197,14 @@ export default function App() {
             onLoad={onIframeLoad}
           />
           <Overlay rects={rects} pending={pendingSelectors} hovered={hovered} selected={selected?.selector} />
+          <ProcessingLock
+            active={processing}
+            message={procMsg}
+            question={question?.text}
+            options={question?.options}
+            onAnswer={answerQuestion}
+            onDismiss={() => { setProcessing(false); setQuestion(null); }}
+          />
         </div>
 
         <aside className="wi-side">
