@@ -27,7 +27,7 @@
 
 import yaml from "js-yaml";
 
-export const TYPES = ["content-edit", "style-edit", "structural-change"];
+export const TYPES = ["content-edit", "style-edit", "structural-change", "remove"];
 
 const ITEM_HEADING = /^##\s+item:\s*(.+?)\s*$/;
 const FIELD = /^-\s+([a-z_]+):\s*([\s\S]*)$/;

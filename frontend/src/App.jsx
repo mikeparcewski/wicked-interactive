@@ -20,6 +20,7 @@ export default function App() {
   const [procMsg, setProcMsg] = useState("");
   const [question, setQuestion] = useState(null);
   const [chat, setChat] = useState([]);                  // conversation transcript
+  const [chatOpen, setChatOpen] = useState(true);        // chat panel expand/collapse
 
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
@@ -100,6 +101,10 @@ export default function App() {
         setQuestion({ text: data.question, options: data.options || [], requestId: data.requestId });
         setProcMsg(data.message || "A quick question");
         setProcessing(true);
+      } else if (data.state === "processing" || data.state === "awaiting-agent") {
+        // Agent-driven redraw (e.g. from chat) — show the loading overlay on the document.
+        setProcessing(true);
+        if (data.message) setProcMsg(data.message);
       } else {
         if (data.message) setProcMsg(data.message);
         if (data.state === "complete") { setProcessing(false); setQuestion(null); submittedVersion.current = null; }
@@ -133,6 +138,20 @@ export default function App() {
       const { version } = await postFeedback([item]);
       submittedVersion.current = version;
       if (mode !== "change-text") setProcMsg("Working on it…");
+    } catch (e) {
+      setStatus({ kind: "error", text: e.message });
+      setProcessing(false);
+    }
+  }
+
+  async function removeBlock(selector) {
+    setSelected(null);
+    setProcessing(true);
+    setProcMsg("Removing…");
+    setStatus(null);
+    try {
+      const { version } = await postFeedback([buildItem({ selector, type: "remove" })]);
+      submittedVersion.current = version;   // deterministic — unlocks on `processed`
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
       setProcessing(false);
@@ -186,10 +205,10 @@ export default function App() {
       {status && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
 
       <div className="wi-stage">
-        <ChatPanel log={chat} onSend={sendChat} busy={false} />
+        <ChatPanel log={chat} onSend={sendChat} busy={processing} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
         <div className="wi-doc">
           <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
-          <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} />
+          <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
           <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
           <ProcessingLock active={processing} message={procMsg} question={question?.text} options={question?.options}
             onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />

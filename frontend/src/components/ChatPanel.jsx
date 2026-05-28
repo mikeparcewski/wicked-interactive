@@ -1,15 +1,22 @@
-// ChatPanel.jsx — the conversational left panel (ADR-0014). Renders the transcript
-// (agent narration + user guidance + edit events) and an input for free-form direction.
+// ChatPanel.jsx — conversational panel (ADR-0014), collapsible.
 import { useEffect, useRef, useState } from "react";
 
-export default function ChatPanel({ log, onSend, busy }) {
+export default function ChatPanel({ log, onSend, busy, collapsed, onToggle }) {
   const [text, setText] = useState("");
   const scrollRef = useRef(null);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [log]);
+  }, [log, collapsed]);
+
+  if (collapsed) {
+    return (
+      <aside className="wi-chat wi-chat--collapsed">
+        <button className="wi-chat__toggle" title="Open assistant" onClick={onToggle}>💬</button>
+      </aside>
+    );
+  }
 
   function send(e) {
     e.preventDefault();
@@ -21,12 +28,13 @@ export default function ChatPanel({ log, onSend, busy }) {
 
   return (
     <aside className="wi-chat">
-      <div className="wi-chat__head">Assistant</div>
+      <div className="wi-chat__head">
+        <span>Assistant</span>
+        <button className="wi-chat__toggle" title="Collapse" onClick={onToggle}>⟨</button>
+      </div>
       <div className="wi-chat__log" ref={scrollRef}>
         {log.length === 0 && (
-          <p className="wi-chat__hint">
-            Talk to me here, or click a block in the document. Try “make the whole page feel more premium”.
-          </p>
+          <p className="wi-chat__hint">Talk to me, or click a block. Try “make the whole page feel more premium”.</p>
         )}
         {log.map((m, i) => (
           <div key={i} className={`wi-msg wi-msg--${m.role}`}>

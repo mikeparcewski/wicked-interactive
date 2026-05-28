@@ -38,6 +38,18 @@ test("parses structured style + class fields", () => {
   assert.deepEqual(items[1].class_add, ["highlight"]);
 });
 
+test("accepts a remove item (no extra fields required)", () => {
+  const { items } = parseFeedback(`---
+version: 1
+---
+
+## item: slide-3-link-1
+- type: remove
+`);
+  assert.equal(items[0].type, "remove");
+  assert.equal(items[0].selector, "slide-3-link-1");
+});
+
 test("rejects an invalid type", () => {
   assert.throws(() => parseFeedback(`---
 version: 1
