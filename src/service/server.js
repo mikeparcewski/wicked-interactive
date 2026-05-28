@@ -98,6 +98,10 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
   });
 
   // Export to self-contained HTML or PDF (ADR-0009), triggered from the browser.
+  // POST creates the file under <workspace>/exports/; response includes a `download`
+  // URL the frontend can hit to actually pull the bytes (the server-side `path` alone
+  // never reached the user's machine — see the 2026-05-28 "PDF/HTML might generate,
+  // but not downloading" report).
   app.post("/api/export", (req, res) => {
     const version = Number(req.body?.version);
     const format = String(req.body?.format || "html").toLowerCase();
@@ -105,11 +109,27 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     if (format !== "html" && format !== "pdf") return res.status(400).json({ error: "format must be html or pdf" });
     try {
       const result = format === "pdf" ? exportPdf(dir, version) : exportHtml(dir, version);
+      const file = basename(result.path);
+      const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
       busEmit(EVENTS.EXPORT_REQUESTED, { document_id: documentId, version, format, ts: new Date().toISOString() });
-      res.json({ format, ...result });
+      res.json({ format, ...result, file, download });
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
+  });
+
+  // Download the actual exported file. Content-Disposition: attachment forces a save
+  // dialog regardless of the file's MIME type. Filenames are restricted to the slug
+  // characters export.js uses, so this can't path-traverse.
+  app.get("/api/export/file/:name", (req, res) => {
+    const name = req.params.name;
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
+    const filePath = join(dir, "exports", name);
+    if (!existsSync(filePath)) return res.status(404).send("not found");
+    const isPdf = name.toLowerCase().endsWith(".pdf");
+    res.setHeader("Content-Type", isPdf ? "application/pdf" : "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+    res.sendFile(filePath);
   });
 
   // Conversation log (ADR-0014): append-only transcript persisted across reloads.

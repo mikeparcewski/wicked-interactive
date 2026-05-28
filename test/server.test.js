@@ -173,3 +173,36 @@ test("watcher processes posted feedback end-to-end (live loop)", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Download endpoint added 2026-05-28 — POST /api/export now also exposes the file
+// over GET /api/export/file/:name with Content-Disposition so the browser actually saves it.
+test("POST /api/export returns a download URL + GET /api/export/file serves the bytes", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    // Trigger an HTML export of v0 (the seeded version).
+    const post = await fetch(`${base}/api/export`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 0, format: "html" }),
+    });
+    assert.equal(post.status, 200);
+    const body = await post.json();
+    assert.ok(body.file, "response should include the export filename");
+    assert.ok(body.download, "response should include a download URL");
+    assert.match(body.download, new RegExp(`/api/export/file/${body.file}$`));
+
+    // Fetch the file via the download URL.
+    const dl = await fetch(`${base}${body.download}`);
+    assert.equal(dl.status, 200);
+    assert.match(dl.headers.get("content-disposition") || "", /attachment;\s*filename="/i);
+    const bytes = await dl.text();
+    assert.ok(bytes.includes("<html"), "downloaded content should be HTML");
+  } finally { await cleanup(); }
+});
+
+test("GET /api/export/file rejects path-traversal attempts", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const bad = await fetch(`${base}/api/export/file/${encodeURIComponent("../_v0.html")}`);
+    assert.equal(bad.status, 400);
+  } finally { await cleanup(); }
+});

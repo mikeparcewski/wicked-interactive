@@ -232,8 +232,12 @@ export default function App() {
     if (viewing == null) return;
     setStatus({ kind: "ok", text: `Exporting v${viewing} as ${format.toUpperCase()}…` });
     try {
-      const { path } = await postExport(viewing, format);
-      setStatus({ kind: "ok", text: `Exported ${format.toUpperCase()}: ${path}` });
+      const { file, download } = await postExport(viewing, format);
+      // POST creates the file server-side; we then hit GET <download> via a hidden <a download>
+      // so the browser saves it. Without this step the file sits in /tmp on the server and
+      // never reaches the user.
+      if (download) triggerDownload(download, file);
+      setStatus({ kind: "ok", text: `Downloaded ${file}` });
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
     }
@@ -290,6 +294,18 @@ export default function App() {
 }
 
 const EMPTY = new Set();
+
+/** Trigger a browser download for a same-origin URL with an explicit filename. */
+function triggerDownload(url, filename) {
+  if (typeof document === "undefined") return;
+  const a = document.createElement("a");
+  a.href = url;
+  if (filename) a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
 function summarize(data) {
   const parts = [];
