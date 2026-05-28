@@ -241,6 +241,14 @@ export default function App() {
 
   const viewingIsHead = manifest && viewing === manifest.head;
 
+  // "Agent is working" indicator. The transcript is append-only and the SSE round-trip is
+  // sub-100ms, so deriving from the last entry beats juggling a separate timer: the moment
+  // the user's message lands, the indicator lights; the moment the agent posts ANYTHING
+  // (status or message), it clears. The processing lock already covers structural edits,
+  // so we suppress the chat indicator while it's up to avoid double feedback.
+  const lastEntry = chat[chat.length - 1];
+  const agentThinking = !processing && lastEntry?.role === "user";
+
   return (
     <div className="wi-app">
       <header className="wi-header">
@@ -259,7 +267,7 @@ export default function App() {
       {status && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
 
       <div className="wi-stage">
-        <ChatPanel log={chat} onSend={sendChat} busy={processing} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
+        <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
         <div className="wi-doc">
           <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
           <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
