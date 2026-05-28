@@ -83,6 +83,22 @@ test("style-edit sets a background on a section, preserving children (ADR-0011 /
   assert.match(res.html, /data-wid="p1"/);
 });
 
+test("remove deletes the element + its anchor (explicit removal, INV-2 exempt)", async () => {
+  const html = instrument("<h1>T</h1><p>keep</p>").html;
+  const res = await regenerate(html, { items: [{ selector: "slide-0-heading-1", type: "remove" }] });
+  assert.deepEqual(res.applied, ["slide-0-heading-1"]);
+  assert.doesNotMatch(res.html, /slide-0-heading-1/, "removed element gone");
+  assert.match(res.html, /data-wid="slide-0-paragraph-1"/, "sibling preserved");
+});
+
+test("removing a container exempts its child anchors from the INV-2 net", async () => {
+  const html = '<section data-wid="section-0"><p data-wid="p1">x</p></section><p data-wid="p2">y</p>';
+  const res = await regenerate(html, { items: [{ selector: "section-0", type: "remove" }] });
+  assert.deepEqual(res.applied, ["section-0"]);
+  assert.doesNotMatch(res.html, /section-0|"p1"/, "container + children gone, no INV-2 throw");
+  assert.match(res.html, /data-wid="p2"/, "outside element preserved");
+});
+
 test("structural-change without an llm is rejected", async () => {
   const res = await regenerate(build(), {
     items: [{ selector: "slide-0-heading-1", type: "structural-change", instruction: "make it punchy" }],

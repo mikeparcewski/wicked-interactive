@@ -58,6 +58,7 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
   const applied = [];
   const rejected = [];
   const stale = [];
+  const removed = [];  // anchors intentionally deleted (exempt from the INV-2 net)
 
   for (const item of feedback.items) {
     const $el = $(`[data-wid="${item.selector}"]`);
@@ -90,6 +91,12 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
       if (item.class_remove) item.class_remove.forEach((c) => $el.removeClass(c));
       if (item.class_add) item.class_add.forEach((c) => $el.addClass(c));
       applied.push(item.selector);
+    } else if (item.type === "remove") {
+      // Explicit structural removal (ADR-0003): the element and its subtree anchors go,
+      // and they're exempted from the INV-2 net below (this is intentional, not a drop).
+      removed.push(...widsUnder($, el));
+      $el.remove();
+      applied.push(item.selector);
     } else if (item.type === "structural-change") {
       if (typeof opts.llm !== "function") {
         rejected.push({ selector: item.selector, reason: "structural-change-requires-llm" });
@@ -118,7 +125,8 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
   }
 
   const html = $.html();
-  const missing = prevIds.filter((w) => !collectWids(html).includes(w));
+  const present = collectWids(html);
+  const missing = prevIds.filter((w) => !present.includes(w) && !removed.includes(w));
   if (missing.length) throw new Inv2Error(missing); // safety net — per-item guards should prevent this
   return { html, applied, rejected, stale };
 }

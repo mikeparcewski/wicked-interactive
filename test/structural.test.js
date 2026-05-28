@@ -74,6 +74,22 @@ test("applyStructuralResponse finalizes a follow-on version preserving the chain
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("applyStructuralResponse handles a remove directive (real deletion)", async () => {
+  const dir = fresh();
+  try {
+    const { file } = writeFeedback(dir, {
+      items: [{ selector: "slide-0-paragraph-1", type: "structural-change", instruction: "remove it" }],
+    });
+    await processFeedbackFile(dir, file, {});
+    writeFileSync(join(dir, REQUESTS_DIR, "_v1.response.json"), JSON.stringify({
+      version: 1, results: [{ selector: "slide-0-paragraph-1", remove: true }],
+    }));
+    const res = await applyStructuralResponse(dir, "_v1.response.json", {});
+    assert.deepEqual(res.applied, ["slide-0-paragraph-1"]);
+    assert.doesNotMatch(readVersionHtml(dir, res.version), /slide-0-paragraph-1/, "element deleted");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test("INV-2: an agent response that drops the data-wid is rejected", async () => {
   const dir = fresh();
   try {

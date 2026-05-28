@@ -65,7 +65,9 @@ export async function applyStructuralResponse(dir, responseFile, opts = {}) {
 
   const baseHtml = readVersionHtml(dir, parent);
   const feedback = {
-    items: resp.results.map((r) => ({ selector: r.selector, type: "structural-change", instruction: "(delegated)" })),
+    items: resp.results.map((r) => (r.remove
+      ? { selector: r.selector, type: "remove" }
+      : { selector: r.selector, type: "structural-change", instruction: "(delegated)" })),
   };
   const llm = async (fragmentBefore) => {
     const sel = rootWid(fragmentBefore);
