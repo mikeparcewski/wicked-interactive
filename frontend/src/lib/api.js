@@ -43,6 +43,24 @@ export async function postAnswer(requestId, answer) {
   return body;
 }
 
+// Conversational panel (ADR-0014).
+export async function postMessage(text) {
+  const r = await fetch("/api/message", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || "message failed");
+  return body;
+}
+
+export async function getConversation() {
+  const r = await fetch("/api/conversation");
+  if (!r.ok) return [];
+  return r.json();
+}
+
 // Export the given version to self-contained HTML or PDF (ADR-0009).
 export async function postExport(version, format) {
   const r = await fetch("/api/export", {

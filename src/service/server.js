@@ -6,7 +6,7 @@ import express from "express";
 import chokidar from "chokidar";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
 import { writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
@@ -103,11 +103,36 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     }
   });
 
+  // Conversation log (ADR-0014): append-only transcript persisted across reloads.
+  const convoFile = () => resolve(dir, "conversation.jsonl");
+  function logConvo(entry) {
+    try { appendFileSync(convoFile(), JSON.stringify({ ...entry, ts: entry.ts || new Date().toISOString() }) + "\n"); }
+    catch { /* best-effort */ }
+  }
+
   // Agent status channel (ADR-0012): the supervising agent posts progress / questions.
   app.post("/api/status", (req, res) => {
     const { state, message, version, requestId, question, options } = req.body || {};
     broadcast("status", { state, message, version, requestId, question, options, ts: new Date().toISOString() });
+    if (message || question) logConvo({ role: "agent", text: question || message, state });
     res.json({ ok: true });
+  });
+
+  // User -> agent message (ADR-0014). The agent's SSE listener receives the broadcast.
+  app.post("/api/message", (req, res) => {
+    const text = (req.body?.text || "").toString().trim();
+    if (!text) return res.status(400).json({ error: "text required" });
+    const entry = { role: "user", text, ts: new Date().toISOString() };
+    logConvo(entry);
+    broadcast("message", entry);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/conversation", (_req, res) => {
+    try {
+      const lines = existsSync(convoFile()) ? readFileSync(convoFile(), "utf-8").trim() : "";
+      res.json(lines ? lines.split("\n").map((l) => JSON.parse(l)) : []);
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   // User's answer to an agent question -> written as a file the agent reads, + broadcast.

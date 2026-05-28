@@ -124,6 +124,29 @@ test("POST /api/answer without requestId is rejected", async () => {
   } finally { await cleanup(); }
 });
 
+test("POST /api/message logs to the conversation + GET /api/conversation returns it (ADR-0014)", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const post = await fetch(`${base}/api/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "make the whole page more premium" }),
+    });
+    assert.equal(post.status, 200);
+    const convo = await (await fetch(`${base}/api/conversation`)).json();
+    assert.ok(convo.some((m) => m.role === "user" && /premium/.test(m.text)));
+  } finally { await cleanup(); }
+});
+
+test("POST /api/message with empty text is rejected", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const r = await fetch(`${base}/api/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "  " }),
+    });
+    assert.equal(r.status, 400);
+  } finally { await cleanup(); }
+});
+
 // Regression guard: the chokidar watcher must actually process a posted feedback file
 // (chokidar v4 dropped glob support — watching a glob silently matched nothing).
 test("watcher processes posted feedback end-to-end (live loop)", async () => {

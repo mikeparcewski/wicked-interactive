@@ -99,6 +99,15 @@ try {
   }, { timeout: 10000 });
   step("stage unlocked after completion");
 
+  // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
+  await page.type(".wi-chat__input textarea", "make the whole page more premium");
+  await page.click(".wi-chat__input button[type=submit]");
+  await page.waitForFunction(
+    () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),
+    { timeout: 8000 },
+  );
+  step("chat message round-trips into the transcript (conversational panel)");
+
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join("; ")}`);
   if (!loadManifest(dir).versions.some((v) => v.feedback_file?.endsWith(".response.json"))) {
     throw new Error("expected an agent-finalized version");
