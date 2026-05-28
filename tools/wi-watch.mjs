@@ -29,7 +29,10 @@ const { values: argv } = parseArgs({
 });
 
 const url = new URL("/api/events/all", argv.base);
-const STALL_MS = 60_000;   // no traffic for this long → assume dead, reconnect
+// 60s was too tight in practice — long-lived loopback streams occasionally go quiet for
+// ~1 min even with 15s heartbeats. 180s catches genuine dead sockets without false-tripping
+// every ~17 min. Real drops fire socket-close events immediately anyway.
+const STALL_MS = 180_000;
 
 function ts() { return new Date().toISOString().slice(11, 19); }
 function note(msg) { if (!argv.quiet) console.log(`${ts()} watcher ${msg}`); }
