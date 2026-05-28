@@ -218,6 +218,7 @@ export default function App() {
     <div className="wi-app">
       <header className="wi-header">
         <span className="wi-logo">wicked-interactive</span>
+        <span className="wi-spacer" />
         <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
         {manifest && !viewingIsHead && (
           <button className="wi-btn wi-btn--ghost" onClick={() => startAgainFrom(viewing)}>↳ Start again from v{viewing}</button>

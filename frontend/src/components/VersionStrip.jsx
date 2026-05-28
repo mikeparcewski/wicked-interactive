@@ -5,7 +5,7 @@ export default function VersionStrip({ manifest, viewing, onView }) {
   const versions = [...manifest.versions].sort((a, b) => a.version - b.version);
   return (
     <label className="wi-vsel" aria-label="version history">
-      Version
+      Current Version
       <select value={viewing ?? manifest.head} onChange={(e) => onView(Number(e.target.value))}>
         {versions.map((v) => (
           <option key={v.version} value={v.version}>
