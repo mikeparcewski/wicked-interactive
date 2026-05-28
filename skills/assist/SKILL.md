@@ -159,7 +159,52 @@ On a `message` event (role `user`):
   - Always post a `processing` status when you start and `complete` when the new version
     lands, so the document shows the loading state.
 
-## Step 5 — Loop
+## Step 5 — Consult project knowledge before you rewrite (wicked-brain)
+
+Before any **structural** edit or first-draft generation (Step 3, or the structural branch
+of Step 4), check whether the project's brain knows something the document should respect —
+prior decisions, terminology, the customer's positioning, numbers that must stay accurate.
+This is what keeps agent-authored content grounded instead of plausibly-wrong (ADR-0016
+Slice E).
+
+- Post `{"state":"processing","message":"Checking project knowledge…"}` so the user sees why
+  there's a beat before the edit.
+- Query the brain for the topic of the edit, e.g. `wicked-brain:search` with the section's
+  subject (or `wicked-brain:query` for a "what does X say" question). Always pass a stable
+  `session_id`.
+- Fold any **citable** facts into the markup you produce, and when a fact drove a choice,
+  say so in your chat reply ("kept the ARR figure at $4.2M per the Q3 board deck"). If the
+  brain returns nothing relevant, proceed — never block an edit on a knowledge miss.
+
+Skip this for deterministic tweaks (exact-text, style, remove); those carry no authorship
+risk. It's the generative edits that need grounding.
+
+## Step 6 — Assemble a crew for multi-discipline requests (wicked-garden)
+
+Some chat requests are bigger than one editing pass — they need design + copy + structure
+reasoned about together ("turn this into an investor-ready deck", "make the whole thing feel
+premium and tighten the narrative", "redesign this section and rewrite the story around it").
+Route these to a **wicked-garden crew** rather than doing a shallow single-shot edit
+(ADR-0016 Slice D).
+
+- Recognise the trigger: the request spans **more than one discipline** (visual design AND
+  narrative AND structure), asks for a whole-document transformation, or is open-ended enough
+  that a crew's plan→build→review beats a single edit.
+- Post `{"state":"processing","message":"Assembling a crew…"}` so the wait reads as
+  deliberate work, not a hang.
+- Dispatch the relevant wicked-garden crew/agents (e.g. a product/design/engineering crew via
+  the Task tool) with the current head HTML and the user's goal. Let the crew produce the
+  plan and the new markup.
+- You remain the **single writer back into the loop**: take the crew's output, preserve every
+  `data-wid` (Step 2), and land it as a new version exactly as in Step 3c / Step 4. The crew
+  reasons; you are still the one who satisfies the INV-2 gate.
+- Keep the user posted (`processing` → `complete`) and summarise what the crew changed in a
+  chat reply.
+
+For a single-discipline ask ("make this headline bolder", "punch up this one card"), don't
+over-engineer it — handle it inline (Step 3/4). Crews are for breadth, not every edit.
+
+## Step 7 — Loop
 
 Return to watching. Keep going until the user says to stop. The session staying alive IS
 the product guarantee — `serve` + `assist` together are why a non-technical user can click
