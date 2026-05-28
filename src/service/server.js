@@ -11,6 +11,7 @@ import { busEmit, EVENTS } from "./bus.js";
 import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 import { exportHtml, exportPdf } from "./export.js";
+import { preflight } from "./preflight.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +42,10 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
   // regenerations never race on the manifest.
   let queue = Promise.resolve();
   const enqueue = (task) => { queue = queue.then(task).catch(() => {}); return queue; };
+
+  // Plugin install-gate (ADR-0016): report which sibling plugins are present so the
+  // editor can block on missing ones. Cheap (existsSync only); safe to call on every load.
+  app.get("/api/preflight", (_req, res) => res.json(preflight()));
 
   app.get("/api/versions", (_req, res) => {
     try { res.json(loadManifest(dir)); } catch (e) { res.status(404).json({ error: e.message }); }
@@ -267,6 +272,7 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
   }
 
   // Top-level (cross-doc) endpoints
+  top.get("/api/preflight", (_req, res) => res.json(preflight()));
   top.get("/api/docs", (_req, res) => res.json(listDocs()));
 
   top.post("/api/docs", async (req, res) => {

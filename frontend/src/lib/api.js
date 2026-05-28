@@ -40,6 +40,13 @@ export async function listDocs() {
   return r.json();
 }
 
+// Plugin install-gate (ADR-0016) — top-level, NEVER prefixed.
+export async function getPreflight() {
+  const r = await fetch("/api/preflight");
+  if (!r.ok) return { ok: false, missing: [], required: {}, install_hint: null, unreachable: true };
+  return r.json();
+}
+
 export async function createDoc(name, html) {
   const r = await fetch("/api/docs", {
     method: "POST", headers: { "Content-Type": "application/json" },

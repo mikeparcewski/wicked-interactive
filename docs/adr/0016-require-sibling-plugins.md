@@ -46,10 +46,15 @@ true once integrations land.
 
 ### Implementation phasing
 This ADR is the doctrine. Implementation lands across slices:
-- **Slice A (this commit):** ADR + new-doc modal "Describe / Paste HTML" fix (precursor) +
-  honest footer rewrite. No preflight enforcement yet.
-- **Slice B:** preflight endpoint + UI install-gate (detection via plugin-dir + `npx`
-  probes); the doctrine becomes enforceable.
+- **Slice A (landed):** ADR + new-doc modal precursor fix + honest footer rewrite. No
+  preflight enforcement yet.
+- **Slice B (landed):** `GET /api/preflight` on both the multi-server and legacy server
+  (path-based detection: plugin caches for prezzie/garden, `~/.wicked-brain` for brain);
+  blocking `<InstallGate>` modal in the editor with the install command + per-plugin
+  status. New-doc flow pivoted (2026-05-28): HTML is now optional; an empty doc lands on
+  a placeholder shell with the chat panel open, so the agent + user co-author from a
+  blank slate via chat. Detection paths are overrideable via `WI_PLUGIN_PATHS` (tests
+  + non-default installs).
 - **Slice C:** theme system (prezzie tokens applied as a base style block per version).
 - **Slice D:** crew-spawn affordance + auto-route complex chat requests (garden).
 - **Slice E:** brain queries in the agent loop (citable retrieval).

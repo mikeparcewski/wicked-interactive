@@ -6,8 +6,9 @@ import ProcessingLock from "./components/ProcessingLock.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import DocPicker from "./components/DocPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
+import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, getPreflight } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -27,6 +28,7 @@ export default function App() {
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [newDocError, setNewDocError] = useState(null);
+  const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
   const currentDoc = getCurrentDoc();
 
   const iframeRef = useRef(null);
@@ -45,24 +47,23 @@ export default function App() {
     return m;
   }, []);
 
+  const checkPreflight = useCallback(() => {
+    getPreflight().then(setPreflight).catch(() => setPreflight({ ok: false, missing: [], required: {}, unreachable: true }));
+  }, []);
+
   useEffect(() => {
+    checkPreflight();
     refreshVersions().then((m) => setViewing((v) => (v == null ? m.head : v))).catch(() => {});
     getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
     listDocs().then(setDocs).catch(() => setDocs([]));
-  }, [refreshVersions]);
+  }, [refreshVersions, checkPreflight]);
 
-  async function onCreateDoc(name, html, meta) {
+  async function onCreateDoc(name, html /*, meta */) {
     setNewDocError(null);
     try {
       await createDoc(name, html);
-      // If the user described the doc rather than pasting HTML, drop the prompt into the
-      // new doc's chat so the agent has context the moment they arrive.
-      if (meta && meta.kind === "describe" && meta.prompt) {
-        await fetch(`/d/${name}/api/message`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: meta.prompt }),
-        }).catch(() => {});
-      }
+      // Empty / brainstorm docs land on the placeholder shell with the chat panel open
+      // (chatOpen defaults to true on mount). The user drives content via chat from there.
       navigateToDoc(name);   // hard-reloads to ?doc=<name>
     } catch (e) {
       setNewDocError(e.message);
@@ -274,6 +275,8 @@ export default function App() {
         onCreate={onCreateDoc}
         onCancel={() => setShowNewDoc(false)}
       />
+
+      <InstallGate preflight={preflight} onRetry={checkPreflight} />
     </div>
   );
 }
