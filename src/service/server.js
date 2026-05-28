@@ -250,15 +250,20 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     const frame = `event: ${event}\ndata: ${JSON.stringify({ doc, ...data })}\n\n`;
     for (const res of topClients) res.write(frame);
   }
-  // SSE heartbeat — a comment frame every 30s so half-open sockets surface as errors
-  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=60s) stay green.
-  // SSE comments start with `:` and are ignored by EventSource consumers.
+  // SSE heartbeat — a comment frame every 15s so half-open sockets surface as errors
+  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=60s) stay green
+  // even if one ping is lost. SSE comments start with `:` and are ignored by EventSource.
+  //
+  // We also `setNoDelay(true)` on the socket so the kernel doesn't buffer the (small)
+  // comment payloads via Nagle — pre-fix, the 24-byte heartbeats sat in the socket
+  // buffer and the watcher's 60s watchdog tripped every 7-16 minutes.
   top.get("/api/events/all", (req, res) => {
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.flushHeaders?.();
+    res.socket?.setNoDelay(true);
     res.write("event: ready\ndata: {\"watching\":\"*\"}\n\n");
     topClients.add(res);
-    const heartbeat = setInterval(() => { try { res.write(`: ping ${Date.now()}\n\n`); } catch { /* socket dead — close handler will clear */ } }, 30_000);
+    const heartbeat = setInterval(() => { try { res.write(`: ping ${Date.now()}\n\n`); } catch { /* socket dead — close handler will clear */ } }, 15_000);
     const cleanup = () => { clearInterval(heartbeat); topClients.delete(res); };
     req.on("close", cleanup);
     res.on("close", cleanup);
