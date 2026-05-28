@@ -250,12 +250,18 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     const frame = `event: ${event}\ndata: ${JSON.stringify({ doc, ...data })}\n\n`;
     for (const res of topClients) res.write(frame);
   }
+  // SSE heartbeat — a comment frame every 30s so half-open sockets surface as errors
+  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=60s) stay green.
+  // SSE comments start with `:` and are ignored by EventSource consumers.
   top.get("/api/events/all", (req, res) => {
     res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     res.flushHeaders?.();
     res.write("event: ready\ndata: {\"watching\":\"*\"}\n\n");
     topClients.add(res);
-    req.on("close", () => topClients.delete(res));
+    const heartbeat = setInterval(() => { try { res.write(`: ping ${Date.now()}\n\n`); } catch { /* socket dead — close handler will clear */ } }, 30_000);
+    const cleanup = () => { clearInterval(heartbeat); topClients.delete(res); };
+    req.on("close", cleanup);
+    res.on("close", cleanup);
   });
 
   function docDir(name) { return resolve(root, name); }
