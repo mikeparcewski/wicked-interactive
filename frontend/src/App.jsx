@@ -51,10 +51,18 @@ export default function App() {
     listDocs().then(setDocs).catch(() => setDocs([]));
   }, [refreshVersions]);
 
-  async function onCreateDoc(name, html) {
+  async function onCreateDoc(name, html, meta) {
     setNewDocError(null);
     try {
       await createDoc(name, html);
+      // If the user described the doc rather than pasting HTML, drop the prompt into the
+      // new doc's chat so the agent has context the moment they arrive.
+      if (meta && meta.kind === "describe" && meta.prompt) {
+        await fetch(`/d/${name}/api/message`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: meta.prompt }),
+        }).catch(() => {});
+      }
       navigateToDoc(name);   // hard-reloads to ?doc=<name>
     } catch (e) {
       setNewDocError(e.message);
