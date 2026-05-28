@@ -12,7 +12,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-function pluginSearchPaths() {
+// Exported so service-level plugin-cache lookups (e.g. theme-source) reuse the same paths.
+export function pluginSearchPaths() {
   const env = (process.env.WI_PLUGIN_PATHS || "").split(":").filter(Boolean);
   const home = homedir();
   return [

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import * as cheerio from "cheerio";
 import { regenerate } from "../core/regenerate.js";
 import { instrument } from "../core/instrument.js";
+import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest, readVersionHtml } from "./fsstore.js";
 
@@ -82,7 +83,9 @@ export async function applyStructuralResponse(dir, responseFile, opts = {}) {
   // Without this, new content from the agent stays unclickable in the editor — INV-1
   // still preserves existing wids, INV-2 already passed inside regenerate, so this is
   // strictly additive.
-  const html = instrument(regenerated).html;
+  // Re-apply the base theme (idempotent) so agent-produced versions stay themed (ADR-0016
+  // Slice C). Anchor-free, so the INV-2 gate that just passed is unaffected.
+  const html = themed(instrument(regenerated).html, opts);
 
   let manifest = loadManifest(dir);
   const version = nextVersionNumber(manifest);

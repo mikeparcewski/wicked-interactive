@@ -18,6 +18,7 @@ import { regenerate } from "../core/regenerate.js";
 import { initManifest, recordVersion, getVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest, readVersionHtml } from "./fsstore.js";
 import { splitItems, writeStructuralRequest } from "./structural.js";
+import { themed } from "./theme-source.js";
 
 // Re-export the store reads so existing callers (server, tests) keep their import path.
 export { loadManifest, readVersionHtml } from "./fsstore.js";
@@ -41,7 +42,10 @@ function highestVersionOnDisk(dir) {
  */
 export function initWorkspace(dir, html, opts = {}) {
   mkdirSync(dir, { recursive: true });
-  const prepared = opts.instrument === false ? html : instrument(html).html;
+  const anchored = opts.instrument === false ? html : instrument(html).html;
+  // Apply the prezzie-derived base theme so every version (including v0) shares a consistent
+  // look (ADR-0016 Slice C). Idempotent + anchor-free, so INV-1/INV-2 are unaffected.
+  const prepared = themed(anchored, opts);
   atomicWrite(join(dir, "_v0.html"), prepared);
   const manifest = initManifest("_v0.html");
   saveManifest(dir, manifest);
@@ -113,7 +117,9 @@ export async function processFeedbackFile(dir, mdFile, opts = {}) {
   // instrument() preserves existing wids (INV-1), only ADDS for untagged blocks; safe to
   // run after INV-2 has already passed. Without this, content added via structural-change
   // stays unclickable in the editor.
-  const html = instrument(regenerated).html;
+  // Re-apply the base theme (idempotent — replaces the inherited block) so the version stays
+  // themed after regeneration (ADR-0016 Slice C).
+  const html = themed(instrument(regenerated).html, opts);
   atomicWrite(join(dir, `_v${version}.html`), html);
   ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: mdFile }));
   saveManifest(dir, manifest);
