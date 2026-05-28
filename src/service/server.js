@@ -4,11 +4,11 @@
 
 import express from "express";
 import chokidar from "chokidar";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync } from "node:fs";
 import { busEmit, EVENTS } from "./bus.js";
-import { writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
+import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 import { exportHtml, exportPdf } from "./export.js";
 
@@ -207,5 +207,102 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     sseClients.clear();
   }
 
-  return { app, start, stop, emit, broadcast, get clients() { return sseClients.size; } };
+  return { app, start, stop, startWatching, emit, broadcast, get clients() { return sseClients.size; } };
 }
+
+// ---------------------------------------------------------------------------
+// Multi-document mode (ADR-0015): one express server hosting many workspaces
+// under a docs root. Each doc gets its own createServer sub-app mounted at
+// /d/:doc/. Top-level adds GET /api/docs + POST /api/docs.
+// ---------------------------------------------------------------------------
+
+const DOC_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/; // slug-safe, no path separators
+
+function slugify(name) {
+  return String(name || "").toLowerCase().trim().replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+}
+
+/** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
+export function createMultiServer({ root, frontendDir, llm } = {}) {
+  if (!root) throw new Error("createMultiServer: root is required");
+  mkdirSync(root, { recursive: true });
+  const top = express();
+  top.use(express.json({ limit: "5mb" }));
+
+  const docs = new Map();          // name -> { svc, dir }
+  let topServer;
+
+  function docDir(name) { return resolve(root, name); }
+  function isExistingDoc(name) {
+    return DOC_NAME.test(name) && existsSync(join(docDir(name), "versions.json"));
+  }
+
+  async function mountDoc(name) {
+    if (docs.has(name)) return docs.get(name);
+    if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
+    const dir = docDir(name);
+    const svc = createServer({ dir, documentId: name, llm, watch: false, frontendDir: null });
+    await svc.startWatching();
+    top.use(`/d/${name}`, svc.app);
+    docs.set(name, { svc, dir });
+    return docs.get(name);
+  }
+
+  function listDocs() {
+    const out = [];
+    for (const entry of (existsSync(root) ? readdirSync(root, { withFileTypes: true }) : [])) {
+      if (!entry.isDirectory()) continue;
+      const name = entry.name;
+      if (!DOC_NAME.test(name)) continue;
+      const v = join(docDir(name), "versions.json");
+      if (!existsSync(v)) continue;
+      try {
+        const m = JSON.parse(readFileSync(v, "utf-8"));
+        const last = m.versions[m.versions.length - 1] || {};
+        out.push({ name, head: m.head, versions: m.versions.length, updated_at: last.created_at || null });
+      } catch { /* skip malformed */ }
+    }
+    return out.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+  }
+
+  // Top-level (cross-doc) endpoints
+  top.get("/api/docs", (_req, res) => res.json(listDocs()));
+
+  top.post("/api/docs", async (req, res) => {
+    const raw = req.body?.name;
+    const html = String(req.body?.html ?? "");
+    const name = DOC_NAME.test(raw) ? raw : slugify(raw);
+    if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
+    if (!html.trim()) return res.status(400).json({ error: "html required" });
+    if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
+    const dir = docDir(name);
+    initWorkspace(dir, html);                  // seeds _v0.html + versions.json
+    await mountDoc(name);
+    res.json({ name, head: 0 });
+  });
+
+  // Mount any docs already on disk so their routes are live from the first request.
+  // (Synchronous-enough — chokidar 'ready' resolves quickly per dir.)
+  async function bootstrap() {
+    for (const entry of (existsSync(root) ? readdirSync(root, { withFileTypes: true }) : [])) {
+      if (entry.isDirectory() && isExistingDoc(entry.name)) await mountDoc(entry.name);
+    }
+  }
+
+  // Static frontend (SPA) at /, mounted LAST so /api/* and /d/* take precedence.
+  const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
+  if (existsSync(staticDir)) top.use(express.static(staticDir));
+
+  async function start(port = 0) {
+    await bootstrap();
+    return new Promise((resolve) => { topServer = top.listen(port, () => resolve(topServer.address().port)); });
+  }
+  async function stop() {
+    for (const { svc } of docs.values()) { try { await svc.stop(); } catch {} }
+    if (topServer) await new Promise((r) => topServer.close(r));
+  }
+
+  return { app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; } };
+}
+
