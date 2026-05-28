@@ -43,6 +43,31 @@ export default function App() {
     getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
   }, [refreshVersions]);
 
+  // SSE-drop backstop: re-check head on focus/visibility + every 30s. If we missed an
+  // `html-updated` event during a reconnect (e.g. service restart) and we were following
+  // head, catch up to the new head. Cheap and silent on no-change.
+  useEffect(() => {
+    let cancelled = false;
+    async function catchUp() {
+      if (cancelled) return;
+      try {
+        const before = headRef.current;
+        const m = await getVersions();
+        setManifest(m);
+        if (m.head !== before && (viewingRef.current == null || viewingRef.current === before)) {
+          pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
+          setViewing(m.head);
+        }
+      } catch { /* offline / transient — try again next tick */ }
+    }
+    const id = setInterval(catchUp, 30000);
+    const onFocus = () => catchUp();
+    const onVis = () => { if (!document.hidden) catchUp(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => { cancelled = true; clearInterval(id); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+
   // ---- overlay rect computation (same-origin iframe) ----
   const recompute = useCallback(() => {
     const doc = iframeRef.current?.contentDocument;
