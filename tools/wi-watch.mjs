@@ -34,6 +34,9 @@ const STALL_MS = 60_000;   // no traffic for this long → assume dead, reconnec
 function ts() { return new Date().toISOString().slice(11, 19); }
 function note(msg) { if (!argv.quiet) console.log(`${ts()} watcher ${msg}`); }
 
+let activeReq = null;     // the in-flight request; destroyed before each reconnect to
+                          // prevent parallel SSE streams (event-spam after a stall reconnect)
+
 function connect() {
   let scheduled = false;
   let stallTimer = null;
@@ -41,6 +44,7 @@ function connect() {
     if (scheduled) return;            // first signal wins; ignore the others
     scheduled = true;
     if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
+    if (activeReq) { try { activeReq.destroy(); } catch {} activeReq = null; }
     note(`${reason} — reconnecting in ${delayMs}ms`);
     setTimeout(connect, delayMs);
   }
@@ -72,6 +76,10 @@ function connect() {
           else if (line.startsWith("data: ")) data += line.slice(6);
         }
         if (ev === "ready") continue;
+        // SSE comment frames (server-side heartbeats start with `:`) have no event:/data:
+        // lines, so ev/data stay empty. Skip them — they keep the connection warm but
+        // shouldn't surface as conversation notifications.
+        if (ev === "?" && !data) continue;
         let parsed = data;
         try { parsed = JSON.stringify(JSON.parse(data)); } catch { /* keep raw */ }
         let doc = "?";
@@ -90,6 +98,7 @@ function connect() {
   });
   req.setTimeout(0);
   req.on("error", (e) => scheduleReconnect(`http error: ${e.message}`, 1000));
+  activeReq = req;
 }
 
 process.on("SIGINT",  () => { note("SIGINT — bye"); process.exit(0); });
