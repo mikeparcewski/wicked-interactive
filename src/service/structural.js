@@ -8,6 +8,7 @@ import { readFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import * as cheerio from "cheerio";
 import { regenerate } from "../core/regenerate.js";
+import { instrument } from "../core/instrument.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest, readVersionHtml } from "./fsstore.js";
 
@@ -76,7 +77,12 @@ export async function applyStructuralResponse(dir, responseFile, opts = {}) {
     return frag;
   };
 
-  const { html, applied, rejected } = await regenerate(baseHtml, feedback, { llm });
+  const { html: regenerated, applied, rejected } = await regenerate(baseHtml, feedback, { llm });
+  // Re-instrument so any new h2/p/li in the structural fragment pick up a data-wid.
+  // Without this, new content from the agent stays unclickable in the editor — INV-1
+  // still preserves existing wids, INV-2 already passed inside regenerate, so this is
+  // strictly additive.
+  const html = instrument(regenerated).html;
 
   let manifest = loadManifest(dir);
   const version = nextVersionNumber(manifest);

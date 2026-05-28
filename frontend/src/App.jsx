@@ -122,6 +122,12 @@ export default function App() {
     });
     win.addEventListener("scroll", recompute, { passive: true });
     win.addEventListener("resize", recompute);
+    // Scroll events don't bubble, but with capture:true the document-level listener
+    // fires for ANY scrollable descendant (e.g. a `<section overflow-y:auto scroll-snap>`
+    // deck container). Without this the overlay rects stay stale during inner-section
+    // scrolls and the inline-comment dialog appears at the pre-scroll position — usually
+    // way off-screen below the iframe viewport.
+    doc.addEventListener("scroll", recompute, { passive: true, capture: true });
   }, [recompute]);
 
   // ---- SSE: hot-reload + lock + chat transcript ----

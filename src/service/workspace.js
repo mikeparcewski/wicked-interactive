@@ -108,8 +108,12 @@ export async function processFeedbackFile(dir, mdFile, opts = {}) {
 
   const { deterministic, structural } = splitItems(feedback.items);
   const prevHtml = readVersionHtml(dir, parent);
-  const { html, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
-
+  const { html: regenerated, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
+  // Re-instrument so any new h2/p/li introduced by the regen pick up a data-wid.
+  // instrument() preserves existing wids (INV-1), only ADDS for untagged blocks; safe to
+  // run after INV-2 has already passed. Without this, content added via structural-change
+  // stays unclickable in the editor.
+  const html = instrument(regenerated).html;
   atomicWrite(join(dir, `_v${version}.html`), html);
   ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: mdFile }));
   saveManifest(dir, manifest);
