@@ -132,6 +132,23 @@ body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 .wi-pending__item em { color: #64748b; margin-left: auto; }
 .wi-x { border: 0; background: none; color: #94a3b8; cursor: pointer; font-size: 16px; }
 
+.wi-doc-picker { display: inline-flex; align-items: center; gap: 6px; }
+.wi-doc-picker select { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px;
+  border: 1px solid #334155; background: #1e293b; color: #fff; }
+
+/* Modal (ADR-0015 new-document) */
+.wi-modal-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.55);
+  backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.wi-modal { background: #fff; border-radius: 16px; padding: 24px 28px; width: 100%; max-width: 560px;
+  box-shadow: 0 30px 60px rgba(0,0,0,.4); }
+.wi-modal__title { margin: 0 0 6px; font-size: 20px; color: #0f172a; }
+.wi-modal__hint { margin: 0 0 16px; color: #64748b; font-size: 13px; }
+.wi-modal__field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; color: #334155; }
+.wi-modal__field input, .wi-modal__field textarea { font: inherit; padding: 8px; border: 1px solid var(--wi-line); border-radius: 8px; }
+.wi-modal__field textarea { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 12px; resize: vertical; }
+.wi-modal__error { color: #b91c1c; background: #fef2f2; padding: 6px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
+.wi-modal__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
 .wi-vsel { display: inline-flex; align-items: center; gap: 6px; color: #cbd5e1; font-size: 13px; }
 .wi-vsel select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #334155;
   background: #1e293b; color: #fff; }

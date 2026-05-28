@@ -1,74 +1,51 @@
-// api.js — thin client for the service HTTP API.
+// api.js — thin HTTP client. All paths route through apiPath() so the same bundle works in
+// single-doc (legacy --dir) and multi-doc (--root + ?doc=) modes — see lib/apiPath.js.
 
-export const docUrl = (version) => (version == null ? "/doc" : `/doc/${version}`);
+import { apiPath, docSrc } from "./apiPath.js";
+
+export const docUrl = (version) => docSrc(version);
+
+async function jpost(path, body) {
+  const r = await fetch(apiPath(path), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `request failed: ${path}`);
+  return data;
+}
 
 export async function getVersions() {
-  const r = await fetch("/api/versions");
+  const r = await fetch(apiPath("/api/versions"));
   if (!r.ok) throw new Error("failed to load versions");
   return r.json();
 }
 
-export async function postFeedback(items) {
-  const r = await fetch("/api/feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items }),
-  });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || "feedback failed");
-  return body;
-}
-
-// Fork / "start again from here" (ADR-0008): non-destructive.
-export async function postFork(from) {
-  const r = await fetch("/api/fork", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from }),
-  });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || "fork failed");
-  return body;
-}
-
-// Answer an agent clarifying question (ADR-0012).
-export async function postAnswer(requestId, answer) {
-  const r = await fetch("/api/answer", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requestId, answer }),
-  });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || "answer failed");
-  return body;
-}
-
-// Conversational panel (ADR-0014).
-export async function postMessage(text) {
-  const r = await fetch("/api/message", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || "message failed");
-  return body;
-}
+export const postFeedback = (items) => jpost("/api/feedback", { items });
+export const postFork = (from) => jpost("/api/fork", { from });
+export const postAnswer = (requestId, answer) => jpost("/api/answer", { requestId, answer });
+export const postMessage = (text) => jpost("/api/message", { text });
+export const postExport = (version, format) => jpost("/api/export", { version, format });
 
 export async function getConversation() {
-  const r = await fetch("/api/conversation");
+  const r = await fetch(apiPath("/api/conversation"));
   if (!r.ok) return [];
   return r.json();
 }
 
-// Export the given version to self-contained HTML or PDF (ADR-0009).
-export async function postExport(version, format) {
-  const r = await fetch("/api/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ version, format }),
+// Multi-doc registry (ADR-0015) — these are top-level, NEVER prefixed.
+export async function listDocs() {
+  const r = await fetch("/api/docs");
+  if (!r.ok) return [];
+  return r.json();
+}
+
+export async function createDoc(name, html) {
+  const r = await fetch("/api/docs", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, html }),
   });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(body.error || "export failed");
-  return body;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "couldn't create doc");
+  return data;
 }

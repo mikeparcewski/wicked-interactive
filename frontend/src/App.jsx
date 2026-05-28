@@ -4,8 +4,11 @@ import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import ProcessingLock from "./components/ProcessingLock.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
+import DocPicker from "./components/DocPicker.jsx";
+import NewDocModal from "./components/NewDocModal.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc } from "./lib/api.js";
+import { getCurrentDoc, navigateToDoc, eventsUrl } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
 
@@ -21,6 +24,10 @@ export default function App() {
   const [question, setQuestion] = useState(null);
   const [chat, setChat] = useState([]);                  // conversation transcript
   const [chatOpen, setChatOpen] = useState(true);        // chat panel expand/collapse
+  const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
+  const [showNewDoc, setShowNewDoc] = useState(false);
+  const [newDocError, setNewDocError] = useState(null);
+  const currentDoc = getCurrentDoc();
 
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
@@ -39,9 +46,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    refreshVersions().then((m) => setViewing((v) => (v == null ? m.head : v)));
+    refreshVersions().then((m) => setViewing((v) => (v == null ? m.head : v))).catch(() => {});
     getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
+    listDocs().then(setDocs).catch(() => setDocs([]));
   }, [refreshVersions]);
+
+  async function onCreateDoc(name, html) {
+    setNewDocError(null);
+    try {
+      await createDoc(name, html);
+      navigateToDoc(name);   // hard-reloads to ?doc=<name>
+    } catch (e) {
+      setNewDocError(e.message);
+    }
+  }
 
   // SSE-drop backstop: re-check head on focus/visibility + every 30s. If we missed an
   // `html-updated` event during a reconnect (e.g. service restart) and we were following
@@ -98,7 +116,7 @@ export default function App() {
   }, [recompute]);
 
   // ---- SSE: hot-reload + lock + chat transcript ----
-  useSse("/events", {
+  useSse(eventsUrl(), {
     "html-updated": async () => {
       const wasFollowing = viewingRef.current == null || viewingRef.current === headRef.current;
       const m = await refreshVersions();
@@ -218,6 +236,7 @@ export default function App() {
     <div className="wi-app">
       <header className="wi-header">
         <span className="wi-logo">wicked-interactive</span>
+        <DocPicker docs={docs} current={currentDoc} onSelect={navigateToDoc} onNew={() => { setNewDocError(null); setShowNewDoc(true); }} />
         <span className="wi-spacer" />
         <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
         {manifest && !viewingIsHead && (
@@ -240,6 +259,13 @@ export default function App() {
             onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />
         </div>
       </div>
+
+      <NewDocModal
+        open={showNewDoc}
+        error={newDocError}
+        onCreate={onCreateDoc}
+        onCancel={() => setShowNewDoc(false)}
+      />
     </div>
   );
 }
