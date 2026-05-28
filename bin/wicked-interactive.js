@@ -1,26 +1,44 @@
 #!/usr/bin/env node
 // wicked-interactive CLI — the one command a business user runs (INV-6).
 //
-//   wicked-interactive serve --root <docs-dir> [--port N]
+//   wicked-interactive serve --root <docs-dir> [--port N] [--watch]
 //       Multi-document mode (ADR-0015). Hosts every workspace under <docs-dir>;
 //       new docs are created from the UI ("New document" modal). Preferred.
+//       --watch also tails /api/events/all in the same terminal — operator visibility
+//       into every per-doc broadcast.
 //
 //   wicked-interactive serve --dir <workspace> [--html <file>] [--port N]
 //       Legacy single-document mode. Workspace must exist; --html seeds _v0.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 import { createServer, createMultiServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith("--")) args[a.slice(2)] = argv[++i];
-    else args._.push(a);
+    if (!a.startsWith("--")) { args._.push(a); continue; }
+    const key = a.slice(2);
+    const next = argv[i + 1];
+    // Boolean flag if the next arg is missing or itself another --flag; otherwise consume it.
+    if (next === undefined || next.startsWith("--")) args[key] = true;
+    else { args[key] = next; i++; }
   }
   return args;
+}
+
+/** Spawn tools/wi-watch.mjs as a child and pipe its lines into the parent's stdout. */
+function spawnWatcher(base) {
+  const script = resolve(HERE, "..", "tools", "wi-watch.mjs");
+  const child = spawn(process.execPath, [script, "--base", base], { stdio: ["ignore", "inherit", "inherit"] });
+  child.on("exit", (code, sig) => console.log(`[watch] exited (code=${code} sig=${sig})`));
+  return child;
 }
 
 async function main() {
@@ -36,10 +54,17 @@ async function main() {
   if (args.root) {
     const svc = createMultiServer({ root: args.root });
     const actualPort = await svc.start(port);
-    console.log(`wicked-interactive (multi-doc) serving ${args.root} on http://localhost:${actualPort}`);
-    console.log(`  docs:   http://localhost:${actualPort}/api/docs`);
-    console.log(`  open:   http://localhost:${actualPort}/?doc=<name>`);
-    const shutdown = async () => { await svc.stop(); process.exit(0); };
+    const base = `http://localhost:${actualPort}`;
+    console.log(`wicked-interactive (multi-doc) serving ${args.root} on ${base}`);
+    console.log(`  docs:   ${base}/api/docs`);
+    console.log(`  open:   ${base}/?doc=<name>`);
+    console.log(`  tail:   ${base}/api/events/all`);
+    let watcher = null;
+    if (args.watch) {
+      console.log("  --watch: tailing events in this terminal");
+      watcher = spawnWatcher(base);
+    }
+    const shutdown = async () => { if (watcher) watcher.kill(); await svc.stop(); process.exit(0); };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
     return;

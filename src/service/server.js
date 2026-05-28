@@ -22,14 +22,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * @param {Function} [opts.llm]     structural-change LLM (increment 4)
  * @param {boolean} [opts.watch]    enable chokidar processing (default true)
  */
-export function createServer({ dir, documentId = "doc", watch = true, frontendDir } = {}) {
+export function createServer({ dir, documentId = "doc", watch = true, frontendDir, tap } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
   const sseClients = new Set();
 
+  // `tap` is the cross-server hook used by createMultiServer to fan all per-doc events
+  // into a single top-level /api/events/all stream. It's a fire-and-forget callback —
+  // exceptions are swallowed so a dead tap can't break the doc's own SSE clients.
   function broadcast(event, data) {
     const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const res of sseClients) res.write(frame);
+    if (tap) { try { tap(event, data); } catch { /* never let the tap break broadcasts */ } }
   }
 
   // Pipeline emitter: fan out to the bus and (for html updates) to connected browsers.
@@ -238,6 +242,22 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
   const docs = new Map();          // name -> { svc, dir }
   let topServer;
 
+  // Cross-doc event stream (operator-facing). Per-doc servers call `tap()` on every
+  // broadcast; we fan them out to anyone subscribed to /api/events/all, prepending the
+  // doc name so the receiver can route. Cheap (in-memory; no extra HTTP hops).
+  const topClients = new Set();
+  function topBroadcast(doc, event, data) {
+    const frame = `event: ${event}\ndata: ${JSON.stringify({ doc, ...data })}\n\n`;
+    for (const res of topClients) res.write(frame);
+  }
+  top.get("/api/events/all", (req, res) => {
+    res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    res.flushHeaders?.();
+    res.write("event: ready\ndata: {\"watching\":\"*\"}\n\n");
+    topClients.add(res);
+    req.on("close", () => topClients.delete(res));
+  });
+
   function docDir(name) { return resolve(root, name); }
   function isExistingDoc(name) {
     return DOC_NAME.test(name) && existsSync(join(docDir(name), "versions.json"));
@@ -247,7 +267,10 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     if (docs.has(name)) return docs.get(name);
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
     const dir = docDir(name);
-    const svc = createServer({ dir, documentId: name, llm, watch: false, frontendDir: null });
+    const svc = createServer({
+      dir, documentId: name, llm, watch: false, frontendDir: null,
+      tap: (event, data) => topBroadcast(name, event, data),  // fan into /api/events/all
+    });
     await svc.startWatching();
     top.use(`/d/${name}`, svc.app);
     docs.set(name, { svc, dir });
