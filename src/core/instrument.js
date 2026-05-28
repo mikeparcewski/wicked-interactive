@@ -14,6 +14,10 @@ export const DEFAULT_REVIEWABLE = [
   "h1", "h2", "h3", "h4", "h5", "h6",
   "p", "li", "blockquote", "figcaption",
   "td", "th", "a", "button", "img",
+  // Author opt-in for composite cards (divs) and chiclets (spans). Anything tagged
+  // `data-card` becomes individually clickable and gets its own data-wid — without
+  // this, structural-change content (cards, chips, tiles) stays unreachable.
+  "[data-card]",
 ];
 
 const ROLE_BY_TAG = {
@@ -26,7 +30,11 @@ const SLIDE_SELECTOR = "section, [data-slide], .slide";
 // Containers that can be restyled/themed as a whole (ADR-0011).
 const SECTION_SELECTOR = "section, header, [data-slide], .slide";
 
-function roleFor(tagName) {
+function roleFor(el) {
+  // `data-card` is explicit author intent — keep its own role so cards (divs) and
+  // chiclets (spans) end up with predictable, semantic wids like `slide-3-card-2`.
+  if (el?.attribs && el.attribs["data-card"] != null) return "card";
+  const tagName = el?.tagName || el?.name;
   return ROLE_BY_TAG[tagName] || "block";
 }
 
@@ -68,7 +76,7 @@ export function instrument(html, opts = {}) {
       return; // INV-1: never reassign
     }
     const slide = nearestSlide(el);
-    const role = roleFor(el.tagName || el.name);
+    const role = roleFor(el);
     const key = `${slide}-${role}`;
     let n = (counters.get(key) || 0) + 1;
     let wid = `slide-${slide}-${role}-${n}`;

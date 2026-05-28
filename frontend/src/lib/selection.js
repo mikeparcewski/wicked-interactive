@@ -27,6 +27,16 @@ export function nearestSection(el) {
   return null;
 }
 
+/** True if this element nests other wid-anchored elements — i.e. it's a composite
+ *  (card, container) rather than a leaf (h2, p, single chip). `Change text` is a
+ *  destructive replace, so the UI hides it for composites where the merged inner
+ *  text isn't a meaningful edit target.
+ */
+function isComposite(el) {
+  if (!el || typeof el.querySelector !== "function") return false;
+  return el.querySelector("[data-wid]") != null;
+}
+
 /** Describe a reviewable element for the feedback panel + the `before` snapshot (AC-10). */
 export function describe(el) {
   if (!el || typeof el.getAttribute !== "function") return null;
@@ -37,5 +47,6 @@ export function describe(el) {
     tag: String(el.tagName || "").toLowerCase(),
     before: normText(el.textContent),
     section: nearestSection(el),
+    composite: isComposite(el),
   };
 }

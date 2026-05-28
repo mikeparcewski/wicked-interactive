@@ -13,6 +13,10 @@ export default function InlineComment({ selected, rect, onSubmit, onCancel }) {
   useEffect(() => { setText(mode === "change-text" ? (selected?.before ?? "") : ""); }, [mode, selected]);
 
   if (!selected || !rect) return null;
+  // For composite elements (cards, containers with nested wid-anchored children)
+  // a destructive innerText replace would flatten the whole subtree. Hide the
+  // "Change text" tab; structural-change is the right tool for those.
+  const allowChangeText = !selected.composite;
   const top = Math.max(8, rect.top + rect.height + 8);
   const left = Math.max(8, Math.min(rect.left, (typeof window !== "undefined" ? window.innerWidth : 1200) - 360));
 
@@ -27,7 +31,9 @@ export default function InlineComment({ selected, rect, onSubmit, onCancel }) {
       <form onSubmit={submit}>
         <div className="wi-inline__scope">
           <button type="button" className={mode === "block-comment" ? "on" : ""} onClick={() => setMode("block-comment")}>This block</button>
-          <button type="button" className={mode === "change-text" ? "on" : ""} onClick={() => setMode("change-text")}>Change text</button>
+          {allowChangeText && (
+            <button type="button" className={mode === "change-text" ? "on" : ""} onClick={() => setMode("change-text")}>Change text</button>
+          )}
           {selected.section && (
             <button type="button" className={mode === "section-comment" ? "on" : ""} onClick={() => setMode("section-comment")}>Whole section</button>
           )}
