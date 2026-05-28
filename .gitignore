@@ -1,7 +1,19 @@
 node_modules/
-dist/
 *.log
+
+# The built SPA (frontend/dist) IS shipped — the plugin has no build step at install
+# time, so the service must find a real bundle to serve. It is tracked on purpose.
+# Ignore only transient build caches.
+.vite/
+frontend/.vite/
 .DS_Store
 
 # wicked-vault derived query cache (source of truth is entries/ + payloads/)
 .wicked-vault/index.sqlite
+
+# Local AI-tooling chat logs — never part of the shipped plugin
+.aider*
+
+# Secrets — guard against accidental commits
+.env
+.env.*

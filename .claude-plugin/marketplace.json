@@ -1,0 +1,20 @@
+{
+  "name": "wicked-interactive",
+  "description": "Interactive HTML & presentation builder with an in-browser feedback loop for non-technical business users. Highlight blocks, attach plain-language feedback, regenerate live with the supervising Claude session in the loop. Versioned, forkable, exportable to self-contained HTML/PDF.",
+  "owner": {
+    "name": "Mike Parcewski",
+    "url": "https://github.com/mikeparcewski"
+  },
+  "plugins": [
+    {
+      "name": "wicked-interactive",
+      "description": "Interactive HTML & presentation builder with an in-browser feedback loop. One command starts the service, opens the browser, and puts the running Claude session into the supervising-agent loop. Deterministic edits apply instantly; structural edits are delegated to the agent through a data-wid-preserving request/response protocol. Requires sibling plugins wicked-prezzie, wicked-garden, and wicked-brain.",
+      "version": "0.1.0",
+      "source": "./",
+      "author": {
+        "name": "Mike Parcewski",
+        "url": "https://github.com/mikeparcewski"
+      }
+    }
+  ]
+}

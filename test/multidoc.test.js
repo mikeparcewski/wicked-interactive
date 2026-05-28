@@ -73,6 +73,23 @@ test("POST /api/docs validates name + html and reports duplicates", async () => 
   } finally { await cleanup(); }
 });
 
+test("POST /api/docs returns 400 (not a 500 stack) when workspace init throws", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    // Plant a FILE where the new doc's directory would be created. initWorkspace's
+    // mkdirSync(dir, { recursive: true }) then throws ENOTDIR — the guard must turn that
+    // into a clean 400, not an unhandled 500 with a stack trace.
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(root, "blocked"), "i am a file, not a directory");
+    const res = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "blocked", html: "<h1>ok</h1>" }),
+    });
+    assert.equal(res.status, 400);
+    assert.ok((await res.json()).error, "400 body carries an error message");
+  } finally { await cleanup(); }
+});
+
 test("existing docs on disk are mounted on startup", async () => {
   // Pre-create a doc on disk, then boot — it should appear in /api/docs.
   const root = mkdtempSync(join(tmpdir(), "wi-multi-"));

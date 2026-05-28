@@ -2,7 +2,7 @@
 
 Interactive HTML & Presentation Builder with an in-browser feedback loop for
 non-technical business users. See `docs/requirements.md` (approved ACs) and
-`docs/adr/` (9 architecture decisions).
+`docs/adr/` (17 architecture decisions).
 
 ## wicked-brain
 

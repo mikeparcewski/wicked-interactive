@@ -6,13 +6,28 @@ attach plain-language feedback, click **UPDATE**, and watch the draft regenerate
 then navigate versions, fork, and export to self-contained HTML or PDF.
 
 - **Requirements:** [`docs/requirements.md`](docs/requirements.md) (approved acceptance criteria)
-- **Architecture decisions:** [`docs/adr/`](docs/adr/) (9 ADRs)
+- **Architecture decisions:** [`docs/adr/`](docs/adr/) (17 ADRs)
+
+## Install
+
+wicked-interactive is a **Claude Code plugin** — the supervising agent that fulfills
+structural edits and chat (ADR-0010) _is_ the Claude Code session, so it ships where that
+runtime lives. It depends on three sibling plugins (ADR-0016):
+
+```
+claude plugin install wicked-prezzie wicked-garden wicked-brain
+claude plugin install wicked-interactive
+```
+
+Then, inside Claude Code, run the **`serve`** skill ("start wicked-interactive"). It boots
+the local service, opens the browser, and puts the session into the `assist` loop — that
+loop is what makes click-to-edit actually update. No terminal needed after launch.
 
 ## Status
 
-**All 7 increments complete.** The full business-user loop is verified end-to-end in a
-real browser (`npm run acceptance`), and the build gate re-derives three claims —
-`tests-pass` (66), `frontend-build`, and the browser `acceptance` E2E — all PASS.
+**Increments 1–15 complete**, packaged as a plugin. The full business-user loop is verified
+end-to-end in a real browser (`npm run acceptance`); the build gate re-derives
+`tests-pass` (99), `frontend-build`, and the browser `acceptance` E2E — all PASS.
 
 **Increment 1 — core engine.** Pure, browser-free logic:
 
@@ -47,19 +62,29 @@ self-contained interactive HTML (local CSS/JS/images and `url()` refs inlined as
 data-URIs) or a PDF (headless Chrome `--print-to-pdf` — the primitive wicked-prezzie
 wraps; ADR-0009). The renderer is injectable. Export HTML / Export PDF buttons in the UI.
 
+**Increment 14 — multi-document.** `createMultiServer` mounts a per-doc sub-app at
+`/d/:doc/`; `POST /api/docs` creates a workspace, `/api/events/all` multiplexes every
+per-doc broadcast onto one operator tail (the `assist` loop watches this). The picker and
+"New document" modal let a user run many docs from one service.
+
+**Increment 15 — sibling gates + plugin packaging.** A preflight (`src/service/preflight.js`)
+and in-app install-gate block until `wicked-prezzie`, `wicked-garden`, and `wicked-brain`
+are present (ADR-0016). Shipped as a Claude Code plugin (`.claude-plugin/`) with the
+`serve` and `assist` skills as the entry point and supervising loop.
+
 ## Develop
 
 ```bash
-npm install && npm test          # core + service + frontend logic: node --test (66 tests)
+npm install && npm test          # core + service + frontend logic: node --test (99 tests)
 npm run acceptance               # browser-driven E2E (builds frontend, drives Chrome)
 
 cd frontend && npm install
 npm run dev                       # Vite dev server, proxies to the service on :4400
-npm run build                     # production build into frontend/dist
+npm run build                     # production build into frontend/dist (shipped committed)
 
-# run the whole thing:
+# run the multi-doc service directly (the serve skill wraps this):
 npm run build --prefix frontend
-node bin/wicked-interactive.js serve --dir /path/to/workspace --html draft.html
+node bin/wicked-interactive.js serve --root ~/wicked-interactive/docs --watch
 ```
 
 Requires Node ≥ 20. PDF export and the acceptance test need a Chrome/Chromium binary

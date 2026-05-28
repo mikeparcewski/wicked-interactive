@@ -271,8 +271,8 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     for (const res of topClients) res.write(frame);
   }
   // SSE heartbeat — a comment frame every 15s so half-open sockets surface as errors
-  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=60s) stay green
-  // even if one ping is lost. SSE comments start with `:` and are ignored by EventSource.
+  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=180s) stay green
+  // even if several pings are lost. SSE comments start with `:` and are ignored by EventSource.
   //
   // We also `setNoDelay(true)` on the socket so the kernel doesn't buffer the (small)
   // comment payloads via Nagle — pre-fix, the 24-byte heartbeats sat in the socket
@@ -336,10 +336,16 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
     if (!html.trim()) return res.status(400).json({ error: "html required" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
-    const dir = docDir(name);
-    initWorkspace(dir, html);                  // seeds _v0.html + versions.json
-    await mountDoc(name);
-    res.json({ name, head: 0 });
+    try {
+      const dir = docDir(name);
+      initWorkspace(dir, html);                  // seeds _v0.html + versions.json
+      await mountDoc(name);
+      res.json({ name, head: 0 });
+    } catch (e) {
+      // initWorkspace / mountDoc can throw on malformed HTML or a filesystem error.
+      // Return a 400 instead of leaking a 500 + stack to the browser.
+      res.status(400).json({ error: e.message });
+    }
   });
 
   // Mount any docs already on disk so their routes are live from the first request.
