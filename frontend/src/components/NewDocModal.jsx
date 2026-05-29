@@ -1,16 +1,24 @@
 // NewDocModal.jsx — create a new document (ADR-0015).
 //
-// Direction (2026-05-28): HTML is optional. Default flow is "name → blank doc → chat to
-// build". Power users can still paste exact HTML to seed v0. The chat panel opens on
-// arrival so the user knows where to start.
+// Three ways to start:
+//   1. blank   — name only → empty doc → brainstorm in chat (the default).
+//   2. html    — paste exact HTML to seed v0 (power users).
+//   3. source  — "From my content": point at files/a folder + an optional brief; the
+//                supervising agent indexes them (wicked-prezzie / wicked-brain) and builds
+//                the first draft. Most people arrive with material, not finished HTML.
 import { useEffect, useState } from "react";
 
 export default function NewDocModal({ open, onCreate, onCancel, error }) {
   const [name, setName] = useState("");
   const [html, setHtml] = useState("");
   const [showHtml, setShowHtml] = useState(false);
+  const [sourcePath, setSourcePath] = useState("");
+  const [brief, setBrief] = useState("");
+  const [showSource, setShowSource] = useState(false);
 
-  useEffect(() => { if (open) { setName(""); setHtml(""); setShowHtml(false); } }, [open]);
+  useEffect(() => {
+    if (open) { setName(""); setHtml(""); setShowHtml(false); setSourcePath(""); setBrief(""); setShowSource(false); }
+  }, [open]);
   if (!open) return null;
 
   const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -23,28 +31,55 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
 
   const trimmedName = name.trim();
   const trimmedHtml = html.trim();
+  const trimmedSource = sourcePath.trim();
   const valid = trimmedName.length > 0;
 
   function submit(e) {
     e.preventDefault();
-    const seed = trimmedHtml || blankSeed(trimmedName);
-    onCreate(trimmedName, seed, { kind: trimmedHtml ? "html" : "blank" });
+    // Precedence: source > html > blank.
+    if (trimmedSource) {
+      onCreate(trimmedName, "", { kind: "source", sourcePath: trimmedSource, brief: brief.trim() });
+    } else {
+      const seed = trimmedHtml || blankSeed(trimmedName);
+      onCreate(trimmedName, seed, { kind: trimmedHtml ? "html" : "blank" });
+    }
   }
+
+  const ctaLabel = trimmedSource ? "Build from my content" : trimmedHtml ? "Create from HTML" : "Create blank doc";
 
   return (
     <div className="wi-modal-overlay" onClick={onCancel}>
       <div className="wi-modal" onClick={(e) => e.stopPropagation()}>
         <h3 className="wi-modal__title">New document</h3>
         <p className="wi-modal__hint">
-          Pick a name. Skip the HTML and you'll land on an empty doc — the chat on the left is
-          where you brainstorm and build it. Names are slug-safe (lowercase letters, digits,
-          hyphens).
+          Pick a name. Skip everything else and you'll land on an empty doc — the chat on the
+          left is where you brainstorm and build it. Names are slug-safe (lowercase letters,
+          digits, hyphens).
         </p>
         <form onSubmit={submit}>
           <label className="wi-modal__field">
             Name
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-brochure" autoFocus spellCheck={false} />
           </label>
+
+          {!showSource ? (
+            <button type="button" className="wi-modal__disclosure" onClick={() => setShowSource(true)}>
+              Already have the content? <span>Build from my files →</span>
+            </button>
+          ) : (
+            <>
+              <label className="wi-modal__field">
+                Build from my content <span className="wi-modal__optional">(a file or folder on your machine)</span>
+                <input value={sourcePath} onChange={(e) => setSourcePath(e.target.value)}
+                  placeholder="~/Documents/q3-notes  or  ./decks/raw" spellCheck={false} className="wi-modal__mono" />
+              </label>
+              <label className="wi-modal__field">
+                What should it become? <span className="wi-modal__optional">(optional brief)</span>
+                <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3}
+                  placeholder="A 6-slide investor update — lead with the ARR chart, keep it punchy." />
+              </label>
+            </>
+          )}
 
           {!showHtml ? (
             <button type="button" className="wi-modal__disclosure" onClick={() => setShowHtml(true)}>
@@ -60,9 +95,7 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
 
           {error && <div className="wi-modal__error">{error}</div>}
           <div className="wi-modal__actions">
-            <button type="submit" className="wi-btn wi-btn--primary" disabled={!valid}>
-              Create {trimmedHtml ? "from HTML" : "blank doc"}
-            </button>
+            <button type="submit" className="wi-btn wi-btn--primary" disabled={!valid}>{ctaLabel}</button>
             <button type="button" className="wi-btn wi-btn--ghost" onClick={onCancel}>Cancel</button>
           </div>
         </form>

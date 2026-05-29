@@ -58,12 +58,13 @@ export default function App() {
     listDocs().then(setDocs).catch(() => setDocs([]));
   }, [refreshVersions, checkPreflight]);
 
-  async function onCreateDoc(name, html /*, meta */) {
+  async function onCreateDoc(name, html, meta) {
     setNewDocError(null);
     try {
-      await createDoc(name, html);
+      await createDoc(name, html, meta);
       // Empty / brainstorm docs land on the placeholder shell with the chat panel open
       // (chatOpen defaults to true on mount). The user drives content via chat from there.
+      // "From my content" docs land on a placeholder too; the agent hot-swaps in the draft.
       navigateToDoc(name);   // hard-reloads to ?doc=<name>
     } catch (e) {
       setNewDocError(e.message);

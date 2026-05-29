@@ -98,7 +98,9 @@ open "http://localhost:<PORT>/" 2>/dev/null || xdg-open "http://localhost:<PORT>
 ```
 
 Tell the user, in the browser-facing chat is best, but the terminal is fine here:
-- New documents: click **New document**, name it, skip the HTML, and brainstorm in chat.
+- New documents: click **New document**, name it, then either brainstorm in chat from a
+  blank doc OR choose **Build from my files** to point at content you already have — the
+  agent indexes it and drafts the document for you.
 - Existing documents: click a block to comment, "Change text" for exact edits, or type
   in the assistant chat for anything bigger.
 

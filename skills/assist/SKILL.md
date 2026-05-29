@@ -24,12 +24,15 @@ architecture assumes is present. There is no second embedded model; do not add o
 
 Run this as a continuous loop until the user stops the session.
 
-## The two things you fulfill
+## The three things you fulfill
 
 1. **Structural-change requests** — the service writes `requests/_v{n}.request.json`; you
    edit each fragment and write `requests/_v{n}.response.json`.
 2. **Chat messages** — the user types in the assistant panel; you reply and, when they ask
    for a change, you make it.
+3. **Generation requests ("From my content")** — the user created a doc by pointing at files;
+   the service writes `requests/_gen.request.json` and seeds a placeholder. You read the
+   source, build the first draft, and write `requests/_gen.response.json` (Step 5).
 
 ## Step 1 — Watch the event stream
 
@@ -46,6 +49,7 @@ Each line is `HH:MM:SS <doc> <event> <json>`. The events you act on:
 |-------------|----------------------------------------------------|-------------|
 | `processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfill the request file (Step 3) |
 | `message` (role `user`)                    | the user typed in chat                 | reply / make the change (Step 4) |
+| `generation`                               | a new "from my content" doc to build   | build the first draft (Step 5) |
 | `status`, `html-updated`, `error`          | informational                          | none (the UI handles these) |
 
 Per-doc workspaces live under the docs root at `<DOCS>/<doc>/`. The request/response
@@ -159,10 +163,67 @@ On a `message` event (role `user`):
   - Always post a `processing` status when you start and `complete` when the new version
     lands, so the document shows the loading state.
 
-## Step 5 — Consult project knowledge before you rewrite (wicked-brain)
+## Step 5 — Build a document from the user's content ("From my content")
 
-Before any **structural** edit or first-draft generation (Step 3, or the structural branch
-of Step 4), check whether the project's brain knows something the document should respect —
+When a `generation` event arrives (or you find `requests/_gen.request.json` with no `_v1.html`
+yet), the user created a doc by pointing at material instead of typing — the most common way
+people start. The service is model-free, so building the draft is **yours**.
+
+### 5a. Read the request
+
+`<DOCS>/<doc>/requests/_gen.request.json`:
+
+```json
+{ "document_id": "<doc>", "source_path": "~/Documents/q3-notes", "brief": "6-slide investor update…",
+  "base_html": "_v0.html", "ts": "…" }
+```
+
+Post a status immediately so the placeholder doesn't look stuck:
+
+```bash
+curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
+  -d '{"state":"processing","message":"Reading your files and drafting…"}'
+```
+
+### 5b. Index and generate (reuse the siblings — never reinvent)
+
+- Read the files under `source_path` (a single file or a folder; expand `~`).
+- **Ground it in knowledge** — ingest/consult **wicked-brain** so the draft uses the user's
+  real numbers and prior decisions (Step 6 below has the detail). Don't invent figures the
+  source doesn't support.
+- **Generate with wicked-prezzie** — use its deck/HTML generation + theming primitives to turn
+  the material into a real document. For a multi-discipline brief, route through a
+  **wicked-garden crew** (Step 7) so design + copy + structure are reasoned about together.
+- Honor the `brief` if present (length, audience, tone, what to lead with).
+
+### 5c. Write the response — full HTML, not fragments
+
+Unlike a structural edit, this is a **whole new document**, so there are no pre-existing
+`data-wid` anchors to preserve — the service assigns fresh ones and applies the theme. Write a
+small Node script (don't hand-build JSON with escaped HTML):
+
+```js
+import fs from "node:fs";
+const dir = process.argv[2];            // <DOCS>/<doc>
+const html = `<section>…your generated document…</section>`;
+fs.writeFileSync(`${dir}/requests/_gen.response.json`, JSON.stringify({ html }, null, 2));
+console.log("wrote generated draft:", html.length, "bytes");
+```
+
+The watcher picks up `_gen.response.json`, instruments + themes it, lands it as `_v1`, and
+hot-reloads the browser. Then post `complete`:
+
+```bash
+curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
+  -d '{"state":"complete","message":"Here's a first draft — click any block to refine it.","version":1}'
+```
+
+From here the normal click-to-edit loop (Steps 3–4) takes over.
+
+## Step 6 — Consult project knowledge before you rewrite (wicked-brain)
+
+Before any **structural** edit or first-draft generation (Step 3, Step 5, or the structural
+branch of Step 4), check whether the project's brain knows something the document should respect —
 prior decisions, terminology, the customer's positioning, numbers that must stay accurate.
 This is what keeps agent-authored content grounded instead of plausibly-wrong (ADR-0016
 Slice E).
@@ -179,7 +240,7 @@ Slice E).
 Skip this for deterministic tweaks (exact-text, style, remove); those carry no authorship
 risk. It's the generative edits that need grounding.
 
-## Step 6 — Assemble a crew for multi-discipline requests (wicked-garden)
+## Step 7 — Assemble a crew for multi-discipline requests (wicked-garden)
 
 Some chat requests are bigger than one editing pass — they need design + copy + structure
 reasoned about together ("turn this into an investor-ready deck", "make the whole thing feel
@@ -204,7 +265,7 @@ Route these to a **wicked-garden crew** rather than doing a shallow single-shot 
 For a single-discipline ask ("make this headline bolder", "punch up this one card"), don't
 over-engineer it — handle it inline (Step 3/4). Crews are for breadth, not every edit.
 
-## Step 7 — Loop
+## Step 8 — Loop
 
 Return to watching. Keep going until the user says to stop. The session staying alive IS
 the product guarantee — `serve` + `assist` together are why a non-technical user can click

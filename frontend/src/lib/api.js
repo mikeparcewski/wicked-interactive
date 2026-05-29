@@ -47,10 +47,18 @@ export async function getPreflight() {
   return r.json();
 }
 
-export async function createDoc(name, html) {
+// meta: { kind: "blank"|"html"|"source", sourcePath?, brief? }. For kind:"source" the service
+// seeds a placeholder and the supervising agent builds the first draft from the user's files.
+export async function createDoc(name, html, meta = {}) {
+  const body = { name, html };
+  if (meta.kind === "source") {
+    body.kind = "source";
+    body.source_path = meta.sourcePath || "";
+    body.brief = meta.brief || "";
+  }
   const r = await fetch("/api/docs", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, html }),
+    body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || "couldn't create doc");

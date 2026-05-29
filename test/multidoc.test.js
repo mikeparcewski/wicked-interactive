@@ -106,6 +106,49 @@ test("existing docs on disk are mounted on startup", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// "From my content" (kind:source, ADR-0010): the service seeds a placeholder and
+// hands a generation request to the supervising agent — it never generates itself.
+// ---------------------------------------------------------------------------
+test("POST /api/docs kind:source seeds a placeholder + writes a generation request", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "from-content", kind: "source", source_path: "~/notes/q3", brief: "6 slides" }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.name, "from-content");
+    assert.equal(body.head, 0);
+    assert.equal(body.generating, true);
+
+    // Placeholder v0 exists and the manifest head is 0 (agent will land v1 later).
+    const m = await (await fetch(`${base}/d/from-content/api/versions`)).json();
+    assert.equal(m.head, 0);
+
+    // The generation request file is on disk for the agent to fulfill.
+    const reqPath = join(root, "from-content", "requests", "_gen.request.json");
+    assert.ok(existsSync(reqPath), "generation request file written");
+    const { readFileSync } = await import("node:fs");
+    const reqBody = JSON.parse(readFileSync(reqPath, "utf-8"));
+    assert.equal(reqBody.source_path, "~/notes/q3");
+    assert.equal(reqBody.brief, "6 slides");
+  } finally { await cleanup(); }
+});
+
+test("POST /api/docs kind:source requires a source_path", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "no-source", kind: "source", source_path: "" }),
+    });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /source_path/);
+  } finally { await cleanup(); }
+});
+
+// ---------------------------------------------------------------------------
 // Cross-doc event multiplexer: /api/events/all (operator-facing tail). Added
 // in the watcher follow-up so a single listener can survive doc creation +
 // catch every per-doc broadcast without polling each /d/:doc/events stream.

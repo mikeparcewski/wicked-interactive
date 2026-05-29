@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, rea
 import { busEmit, EVENTS } from "./bus.js";
 import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
+import { writeGenerationRequest, applyGeneratedDraft, generationPlaceholder, GEN_RESPONSE } from "./generation.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { preflight } from "./preflight.js";
 
@@ -192,6 +193,7 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
   const root = resolve(dir);
   const FEEDBACK_FILE = /^_v\d+\.md$/;             // feedback batch, in the workspace root
   const RESPONSE_FILE = /^_v\d+\.response\.json$/; // agent's structural reply, in requests/
+  const GEN_RESPONSE_FILE = new RegExp(`^${GEN_RESPONSE.replace(/\./g, "\\.")}$`); // first-draft reply
   function startWatching() {
     mkdirSync(resolve(dir, REQUESTS_DIR), { recursive: true }); // so depth:1 sees responses
     // chokidar v4 dropped globs — watch the tree (depth 1) and route by path here.
@@ -213,6 +215,11 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
           broadcast("processed", {
             version: result.version, parent: result.parent,
             applied: result.applied, rejected: result.rejected, structural: true,
+          });
+        } else if (GEN_RESPONSE_FILE.test(name)) {
+          const result = await applyGeneratedDraft(dir, name, { emit, documentId });
+          broadcast("processed", {
+            version: result.version, parent: result.parent, generated: true,
           });
         }
       } catch (e) {
@@ -331,16 +338,33 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
 
   top.post("/api/docs", async (req, res) => {
     const raw = req.body?.name;
-    const html = String(req.body?.html ?? "");
+    const kind = String(req.body?.kind || "").toLowerCase();
+    const fromSource = kind === "source";
+    const sourcePath = String(req.body?.source_path ?? "").trim();
+    const brief = String(req.body?.brief ?? "").trim();
     const name = DOC_NAME.test(raw) ? raw : slugify(raw);
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
-    if (!html.trim()) return res.status(400).json({ error: "html required" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
+
+    // "From my content" (ADR-0010): the service is model-free, so it can't read files or
+    // generate. It seeds a placeholder v0, then hands a generation request to the supervising
+    // agent, which indexes the source and lands the real first draft as a follow-on version.
+    if (fromSource && !sourcePath) return res.status(400).json({ error: "source_path required for kind:source" });
+    const html = fromSource
+      ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePath))
+      : String(req.body?.html ?? "");
+    if (!fromSource && !html.trim()) return res.status(400).json({ error: "html required" });
+
     try {
       const dir = docDir(name);
       initWorkspace(dir, html);                  // seeds _v0.html + versions.json
-      await mountDoc(name);
-      res.json({ name, head: 0 });
+      const { svc } = await mountDoc(name);
+      if (fromSource) {
+        writeGenerationRequest(dir, { sourcePath, brief, documentId: name });
+        // Fan a generation event onto /api/events/all so the assist loop picks it up.
+        svc.broadcast("generation", { document_id: name, source_path: sourcePath, brief, base_html: "_v0.html", ts: new Date().toISOString() });
+      }
+      res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}) });
     } catch (e) {
       // initWorkspace / mountDoc can throw on malformed HTML or a filesystem error.
       // Return a 400 instead of leaking a 500 + stack to the browser.
