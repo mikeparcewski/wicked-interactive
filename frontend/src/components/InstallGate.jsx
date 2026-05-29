@@ -20,10 +20,11 @@ export default function InstallGate({ preflight, onRetry }) {
   return (
     <div className="wi-gate" role="alertdialog" aria-labelledby="wi-gate-title">
       <div className="wi-gate__panel">
-        <h2 id="wi-gate-title" className="wi-gate__title">Missing sibling plugins</h2>
+        <h2 id="wi-gate-title" className="wi-gate__title">Finishing setup</h2>
         <p className="wi-gate__body">
-          wicked-interactive needs these Claude Code plugins installed before the editor will work.
-          Theme, crews, and knowledge queries all live in them.
+          wicked-interactive sets up its helper tools automatically the first time you start it.
+          If you're seeing this, auto-setup couldn't finish on its own — usually because the editor
+          was launched outside Claude Code. Run the command(s) below, then click recheck.
         </p>
         <ul className="wi-gate__list">
           {Object.entries(required).map(([name, info]) => (
@@ -34,7 +35,7 @@ export default function InstallGate({ preflight, onRetry }) {
             </li>
           ))}
         </ul>
-        <p className="wi-gate__cta">Run this once, then come back:</p>
+        <p className="wi-gate__cta">Run this to finish, then come back:</p>
         <pre className="wi-gate__cmd"><code>{hint}</code></pre>
         <div className="wi-gate__actions">
           <button className="wi-btn wi-btn--primary" onClick={onRetry}>I've installed them — check again</button>

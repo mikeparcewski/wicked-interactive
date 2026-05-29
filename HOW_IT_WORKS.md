@@ -71,9 +71,13 @@ renderer is injectable.
 onto one operator tail (the `assist` loop watches this). The picker and "New document" modal
 let a user run many docs from one service.
 
-**Increment 15 — sibling gates + plugin packaging.** A preflight (`src/service/preflight.js`)
-and in-app install-gate block until `wicked-prezzie`, `wicked-garden`, and `wicked-brain` are
-present (ADR-0016). Shipped as a Claude Code plugin (`.claude-plugin/`) with the `serve` and
+**Increment 15 — sibling setup + plugin packaging.** On first run the `serve` skill runs
+`tools/ensure-siblings.mjs`, which auto-installs only the missing siblings (`wicked-prezzie`,
+`wicked-garden`, `wicked-brain`) and prints every command before it runs — transparent, never
+silent. Opt out with `WI_NO_AUTOINSTALL=1` and it only reports what to install. A preflight
+(`src/service/preflight.js`) and in-app install-gate remain as the safety net for when
+auto-install can't run (e.g. launched outside Claude Code), showing the exact per-tool
+commands (ADR-0016). Shipped as a Claude Code plugin (`.claude-plugin/`) with the `serve` and
 `assist` skills as the entry point and supervising loop.
 
 ## Theme, crews, and knowledge (ADR-0016)

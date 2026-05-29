@@ -8,72 +8,68 @@
 
 # wicked-interactive
 
-**Fix your slides and docs by pointing at them and saying what you want. No code. No tickets. No waiting on the design team.**
+### Vibe-code your slides and docs. It's Replit for stuff you actually present.
 
-Open your draft in the browser. See something you don't like? Click it and say it in plain
-English — *"make this punchier," "this number is wrong," "turn this wall of text into three
-bullets," "make it feel premium."* Hit **UPDATE** and watch it change. Don't like the result?
-Roll back. Want to try a bolder direction? Fork it and keep both. When it's right, export a
-single self-contained HTML file or a PDF and send it.
-
-A Claude Code plugin for the people who own the content but were never handed the keys.
-
-## Say it, see it
-
-| You're looking at... | You say... |
-|---|---|
-| A clunky headline | *"make this shorter and bolder"* |
-| A wrong figure | *"change $4M to $4.2M"* |
-| A dense paragraph | *"turn this into three bullets"* |
-| A flat section | *"make this feel premium"* |
-| A whole rough deck | *"tighten the story and make it investor-ready"* |
-| A blank page | *"build me a deck about our Q3 results"* |
-
-> **The thing that surprises people:** you never touch a terminal. Highlight, type, click —
-> the AI does the rewrite, and *every* version is saved automatically. Nothing you make can be
-> lost, and you can always go back to any earlier draft.
-
-## Install
-
-You'll need [Claude Code](https://claude.com/claude-code). wicked-interactive leans on three
-sibling tools — install them first, then the builder itself:
+You know how Replit lets you build an app by just *talking* to it? This is that, for the
+deck you have to show the board on Monday. Open it in your browser, **point at the thing you
+don't like, say what you want, and watch it change.** No code. No design tickets. No "let me
+loop in the team." Just you, your draft, and a running Claude that does what you ask.
 
 ```
-# 1. The presentation engine — themes, deck generation, HTML → PDF
-/plugin marketplace add mikeparcewski/wicked-prezzie
-/plugin install wicked-prezzie
+Point at it  →  Say it  →  Watch it change  →  (don't like it? undo, or fork and try both)
+```
 
-# 2. The crews that handle big redesigns
-/plugin marketplace add mikeparcewski/wicked-garden
-/plugin install wicked-garden
+It's powered by your Claude Code plan. If you can describe it, you can build it.
 
-# 3. Project memory, so edits stay true to your facts
-npx wicked-brain
+---
 
-# 4. wicked-interactive itself
+## Try it in 30 seconds
+
+> *"Make this headline punchier."*
+> *"That number's wrong — it's $4.2M, not $4M."*
+> *"This slide is a wall of text. Three bullets."*
+> *"Make the whole thing feel premium."*
+> *"Actually, build me a deck about our Q3 results from scratch."*
+
+You click the block. You type that. You hit **UPDATE**. It happens — live, in front of you.
+Every version is saved automatically, so you can rewind to any draft, or **fork** and chase
+two ideas at once. When it's gorgeous, hit export and you've got a clean HTML file or a PDF
+to send. Done.
+
+## Why people actually like it
+
+- 🖱️ **You edit by pointing.** Highlight anything, say what you want in normal words.
+- ⏪ **You can't lose work.** Every change is a new saved version. Rewind anytime.
+- 🍴 **Try both directions.** Fork from any version and keep them side by side.
+- 📤 **Send it anywhere.** Export self-contained HTML or PDF — no broken links, nothing to install on their end.
+- ✨ **Start from a blank page.** Give it a topic, get a first draft.
+- 🙅 **Never see a terminal.** Once it's running, it's all browser.
+
+## Get it running
+
+You'll need [Claude Code](https://claude.com/claude-code). Then add wicked-interactive:
+
+```
 /plugin marketplace add mikeparcewski/wicked-interactive
 /plugin install wicked-interactive
 ```
 
-Then just say **"start wicked-interactive."** It opens your browser, and gets out of your way.
-(If anything's missing, the app tells you exactly what to run — no guessing.)
+Now just say:
 
-## What you can do
+> **"start wicked-interactive"**
 
-- **Edit by pointing.** Click any block, describe the change, watch it happen live.
-- **Never lose a draft.** Every change is a new saved version. Step back and forth freely.
-- **Try two directions.** Fork from any version and keep both alive side by side.
-- **Hand it off cleanly.** Export a self-contained HTML file or a PDF — no broken links, no
-  missing fonts, nothing to install on the other end.
-- **Start from nothing.** Point it at a topic and let it build the first draft for you.
+That's it. The first time, it quietly sets up a few helper tools it needs (you'll see exactly
+what it's installing — nothing sneaky), then your browser pops open and you're off. Prefer to
+install those helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.
 
-## Curious how it works?
+## Want to peek under the hood?
 
-The click-to-edit magic, the version model, and why edits never corrupt your document are all
-explained in **[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** — written for the curious, not required for
-the user. The full design record lives in [`docs/adr/`](docs/adr/) (17 architecture
-decisions) and the approved spec in [`docs/requirements.md`](docs/requirements.md).
+Totally optional. **[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** explains the click-to-edit magic,
+why your versions can never get corrupted, and how the AI stays in the loop. The full design
+record is in [`docs/adr/`](docs/adr/) and the spec in [`docs/requirements.md`](docs/requirements.md).
 
-## License
+---
 
-MIT — see [LICENSE](LICENSE).
+MIT licensed — see [LICENSE](LICENSE). Built on [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie),
+[wicked-garden](https://github.com/mikeparcewski/wicked-garden), and
+[wicked-brain](https://github.com/mikeparcewski/wicked-brain).

@@ -21,23 +21,27 @@ loop is broken without a supervising agent (ADR-0010): structural edits and chat
 fulfilled by *this* Claude session writing response files. Starting the service without
 entering the loop leaves the user clicking blocks that never update.
 
-## Step 0 — Preflight: sibling plugins
+## Step 0 — Set up the helper tools (auto-install)
 
-The editor blocks until `wicked-prezzie`, `wicked-garden`, and `wicked-brain` are
-installed (ADR-0016). Confirm they're present:
+The editor needs three sibling tools — `wicked-prezzie`, `wicked-garden`, and
+`wicked-brain` (ADR-0016). Don't make the user install them by hand. Run the setup
+script, which installs **only what's missing** and prints every command before it runs
+(transparency — nothing installed silently):
 
 ```bash
-node bin/wicked-interactive.js --help 2>/dev/null; \
-node -e "import('./src/service/preflight.js').then(m=>{const p=m.preflight();console.log(JSON.stringify(p));process.exit(p.ok?0:1)})"
+node tools/ensure-siblings.mjs
 ```
 
-If `ok:false`, tell the user exactly what to run and stop:
+Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the
+three helper tools wicked-interactive needs (wicked-prezzie, wicked-garden, wicked-brain).
+You'll see each install command as it runs."* If everything is already present the script
+is a no-op and exits 0.
 
-```
-claude plugin install wicked-prezzie wicked-garden wicked-brain
-```
-
-The in-app install-gate will also block the UI, but failing fast here is friendlier.
+If the script exits non-zero, it couldn't finish (usually `claude` isn't on PATH because
+you're not inside Claude Code). It prints the exact remaining commands — relay those to the
+user and stop. The in-app install-gate is the same safety net in the browser. Respect
+`WI_NO_AUTOINSTALL=1` if the user has opted out of auto-install (the script then only
+reports what's missing).
 
 ## Step 1 — Ensure runtime dependencies
 
