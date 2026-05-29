@@ -1,29 +1,66 @@
 :root {
-  --wi-accent: #2563eb;
+  --wi-accent: #4f46e5;          /* indigo — used sparingly, the one true accent */
+  --wi-accent-h: #4338ca;        /* hover/darker */
   --wi-accent-2: #7c3aed;
-  --wi-accent-soft: #eff4ff;
-  --wi-ring: rgba(37, 99, 235, .35);
+  --wi-accent-soft: #eef2ff;
+  --wi-ring: rgba(79, 70, 229, .35);
   --wi-pending: #f59e0b;
-  --wi-bg: #0f172a;
+  /* surfaces: near-white chrome, pure-white canvas */
+  --wi-bg: #ffffff;
   --wi-panel: #ffffff;
-  --wi-surface: #f8fafc;
-  --wi-line: #e6eaf1;
+  --wi-surface: #fbfbfd;         /* faint off-white rails */
+  --wi-surface-2: #e8eaef;       /* the stage behind the document — cool gray so the white page reads as a lit object */
+  --wi-field: #f4f5f8;           /* inset fields / segmented controls */
+  /* hairline borders instead of heavy gray lines */
+  --wi-line: rgba(15, 23, 42, .08);
+  --wi-line-2: rgba(15, 23, 42, .12);
   --wi-ink: #0f172a;
-  --wi-ink-soft: #64748b;
-  /* radius scale */
-  --wi-r-sm: 8px;
-  --wi-r-md: 12px;
-  --wi-r-lg: 16px;
-  /* elevation scale */
-  --wi-sh-1: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.08);
-  --wi-sh-2: 0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.05);
-  --wi-sh-3: 0 24px 50px rgba(15,23,42,.22);
+  --wi-ink-soft: #6b7280;
+  --wi-ink-faint: #9aa3b2;
+  /* type ramp — deliberate hierarchy, not one uniform size */
+  --wi-text-xs: 11px;
+  --wi-text-sm: 12.5px;
+  --wi-text-base: 13.5px;
+  --wi-text-md: 15px;
+  --wi-text-lg: 19px;
+  --wi-text-xl: 23px;
+  --wi-lh-tight: 1.25;
+  --wi-lh-base: 1.5;
+  /* radius scale — tighter, more precise */
+  --wi-r-sm: 6px;
+  --wi-r-md: 10px;
+  --wi-r-lg: 14px;
+  /* elevation scale — layered, soft, modern */
+  --wi-sh-1: 0 1px 2px rgba(15,23,42,.04), 0 1px 1px rgba(15,23,42,.04);
+  --wi-sh-2: 0 2px 4px rgba(15,23,42,.04), 0 8px 20px rgba(15,23,42,.06);
+  --wi-sh-3: 0 12px 28px rgba(15,23,42,.12), 0 32px 64px rgba(15,23,42,.16);
   --wi-ease: cubic-bezier(.2, .8, .2, 1);
+  /* App-shell planes (Concept D). Four distinct planes, separated by VALUE + soft
+     shadow — never hard hairlines. The document is the brightest, floating object. */
+  --wi-canvas-bg: hsl(220, 16%, 91%);          /* Plane 0 — the workspace the doc floats on */
+  --wi-chrome: hsl(224, 30%, 14%);             /* Plane 1 — dark-indigo rail + toolbar */
+  --wi-chrome-2: hsl(224, 24%, 21%);           /* lifted controls on chrome */
+  --wi-chrome-3: hsl(224, 22%, 27%);           /* hover */
+  --wi-chrome-line: rgba(255,255,255,.06);     /* whisper-thin, used sparingly */
+  --wi-chrome-line-2: rgba(255,255,255,.12);
+  --wi-chrome-ink: hsl(220, 24%, 92%);
+  --wi-chrome-ink-soft: hsl(220, 16%, 68%);
+  --wi-chrome-ink-faint: hsl(220, 12%, 50%);
+  --wi-accent-bright: hsl(245, 100%, 85%);     /* accent text/icons on dark chrome */
+  --wi-panel-bg: hsl(220, 20%, 98%);           /* Plane 2 — light chat panel (right) */
+  --wi-panel-2: hsl(220, 16%, 95%);            /* agent bubbles / inset on the panel */
+  /* soft separators — shadows that imply planes instead of drawing lines */
+  --wi-sep-down:  0 1px 0 rgba(255,255,255,.05), 0 8px 28px rgba(20,24,40,.45);
+  --wi-sep-right: -1px 0 0 rgba(15,23,42,.04), -14px 0 32px rgba(15,23,42,.10);
+  /* the document's float shadow (applied to the iframe — never as layout offset) */
+  --wi-doc-shadow: 0 1px 3px rgba(15,23,42,.10), 0 8px 24px rgba(15,23,42,.12), 0 24px 56px rgba(15,23,42,.10);
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; color: var(--wi-ink);
+  margin: 0; color: var(--wi-ink); background: var(--wi-bg);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: var(--wi-text-base); line-height: var(--wi-lh-base);
+  font-feature-settings: "cv02","cv03","cv04","cv11";
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
@@ -37,33 +74,137 @@ body {
   * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 
-.wi-app { display: flex; flex-direction: column; height: 100vh; }
-
-.wi-header {
-  display: flex; align-items: center; gap: 14px; padding: 12px 18px; flex: 0 0 auto;
-  background: linear-gradient(100deg, #0b1220 0%, #1e1b4b 55%, #4c1d95 100%);
-  color: #fff; box-shadow: 0 2px 16px rgba(0,0,0,.25); position: relative; z-index: 5;
+/* ============================================================================
+   App shell (Concept D) — a 3-zone application grid, not a document in a frame.
+     row 1: toolbar (spans all)
+     row 2: [ rail | canvas | chat-panel ]
+   Separation is value + soft shadow; there are no hard hairlines between zones.
+   ========================================================================== */
+.wi-shell {
+  display: grid;
+  grid-template-columns: 56px 1fr 340px;
+  grid-template-rows: 46px 1fr;
+  height: 100vh; width: 100vw; overflow: hidden;
+  background: var(--wi-canvas-bg);
 }
-.wi-logo { font-weight: 800; letter-spacing: -.2px; font-size: 16px;
-  background: linear-gradient(90deg, #93c5fd, #c4b5fd, #f0abfc);
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
-.wi-header .wi-strip { flex: 1 1 auto; }
+.wi-shell--chat-collapsed { grid-template-columns: 56px 1fr 56px; }
 
+/* ---- Toolbar (Plane 1, spans the top) ---- */
+.wi-toolbar {
+  grid-column: 1 / -1; grid-row: 1; z-index: 6;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 16px 0 14px;
+  background: var(--wi-chrome); color: var(--wi-chrome-ink);
+  box-shadow: var(--wi-sep-down);
+}
+.wi-toolbar__group { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.wi-toolbar__group--center { flex: 1 1 auto; justify-content: center; overflow: hidden; }
+
+/* Brand lockup — glyph + wordmark, lives top-left in the toolbar. */
+.wi-logo { display: inline-flex; align-items: center; gap: 9px; user-select: none; }
+.wi-logo__mark { width: 26px; height: 26px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--wi-accent-bright), var(--wi-accent-2));
+  box-shadow: 0 0 0 1px rgba(255,255,255,.14), 0 3px 10px rgba(124,58,237,.5); }
+.wi-logo__mark svg { display: block; }
+.wi-logo__word { font-size: var(--wi-text-md); font-weight: 700; letter-spacing: -.02em; line-height: 1; white-space: nowrap; }
+.wi-logo__word b { font-weight: 700; color: var(--wi-chrome-ink); }
+.wi-logo__word i { font-style: normal; font-weight: 600; color: var(--wi-accent-bright); }
+
+/* Breadcrumb: the open document's name, divided from the brand by a faint chevron. */
+.wi-toolbar__crumb { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.wi-toolbar__crumb::before { content: "/"; color: var(--wi-chrome-ink-faint); font-size: 16px; font-weight: 300; }
+.wi-toolbar__docname { font-weight: 600; font-size: var(--wi-text-base); letter-spacing: -.01em;
+  color: var(--wi-chrome-ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+
+/* ---- Left rail (Plane 1) — brand + new + doc switcher.
+   Collapsed to 56px in the grid; the inner surface floats absolutely and expands
+   to 232px on hover, sliding OVER the canvas so the document never reflows
+   (reflow would resize the iframe and desync the click-to-edit overlay rects). ---- */
+.wi-rail { grid-column: 1; grid-row: 2; position: relative; z-index: 20; }
+.wi-rail__inner {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 56px;
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 9px;
+  background: var(--wi-chrome); color: var(--wi-chrome-ink-soft);
+  box-shadow: inset -1px 0 0 rgba(0,0,0,.35);
+  overflow-x: hidden; overflow-y: auto;
+  transition: width .2s var(--wi-ease), box-shadow .2s var(--wi-ease);
+}
+.wi-rail:hover .wi-rail__inner {
+  width: 232px;
+  box-shadow: inset -1px 0 0 rgba(0,0,0,.35), 18px 0 44px rgba(15,23,42,.4);
+}
+/* Each row: fixed 38px glyph on the left + a label that fades in as the rail opens. */
+.wi-rail__row { display: flex; align-items: center; gap: 12px; width: 100%; }
+.wi-rail__label {
+  font-size: var(--wi-text-sm); font-weight: 500; white-space: nowrap;
+  opacity: 0; transform: translateX(-4px); pointer-events: none;
+  transition: opacity .14s var(--wi-ease), transform .14s var(--wi-ease);
+}
+.wi-rail:hover .wi-rail__label { opacity: 1; transform: none; }
+
+/* "New" — the one accent action. Flat fill, no raised chrome, aligns flush-left with the tiles. */
+.wi-rail__new-row { cursor: pointer; border: 0; background: transparent; padding: 0; margin: 0;
+  border-radius: var(--wi-r-md); transition: background .14s var(--wi-ease); }
+.wi-rail__new-row:hover { background: rgba(255,255,255,.04); }
+.wi-rail__new { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
+  display: grid; place-items: center; line-height: 0; color: #fff;
+  background: var(--wi-accent); box-shadow: 0 2px 8px rgba(79,70,229,.45);
+  transition: background .14s var(--wi-ease), transform .08s var(--wi-ease); }
+.wi-rail__new-row:hover .wi-rail__new { background: var(--wi-accent-h); }
+.wi-rail__new-row:active .wi-rail__new { transform: scale(.92); }
+.wi-rail__new-label { color: var(--wi-chrome-ink); font-weight: 600; }
+
+.wi-rail__sep { height: 1px; margin: 9px 6px; background: var(--wi-chrome-line); flex: 0 0 auto; }
+.wi-rail__docs { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; overflow-x: hidden; }
+/* Doc switcher — flat tiles, no skeuomorphic raise. The active doc is marked by an
+   accent bar on the rail's left edge + a quiet tint, not a glowing filled icon. */
+.wi-rail__doc {
+  position: relative; display: flex; align-items: center; gap: 11px; width: 100%; cursor: pointer; border: 0; text-align: left;
+  padding: 3px; border-radius: var(--wi-r-md); background: transparent; color: var(--wi-chrome-ink-soft);
+  transition: background .14s var(--wi-ease), color .14s var(--wi-ease);
+}
+.wi-rail__doc::before {
+  content: ""; position: absolute; left: -9px; top: 50%; transform: translateY(-50%) scaleY(0);
+  width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: var(--wi-accent-bright);
+  transition: transform .16s var(--wi-ease);
+}
+.wi-rail__doc-glyph {
+  width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center; font-size: var(--wi-text-sm); font-weight: 600; text-transform: uppercase;
+  color: var(--wi-chrome-ink-soft);
+  background: var(--wi-chrome-2); transition: background .14s var(--wi-ease), color .14s var(--wi-ease);
+}
+.wi-rail__doc:hover { color: var(--wi-chrome-ink); }
+.wi-rail__doc:hover .wi-rail__doc-glyph { background: var(--wi-chrome-3); color: var(--wi-chrome-ink); }
+.wi-rail__doc.is-active { color: #fff; }
+.wi-rail__doc.is-active::before { transform: translateY(-50%) scaleY(1); }
+.wi-rail__doc.is-active .wi-rail__doc-glyph { background: var(--wi-accent); color: #fff; }
+
+/* Base button = light card; used in modals, inline popovers, the processing lock. */
 .wi-btn {
-  border: 1px solid rgba(148,163,184,.4); background: rgba(255,255,255,.08); color: #e2e8f0;
-  padding: 7px 13px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500;
-  transition: background .15s, transform .05s;
+  border: 1px solid var(--wi-line-2); background: #fff; color: var(--wi-ink);
+  padding: 7px 13px; border-radius: var(--wi-r-sm); cursor: pointer; font-size: 13px; font-weight: 500;
+  box-shadow: var(--wi-sh-1); transition: background .15s var(--wi-ease), border-color .15s var(--wi-ease), box-shadow .15s var(--wi-ease), transform .06s var(--wi-ease);
 }
-.wi-btn:hover { background: rgba(255,255,255,.16); }
+.wi-btn:hover { background: var(--wi-field); border-color: var(--wi-ink-faint); }
 .wi-btn:active { transform: translateY(1px); }
-.wi-btn--ghost { background: transparent; color: #cbd5e1; border-color: transparent; }
-.wi-btn--primary { background: linear-gradient(135deg, #3b82f6, #7c3aed); color: #fff;
-  border-color: transparent; box-shadow: 0 6px 16px rgba(59,130,246,.4); }
+.wi-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.wi-btn--ghost { background: transparent; color: var(--wi-ink-soft); border-color: transparent; box-shadow: none; }
+.wi-btn--ghost:hover { background: var(--wi-field); color: var(--wi-ink); border-color: transparent; }
+.wi-btn--primary { background: var(--wi-accent); color: #fff; border-color: transparent;
+  box-shadow: 0 1px 2px rgba(79,70,229,.3), 0 4px 12px rgba(79,70,229,.28); }
+.wi-btn--primary:hover { background: var(--wi-accent-h); border-color: transparent; }
 .wi-btn--primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
-/* light contexts (panels) keep readable buttons */
-.wi-chat .wi-btn, .wi-panel .wi-btn, .wi-inline .wi-btn { color: #0f172a; background: #fff; border-color: var(--wi-line); }
-.wi-chat .wi-btn--primary, .wi-panel .wi-btn--primary, .wi-inline .wi-btn--primary { color: #fff; background: linear-gradient(135deg, #3b82f6, #7c3aed); }
-.wi-chat .wi-btn--ghost, .wi-panel .wi-btn--ghost { color: #64748b; background: transparent; }
+
+/* Toolbar buttons — tactile on dark chrome: lifted fill, soft edge (no hard line), press feedback. */
+.wi-toolbar .wi-btn { background: var(--wi-chrome-2); border-color: transparent; color: var(--wi-chrome-ink);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.35); }
+.wi-toolbar .wi-btn:hover { background: var(--wi-chrome-3); box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 2px 6px rgba(0,0,0,.4); }
+.wi-toolbar .wi-btn--ghost { background: transparent; border-color: transparent; color: var(--wi-chrome-ink-soft); box-shadow: none; }
+.wi-toolbar .wi-btn--ghost:hover { background: rgba(255,255,255,.08); color: var(--wi-chrome-ink); box-shadow: none; }
+.wi-toolbar .wi-btn--primary { background: var(--wi-accent); color: #fff; border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 8px rgba(79,70,229,.5); }
+.wi-toolbar .wi-btn--primary:hover { background: var(--wi-accent-h); }
 
 /* corner ✕ to delete a block (ADR-0013) */
 .wi-box__x { position: absolute; top: -11px; right: -11px; width: 22px; height: 22px; border-radius: 50%;
@@ -71,52 +212,86 @@ body {
   pointer-events: auto; box-shadow: 0 2px 8px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; }
 .wi-box__x:hover { background: #dc2626; transform: scale(1.12); }
 
-.wi-status { padding: 8px 16px; font-size: 14px; }
-.wi-status--ok { background: #ecfdf5; color: #065f46; }
-.wi-status--warn { background: #fffbeb; color: #92400e; }
-.wi-status--error { background: #fef2f2; color: #991b1b; }
+/* Status pill — lives inline in the toolbar's right group (Plane 1). */
+.wi-status { display: inline-flex; align-items: center; gap: 7px; max-width: 320px;
+  padding: 5px 12px; border-radius: 999px; font-size: var(--wi-text-sm); font-weight: 500;
+  background: rgba(255,255,255,.06); color: var(--wi-chrome-ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wi-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.wi-status--ok { color: hsl(150, 60%, 78%); background: hsla(150, 60%, 45%, .14); }
+.wi-status--ok::before { background: hsl(150, 65%, 55%); }
+.wi-status--warn { color: hsl(38, 90%, 78%); background: hsla(38, 90%, 50%, .14); }
+.wi-status--warn::before { background: hsl(38, 92%, 58%); }
+.wi-status--error { color: hsl(0, 80%, 80%); background: hsla(0, 80%, 55%, .16); }
+.wi-status--error::before { background: hsl(0, 84%, 62%); }
 
-.wi-stage { display: flex; flex: 1 1 auto; min-height: 0; }
-.wi-doc { position: relative; flex: 1 1 auto; min-width: 0; }
-.wi-doc iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+/* ---- Canvas (Plane 0) — the document floats here as paper on the workspace ---- */
+.wi-canvas { grid-column: 2; grid-row: 2; position: relative; overflow: hidden; background: var(--wi-canvas-bg); }
+/* The floating document. `inset` offsets the WHOLE unit (iframe + overlay together) within
+   the canvas — the iframe and overlay stay flush to each other, so click-to-edit rects stay
+   aligned. The float look is the iframe's box-shadow, never a padding/transform between layers. */
+.wi-doc { position: absolute; inset: 22px; min-width: 0; border-radius: var(--wi-r-lg); overflow: visible;
+  transition: box-shadow .4s var(--wi-ease); }
+.wi-doc iframe { width: 100%; height: 100%; border: 0; background: #fff; border-radius: var(--wi-r-lg);
+  box-shadow: var(--wi-doc-shadow); animation: wi-frame-in .26s var(--wi-ease) both; }
+@keyframes wi-frame-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* Processing: the document breathes with an accent glow instead of a full lock-out screen. */
+.wi-doc--busy iframe { animation: wi-doc-breathe 2s ease-in-out infinite; }
+@keyframes wi-doc-breathe {
+  0%, 100% { box-shadow: var(--wi-doc-shadow); }
+  50%      { box-shadow: var(--wi-doc-shadow), 0 0 0 3px hsla(245,80%,65%,.35), 0 0 32px 6px hsla(245,80%,60%,.28); }
+}
 
 .wi-spacer { flex: 1 1 auto; }
-.wi-tip { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-  background: #0f172a; color: #e2e8f0; font-size: 13px; padding: 8px 16px; border-radius: 999px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.wi-tip { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: rgba(15,23,42,.92); backdrop-filter: blur(8px); color: #e2e8f0; font-size: 13px; font-weight: 500;
+  padding: 9px 18px; border-radius: 999px; box-shadow: var(--wi-sh-3); }
 
 /* Inline comment popover (ADR-0013) */
 .wi-inline { position: absolute; z-index: 8; width: 340px; max-width: 90vw; background: #fff;
-  border: 1px solid var(--wi-line); border-radius: 12px; box-shadow: 0 16px 40px rgba(15,23,42,.22); padding: 12px; }
-.wi-inline textarea { width: 100%; font: inherit; padding: 8px; border: 1px solid var(--wi-line);
-  border-radius: 8px; resize: vertical; box-sizing: border-box; }
-.wi-inline__scope { display: flex; gap: 4px; margin-bottom: 8px; }
-.wi-inline__scope button { flex: 1; border: 1px solid var(--wi-line); background: #fff; color: #475569;
-  font: inherit; font-size: 12px; padding: 4px; border-radius: 6px; cursor: pointer; }
-.wi-inline__scope button.on { border-color: var(--wi-accent); color: var(--wi-accent); background: #eff6ff; font-weight: 600; }
-.wi-inline__actions { display: flex; gap: 8px; margin-top: 8px; }
+  border: 1px solid var(--wi-line); border-radius: var(--wi-r-md); box-shadow: var(--wi-sh-3); padding: 14px;
+  animation: wi-modal-in .18s var(--wi-ease) both; }
+.wi-inline textarea { width: 100%; font: inherit; padding: 9px 11px; border: 1px solid var(--wi-line-2);
+  border-radius: var(--wi-r-sm); resize: vertical; box-sizing: border-box; }
+.wi-inline__scope { display: flex; gap: 4px; margin-bottom: 10px; background: var(--wi-field); padding: 3px; border-radius: var(--wi-r-sm); }
+.wi-inline__scope button { flex: 1; border: 0; background: transparent; color: var(--wi-ink-soft);
+  font: inherit; font-size: 12px; font-weight: 500; padding: 6px; border-radius: 7px; cursor: pointer; transition: background .15s var(--wi-ease), color .15s var(--wi-ease); }
+.wi-inline__scope button.on { color: var(--wi-accent); background: #fff; font-weight: 600; box-shadow: var(--wi-sh-1); }
+.wi-inline__actions { display: flex; gap: 8px; margin-top: 10px; }
 
-/* Conversational panel (ADR-0014) */
-.wi-chat { flex: 0 0 340px; display: flex; flex-direction: column; min-height: 0;
-  border-right: 1px solid var(--wi-line); background: #f8fafc; }
-.wi-chat__head { padding: 12px 16px; font-weight: 700; color: #0f172a; border-bottom: 1px solid var(--wi-line);
+/* ---- Conversational panel (ADR-0014) — LIGHT plane, docked on the right (Plane 2) ---- */
+.wi-chat { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; min-height: 0; z-index: 4;
+  background: var(--wi-panel-bg); color: var(--wi-ink); box-shadow: var(--wi-sep-right); }
+.wi-chat__head { padding: 0 16px; height: 46px; flex: 0 0 auto; font-weight: 600; font-size: var(--wi-text-sm); letter-spacing: .04em; text-transform: uppercase; color: var(--wi-ink-soft);
   display: flex; align-items: center; justify-content: space-between; }
-.wi-chat__toggle { border: 0; background: none; cursor: pointer; font-size: 16px; color: #64748b; padding: 2px 6px; border-radius: 6px; }
-.wi-chat__toggle:hover { background: #e2e8f0; }
-.wi-chat--collapsed { flex: 0 0 46px; align-items: center; padding-top: 12px; }
+.wi-chat__toggle { border: 0; background: none; cursor: pointer; font-size: 16px; color: var(--wi-ink-faint); padding: 4px 7px; border-radius: var(--wi-r-sm); transition: background .15s var(--wi-ease), color .15s var(--wi-ease); }
+.wi-chat__toggle:hover { background: var(--wi-panel-2); color: var(--wi-ink); }
+.wi-chat--collapsed { align-items: center; padding-top: 12px; }
+.wi-chat--collapsed .wi-chat__head { justify-content: center; padding: 0; }
 .wi-chat--collapsed .wi-chat__toggle { font-size: 22px; }
-.wi-chat__log { flex: 1 1 auto; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-.wi-chat__hint { color: #94a3b8; font-size: 13px; margin: 0; }
-.wi-msg { font-size: 14px; line-height: 1.45; display: flex; flex-direction: column; gap: 2px; max-width: 100%; }
-.wi-msg__who { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #94a3b8; }
-.wi-msg__text { padding: 8px 11px; border-radius: 10px; white-space: pre-wrap; word-break: break-word; }
+.wi-chat__log { flex: 1 1 auto; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.wi-chat__empty { margin: auto; max-width: 240px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wi-chat__empty-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+  background: var(--wi-accent-soft); color: var(--wi-accent); margin-bottom: 4px; box-shadow: var(--wi-sh-1); }
+.wi-chat__empty-title { margin: 0; font-size: var(--wi-text-md); font-weight: 600; color: var(--wi-ink); letter-spacing: -.01em; }
+.wi-chat__hint { color: var(--wi-ink-faint); font-size: var(--wi-text-sm); line-height: var(--wi-lh-base); margin: 0; }
+.wi-chat__hint em { color: var(--wi-ink-soft); font-style: italic; }
+.wi-msg { font-size: var(--wi-text-base); line-height: var(--wi-lh-base); display: flex; flex-direction: column; gap: 3px; max-width: 100%;
+  animation: wi-msg-in .18s var(--wi-ease) both; }
+@keyframes wi-msg-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.wi-msg__who { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--wi-ink-faint); }
+.wi-msg__text { padding: 9px 12px; border-radius: 14px; white-space: pre-wrap; word-break: break-word; }
 .wi-msg--user { align-items: flex-end; }
-.wi-msg--user .wi-msg__text { background: var(--wi-accent); color: #fff; border-bottom-right-radius: 3px; }
-.wi-msg--agent .wi-msg__text { background: #fff; border: 1px solid var(--wi-line); color: #0f172a; border-bottom-left-radius: 3px; }
+.wi-msg--user .wi-msg__text { background: var(--wi-accent); color: #fff; border-bottom-right-radius: 4px; box-shadow: 0 2px 8px rgba(79,70,229,.3); }
+.wi-msg--agent .wi-msg__text { background: var(--wi-panel-2); color: var(--wi-ink); border-bottom-left-radius: 4px; }
 .wi-msg--event { align-items: center; }
-.wi-msg__event { font-size: 12px; color: #64748b; background: #eef2ff; padding: 2px 10px; border-radius: 999px; }
-.wi-chat__input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--wi-line); }
-.wi-chat__input textarea { flex: 1; font: inherit; padding: 8px; border: 1px solid var(--wi-line); border-radius: 8px; resize: none; }
+.wi-msg__event { font-size: 12px; color: var(--wi-accent); background: var(--wi-accent-soft); padding: 3px 11px; border-radius: 999px; }
+.wi-chat__input { display: flex; gap: 8px; padding: 14px; }
+.wi-chat__input textarea { flex: 1; font: inherit; padding: 9px 11px; border: 1px solid var(--wi-line); border-radius: var(--wi-r-md); resize: none;
+  background: #fff; color: var(--wi-ink); box-shadow: inset 0 1px 2px rgba(15,23,42,.05);
+  transition: border-color .15s var(--wi-ease), box-shadow .15s var(--wi-ease); }
+.wi-chat__input textarea::placeholder { color: var(--wi-ink-faint); }
+.wi-chat__input textarea:hover { border-color: var(--wi-line-2); }
+.wi-chat__input textarea:focus { border-color: var(--wi-accent); box-shadow: 0 0 0 3px var(--wi-ring); }
 
 .wi-overlay { position: absolute; inset: 0; pointer-events: none; }
 .wi-box { position: absolute; border: 2px solid transparent; border-radius: 3px; }
@@ -129,29 +304,30 @@ body {
 }
 
 .wi-side {
-  flex: 0 0 340px; border-left: 1px solid var(--wi-line); padding: 16px;
-  overflow-y: auto; background: #f8fafc;
+  flex: 0 0 340px; border-left: 1px solid var(--wi-line); padding: 18px;
+  overflow-y: auto; background: var(--wi-surface);
 }
-.wi-hint { color: #64748b; }
+.wi-hint { color: var(--wi-ink-soft); }
 
-.wi-panel { display: flex; flex-direction: column; gap: 10px; background: var(--wi-panel);
-  border: 1px solid var(--wi-line); border-radius: 8px; padding: 12px; }
-.wi-panel__head code { background: #eef2ff; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
-.wi-panel__before { color: #475569; font-style: italic; font-size: 13px; }
-.wi-modes { display: flex; gap: 4px; background: #f1f5f9; border-radius: 8px; padding: 3px; }
-.wi-mode { flex: 1; border: 0; background: transparent; color: #475569; font: inherit; font-size: 12px;
-  padding: 6px 4px; border-radius: 6px; cursor: pointer; }
-.wi-mode--on { background: #fff; color: var(--wi-accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-.wi-mode__hint { font-size: 12px; color: #64748b; margin: 4px 2px 0; }
-.wi-btn:disabled { opacity: .5; cursor: not-allowed; }
+.wi-panel { display: flex; flex-direction: column; gap: 11px; background: var(--wi-panel);
+  border: 1px solid var(--wi-line); border-radius: var(--wi-r-md); padding: 14px; box-shadow: var(--wi-sh-2); }
+.wi-panel__head code { background: var(--wi-accent-soft); color: var(--wi-accent); padding: 2px 6px; border-radius: 5px; font-size: 12px; }
+.wi-panel__before { color: var(--wi-ink-soft); font-style: italic; font-size: 13px; }
+.wi-modes { display: flex; gap: 3px; background: var(--wi-field); border-radius: var(--wi-r-sm); padding: 3px; }
+.wi-mode { flex: 1; border: 0; background: transparent; color: var(--wi-ink-soft); font: inherit; font-size: 12px; font-weight: 500;
+  padding: 7px 4px; border-radius: 7px; cursor: pointer; transition: background .15s var(--wi-ease), color .15s var(--wi-ease); }
+.wi-mode--on { background: #fff; color: var(--wi-accent); font-weight: 600; box-shadow: var(--wi-sh-1); }
+.wi-mode__hint { font-size: 12px; color: var(--wi-ink-soft); margin: 4px 2px 0; }
 .wi-target { display: flex; gap: 6px; }
-.wi-target__b { flex: 1; border: 1px solid var(--wi-line); background: #fff; color: #475569;
-  font: inherit; font-size: 12px; padding: 5px; border-radius: 6px; cursor: pointer; }
-.wi-target__b.on { border-color: var(--wi-accent); color: var(--wi-accent); font-weight: 600; background: #eff6ff; }
+.wi-target__b { flex: 1; border: 1px solid var(--wi-line-2); background: #fff; color: var(--wi-ink-soft);
+  font: inherit; font-size: 12px; font-weight: 500; padding: 6px; border-radius: 7px; cursor: pointer; transition: border-color .15s var(--wi-ease), color .15s var(--wi-ease), background .15s var(--wi-ease); }
+.wi-target__b.on { border-color: var(--wi-accent); color: var(--wi-accent); font-weight: 600; background: var(--wi-accent-soft); }
 .wi-color { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #334155; }
-.wi-color input { width: 48px; height: 28px; padding: 0; border: 1px solid var(--wi-line); border-radius: 6px; }
-.wi-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #334155; }
-.wi-field select, .wi-field textarea, .wi-field input { font: inherit; padding: 6px; border: 1px solid var(--wi-line); border-radius: 6px; }
+.wi-color input { width: 48px; height: 30px; padding: 0; border: 1px solid var(--wi-line-2); border-radius: 7px; cursor: pointer; }
+.wi-field { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: #334155; }
+.wi-field select, .wi-field textarea, .wi-field input { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--wi-line-2); border-radius: var(--wi-r-sm);
+  background: #fff; transition: border-color .15s var(--wi-ease); }
+.wi-field select:hover, .wi-field textarea:hover, .wi-field input:hover { border-color: var(--wi-ink-faint); }
 .wi-panel__actions { display: flex; gap: 8px; }
 
 .wi-pending { margin-top: 20px; }
@@ -162,8 +338,12 @@ body {
 .wi-x { border: 0; background: none; color: #94a3b8; cursor: pointer; font-size: 16px; }
 
 .wi-doc-picker { display: inline-flex; align-items: center; gap: 6px; }
-.wi-doc-picker select { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px;
-  border: 1px solid #334155; background: #1e293b; color: #fff; }
+.wi-doc-picker select { font: inherit; font-size: 13px; font-weight: 500; padding: 6px 30px 6px 12px; border-radius: var(--wi-r-sm);
+  border: 1px solid var(--wi-chrome-line-2); background: var(--wi-chrome-2); color: var(--wi-chrome-ink);
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ba3b4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; transition: background .15s var(--wi-ease), border-color .15s var(--wi-ease); }
+.wi-doc-picker select:hover { background-color: var(--wi-chrome-3); border-color: rgba(255,255,255,.22); }
 
 /* Modal (ADR-0015 new-document) */
 .wi-modal-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.55);
@@ -171,24 +351,53 @@ body {
 .wi-modal { background: #fff; border-radius: var(--wi-r-lg); padding: 26px 28px; width: 100%; max-width: 560px;
   box-shadow: var(--wi-sh-3); animation: wi-modal-in .22s var(--wi-ease) both; }
 @keyframes wi-modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
-.wi-modal__title { margin: 0 0 6px; font-size: 21px; font-weight: 700; letter-spacing: -.01em; color: var(--wi-ink); }
-.wi-modal__hint { margin: 0 0 16px; color: var(--wi-ink-soft); font-size: 13px; line-height: 1.5; }
+.wi-modal__title { margin: 0 0 6px; font-size: var(--wi-text-xl); font-weight: 700; letter-spacing: -.02em; color: var(--wi-ink); }
+.wi-modal__hint { margin: 0 0 16px; color: var(--wi-ink-soft); font-size: var(--wi-text-sm); line-height: var(--wi-lh-base); }
 .wi-modal__field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; font-size: 13px; font-weight: 500; color: #334155; }
 .wi-modal__field input, .wi-modal__field textarea { font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid var(--wi-line);
-  border-radius: var(--wi-r-sm); background: var(--wi-surface); transition: border-color .15s var(--wi-ease), background .15s var(--wi-ease), box-shadow .15s var(--wi-ease); }
+  border-radius: var(--wi-r-sm); background: var(--wi-field); box-shadow: inset 0 1px 2px rgba(15,23,42,.05);
+  transition: border-color .15s var(--wi-ease), background .15s var(--wi-ease), box-shadow .15s var(--wi-ease); }
 .wi-modal__field input:hover, .wi-modal__field textarea:hover { border-color: #cbd5e1; }
-.wi-modal__field input:focus, .wi-modal__field textarea:focus { background: #fff; }
+.wi-modal__field input:focus, .wi-modal__field textarea:focus { background: #fff; box-shadow: 0 0 0 3px var(--wi-ring); }
 .wi-modal__field textarea { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 12px; resize: vertical; }
 .wi-modal__error { color: #b91c1c; background: #fef2f2; padding: 6px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
-.wi-modal__tabs { display: flex; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 8px; margin-bottom: 10px; }
-.wi-modal__tab { flex: 1; border: 0; background: transparent; color: #475569; font: inherit; font-size: 13px; padding: 7px; border-radius: 6px; cursor: pointer; }
-.wi-modal__tab.on { background: #fff; color: var(--wi-accent); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.wi-modal__tabs { display: flex; gap: 3px; background: var(--wi-field); padding: 3px; border-radius: var(--wi-r-sm); margin-bottom: 10px; }
+.wi-modal__tab { flex: 1; border: 0; background: transparent; color: var(--wi-ink-soft); font: inherit; font-size: 13px; font-weight: 500; padding: 8px; border-radius: 7px; cursor: pointer; transition: background .15s var(--wi-ease), color .15s var(--wi-ease); }
+.wi-modal__tab.on { background: #fff; color: var(--wi-accent); font-weight: 600; box-shadow: var(--wi-sh-1); }
 .wi-modal__mono { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 12px; }
 .wi-modal__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
 
-.wi-vsel { display: inline-flex; align-items: center; gap: 6px; color: #cbd5e1; font-size: 13px; }
-.wi-vsel select { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid #334155;
-  background: #1e293b; color: #fff; }
+/* Version picker — a tight inset pill. A leading "history" glyph + a quiet label,
+   then the borderless select. Reads as one unit, not a label glued to a control. */
+.wi-vsel { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; height: 30px;
+  border-radius: 999px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px var(--wi-chrome-line); }
+.wi-vsel__icon { color: var(--wi-chrome-ink-faint); display: grid; place-items: center; flex: 0 0 auto; }
+.wi-vsel select { font: inherit; font-size: var(--wi-text-sm); font-weight: 600; letter-spacing: -.01em;
+  padding: 0 26px 0 4px; height: 30px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--wi-chrome-ink); -webkit-appearance: none; appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239ba3b4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; }
+.wi-vsel:hover { background: rgba(255,255,255,.09); }
+
+/* Export — a tight segmented control. A leading download glyph, then HTML | PDF segments
+   sharing one rounded shell with a hairline divider between them. */
+.wi-export { display: inline-flex; align-items: stretch; height: 30px; border-radius: var(--wi-r-sm); overflow: hidden;
+  background: var(--wi-chrome-2); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.35); }
+.wi-export__icon { display: grid; place-items: center; padding: 0 9px; color: var(--wi-chrome-ink-soft); }
+.wi-export__seg { border: 0; background: transparent; color: var(--wi-chrome-ink); cursor: pointer;
+  font: inherit; font-size: var(--wi-text-sm); font-weight: 600; padding: 0 13px; letter-spacing: .01em;
+  box-shadow: inset 1px 0 0 var(--wi-chrome-line); transition: background .14s var(--wi-ease), color .14s var(--wi-ease); }
+.wi-export__seg:hover:not(:disabled) { background: var(--wi-accent); color: #fff; }
+.wi-export__seg:active:not(:disabled) { background: var(--wi-accent-h); }
+.wi-export__seg:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Launch empty state — hand-scrawled arrow pointing at the rail's New button. */
+.wi-empty-hint { position: absolute; top: 18px; left: 14px; z-index: 3; pointer-events: none;
+  display: flex; align-items: flex-start; gap: 4px; animation: wi-frame-in .5s var(--wi-ease) both; }
+.wi-empty-hint__arrow { color: var(--wi-accent); flex: 0 0 auto; margin-top: -6px; }
+.wi-empty-hint__text { font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Comic Sans", cursive;
+  font-size: 20px; line-height: 1.25; color: var(--wi-accent); transform: rotate(-3deg); max-width: 230px; margin-top: 26px;
+  text-shadow: 0 1px 0 rgba(255,255,255,.6); }
 
 /* Processing lock overlay (ADR-0012) */
 .wi-lock { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
@@ -207,12 +416,17 @@ body {
   animation: wi-spin .9s linear infinite; }
 @keyframes wi-spin { to { transform: rotate(360deg); } }
 
-.wi-strip { display: flex; gap: 6px; flex-wrap: wrap; }
-.wi-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #334155;
-  background: transparent; color: #cbd5e1; padding: 3px 9px; border-radius: 999px; cursor: pointer; font-size: 13px; }
-.wi-chip--active { border-color: var(--wi-accent); color: #fff; background: rgba(37,99,235,.4); }
-.wi-chip--head { font-weight: 700; }
-.wi-chip__head { font-size: 9px; text-transform: uppercase; background: #16a34a; color: #fff; padding: 0 4px; border-radius: 3px; }
+.wi-strip { display: flex; gap: 5px; flex-wrap: wrap; }
+.wi-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--wi-chrome-line-2);
+  background: var(--wi-chrome-2); color: var(--wi-chrome-ink-soft); padding: 4px 11px; border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 500;
+  transition: border-color .15s var(--wi-ease), color .15s var(--wi-ease), background .15s var(--wi-ease); }
+.wi-chip:hover { background: var(--wi-chrome-3); border-color: rgba(255,255,255,.22); color: var(--wi-chrome-ink); }
+.wi-chip--active { border-color: transparent; color: #fff; background: var(--wi-accent); box-shadow: 0 0 0 1px rgba(129,140,248,.4), 0 2px 8px rgba(79,70,229,.45);
+  animation: wi-chip-pop .26s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes wi-chip-pop { from { transform: scale(.9); } to { transform: scale(1); } }
+.wi-chip--head { font-weight: 600; }
+.wi-chip__head { font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; background: #16a34a; color: #fff; padding: 1px 5px; border-radius: 4px; }
+.wi-chip--active .wi-chip__head { background: rgba(255,255,255,.25); }
 
 /* New-doc modal: optional-HTML disclosure (ADR-0016 slice-A pivot) */
 .wi-modal__disclosure { background: transparent; border: 1px dashed #cbd5e1; color: #475569;

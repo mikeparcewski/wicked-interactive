@@ -4,7 +4,6 @@ import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import ProcessingLock from "./components/ProcessingLock.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
-import DocPicker from "./components/DocPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
@@ -260,33 +259,97 @@ export default function App() {
   const lastEntry = chat[chat.length - 1];
   const agentThinking = !processing && lastEntry?.role === "user";
 
+  const openNewDoc = () => { setNewDocError(null); setShowNewDoc(true); };
+
   return (
-    <div className="wi-app">
-      <header className="wi-header">
-        <span className="wi-logo">wicked-interactive</span>
-        <DocPicker docs={docs} current={currentDoc} onSelect={navigateToDoc} onNew={() => { setNewDocError(null); setShowNewDoc(true); }} />
-        <span className="wi-spacer" />
-        <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
-        {manifest && !viewingIsHead && (
-          <button className="wi-btn wi-btn--ghost" onClick={() => startAgainFrom(viewing)}>↳ Start again from v{viewing}</button>
-        )}
-        <span className="wi-spacer" />
-        <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("html")}>Export HTML</button>
-        <button className="wi-btn" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>Export PDF</button>
+    <div className={`wi-shell ${!chatOpen ? "wi-shell--chat-collapsed" : ""}`}>
+      <header className="wi-toolbar">
+        <div className="wi-toolbar__group">
+          <span className="wi-logo">
+            <span className="wi-logo__mark" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 5l3.5 14L12 8l5.5 11L21 5" />
+              </svg>
+            </span>
+            <span className="wi-logo__word"><b>Wicked</b> <i>Interactive</i></span>
+          </span>
+          {currentDoc && (
+            <span className="wi-toolbar__crumb">
+              <span className="wi-toolbar__docname">{currentDoc}</span>
+            </span>
+          )}
+        </div>
+        <div className="wi-toolbar__group wi-toolbar__group--center">
+          <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
+          {manifest && !viewingIsHead && (
+            <button className="wi-btn wi-btn--ghost" onClick={() => startAgainFrom(viewing)}>↳ Start again from v{viewing}</button>
+          )}
+        </div>
+        <div className="wi-toolbar__group">
+          {status && currentDoc && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
+          <div className="wi-export" role="group" aria-label="Export">
+            <span className="wi-export__icon" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+              </svg>
+            </span>
+            <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("html")}>HTML</button>
+            <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>PDF</button>
+          </div>
+        </div>
       </header>
 
-      {status && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
+      <nav className="wi-rail">
+        <div className="wi-rail__inner">
+          <button className="wi-rail__row wi-rail__new-row" title="New document" onClick={openNewDoc}>
+            <span className="wi-rail__new" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </span>
+            <span className="wi-rail__label wi-rail__new-label">New document</span>
+          </button>
+          <div className="wi-rail__sep" />
+          <div className="wi-rail__docs">
+            {docs.map((d) => {
+              const name = typeof d === "string" ? d : d.name;
+              return (
+                <button
+                  key={name}
+                  className={`wi-rail__doc ${name === currentDoc ? "is-active" : ""}`}
+                  title={name}
+                  onClick={() => navigateToDoc(name)}
+                >
+                  <span className="wi-rail__doc-glyph">{name.slice(0, 1).toUpperCase()}</span>
+                  <span className="wi-rail__label">{name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </nav>
 
-      <div className="wi-stage">
-        <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
-        <div className="wi-doc">
+      <main className="wi-canvas">
+        {!currentDoc && (
+          <div className="wi-empty-hint" aria-hidden="true">
+            <svg className="wi-empty-hint__arrow" width="120" height="96" viewBox="0 0 120 96" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M112 92C74 90 38 74 20 44 14 34 11 24 10 12" />
+              <path d="M3 26C5 19 8 14 10 9" />
+              <path d="M24 20C19 16 14 13 10 9" />
+            </svg>
+            <span className="wi-empty-hint__text">click here to create a new document</span>
+          </div>
+        )}
+        <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
           <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
           <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
           <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
           <ProcessingLock active={processing} message={procMsg} question={question?.text} options={question?.options}
             onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />
         </div>
-      </div>
+      </main>
+
+      <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
 
       <NewDocModal
         open={showNewDoc}
