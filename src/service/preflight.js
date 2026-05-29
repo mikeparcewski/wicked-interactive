@@ -44,6 +44,15 @@ const DETECTORS = {
   "wicked-brain":   brainInstalled,
 };
 
+// Each sibling installs differently, so a single command can't cover them. The hint shown
+// in the install gate maps each MISSING plugin to its real install step (prezzie/garden are
+// Claude Code plugins; brain is an npm package run via npx).
+const INSTALL_CMD = {
+  "wicked-prezzie": "/plugin marketplace add mikeparcewski/wicked-prezzie\n/plugin install wicked-prezzie",
+  "wicked-garden":  "/plugin marketplace add mikeparcewski/wicked-garden\n/plugin install wicked-garden",
+  "wicked-brain":   "npx wicked-brain",
+};
+
 /** Snapshot the install state of every required plugin. */
 export function preflight() {
   const required = {};
@@ -55,6 +64,6 @@ export function preflight() {
     ok: missing.length === 0,
     required,
     missing,
-    install_hint: missing.length ? `claude plugin install ${missing.join(" ")}` : null,
+    install_hint: missing.length ? missing.map((n) => INSTALL_CMD[n]).join("\n\n") : null,
   };
 }

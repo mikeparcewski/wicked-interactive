@@ -7,7 +7,15 @@
 export default function InstallGate({ preflight, onRetry }) {
   if (!preflight || preflight.ok) return null;
   const required = preflight.required || {};
-  const hint = preflight.install_hint || "claude plugin install wicked-prezzie wicked-garden wicked-brain";
+  const hint = preflight.install_hint || [
+    "/plugin marketplace add mikeparcewski/wicked-prezzie",
+    "/plugin install wicked-prezzie",
+    "",
+    "/plugin marketplace add mikeparcewski/wicked-garden",
+    "/plugin install wicked-garden",
+    "",
+    "npx wicked-brain",
+  ].join("\n");
 
   return (
     <div className="wi-gate" role="alertdialog" aria-labelledby="wi-gate-title">

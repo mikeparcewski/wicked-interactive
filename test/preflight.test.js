@@ -39,7 +39,9 @@ test("preflight reports all-missing when no sibling plugin directories exist", (
     const out = preflight();
     assert.equal(out.ok, false);
     assert.deepEqual(out.missing.sort(), ["wicked-brain", "wicked-garden", "wicked-prezzie"]);
-    assert.match(out.install_hint, /claude plugin install/);
+    assert.match(out.install_hint, /\/plugin install wicked-prezzie/);
+    assert.match(out.install_hint, /\/plugin install wicked-garden/);
+    assert.match(out.install_hint, /npx wicked-brain/);
   } finally {
     process.env.WI_PLUGIN_PATHS = prev;
     process.env.HOME = prevHome;
