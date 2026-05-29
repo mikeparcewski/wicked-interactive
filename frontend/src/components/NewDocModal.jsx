@@ -12,14 +12,19 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
   const [name, setName] = useState("");
   const [html, setHtml] = useState("");
   const [showHtml, setShowHtml] = useState(false);
-  const [sourcePath, setSourcePath] = useState("");
+  const [sourcePaths, setSourcePaths] = useState([""]);
   const [brief, setBrief] = useState("");
   const [showSource, setShowSource] = useState(false);
 
   useEffect(() => {
-    if (open) { setName(""); setHtml(""); setShowHtml(false); setSourcePath(""); setBrief(""); setShowSource(false); }
+    if (open) { setName(""); setHtml(""); setShowHtml(false); setSourcePaths([""]); setBrief(""); setShowSource(false); }
   }, [open]);
   if (!open) return null;
+
+  const setPathAt = (i, v) => setSourcePaths((ps) => ps.map((p, j) => (j === i ? v : p)));
+  const addPath = () => setSourcePaths((ps) => [...ps, ""]);
+  const removePathAt = (i) => setSourcePaths((ps) => (ps.length === 1 ? [""] : ps.filter((_, j) => j !== i)));
+  const cleanPaths = sourcePaths.map((p) => p.trim()).filter(Boolean);
 
   const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const titleCase = (s) => s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -31,21 +36,20 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
 
   const trimmedName = name.trim();
   const trimmedHtml = html.trim();
-  const trimmedSource = sourcePath.trim();
   const valid = trimmedName.length > 0;
 
   function submit(e) {
     e.preventDefault();
     // Precedence: source > html > blank.
-    if (trimmedSource) {
-      onCreate(trimmedName, "", { kind: "source", sourcePath: trimmedSource, brief: brief.trim() });
+    if (cleanPaths.length) {
+      onCreate(trimmedName, "", { kind: "source", sourcePaths: cleanPaths, brief: brief.trim() });
     } else {
       const seed = trimmedHtml || blankSeed(trimmedName);
       onCreate(trimmedName, seed, { kind: trimmedHtml ? "html" : "blank" });
     }
   }
 
-  const ctaLabel = trimmedSource ? "Build from my content" : trimmedHtml ? "Create from HTML" : "Create blank doc";
+  const ctaLabel = cleanPaths.length ? "Build from my content" : trimmedHtml ? "Create from HTML" : "Create blank doc";
 
   return (
     <div className="wi-modal-overlay" onClick={onCancel}>
@@ -68,11 +72,20 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
             </button>
           ) : (
             <>
-              <label className="wi-modal__field">
-                Build from my content <span className="wi-modal__optional">(a file or folder on your machine)</span>
-                <input value={sourcePath} onChange={(e) => setSourcePath(e.target.value)}
-                  placeholder="~/Documents/q3-notes  or  ./decks/raw" spellCheck={false} className="wi-modal__mono" />
-              </label>
+              <div className="wi-modal__field">
+                Build from my content <span className="wi-modal__optional">(files or folders on your machine)</span>
+                <div className="wi-paths">
+                  {sourcePaths.map((p, i) => (
+                    <div className="wi-paths__row" key={i}>
+                      <input value={p} onChange={(e) => setPathAt(i, e.target.value)}
+                        placeholder="~/Documents/q3-notes  or  ./decks/raw" spellCheck={false} className="wi-modal__mono" />
+                      <button type="button" className="wi-paths__remove" onClick={() => removePathAt(i)}
+                        aria-label="Remove this location" title="Remove">×</button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="wi-paths__add" onClick={addPath}>+ Add another file or folder</button>
+              </div>
               <label className="wi-modal__field">
                 What should it become? <span className="wi-modal__optional">(optional brief)</span>
                 <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3}

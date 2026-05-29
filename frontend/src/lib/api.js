@@ -47,13 +47,14 @@ export async function getPreflight() {
   return r.json();
 }
 
-// meta: { kind: "blank"|"html"|"source", sourcePath?, brief? }. For kind:"source" the service
-// seeds a placeholder and the supervising agent builds the first draft from the user's files.
+// meta: { kind: "blank"|"html"|"source", sourcePaths?: string[], brief? }. For kind:"source"
+// the service seeds a placeholder and the supervising agent builds the first draft from the
+// user's files (one or more locations).
 export async function createDoc(name, html, meta = {}) {
   const body = { name, html };
   if (meta.kind === "source") {
     body.kind = "source";
-    body.source_path = meta.sourcePath || "";
+    body.source_paths = Array.isArray(meta.sourcePaths) ? meta.sourcePaths : [];
     body.brief = meta.brief || "";
   }
   const r = await fetch("/api/docs", {

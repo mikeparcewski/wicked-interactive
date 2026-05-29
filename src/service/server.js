@@ -340,7 +340,8 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     const raw = req.body?.name;
     const kind = String(req.body?.kind || "").toLowerCase();
     const fromSource = kind === "source";
-    const sourcePath = String(req.body?.source_path ?? "").trim();
+    const sourcePaths = (Array.isArray(req.body?.source_paths) ? req.body.source_paths : [])
+      .map((s) => String(s).trim()).filter(Boolean);
     const brief = String(req.body?.brief ?? "").trim();
     const name = DOC_NAME.test(raw) ? raw : slugify(raw);
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
@@ -348,10 +349,10 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
 
     // "From my content" (ADR-0010): the service is model-free, so it can't read files or
     // generate. It seeds a placeholder v0, then hands a generation request to the supervising
-    // agent, which indexes the source and lands the real first draft as a follow-on version.
-    if (fromSource && !sourcePath) return res.status(400).json({ error: "source_path required for kind:source" });
+    // agent, which indexes the source(s) and lands the real first draft as a follow-on version.
+    if (fromSource && sourcePaths.length === 0) return res.status(400).json({ error: "at least one source path required for kind:source" });
     const html = fromSource
-      ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePath))
+      ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePaths))
       : String(req.body?.html ?? "");
     if (!fromSource && !html.trim()) return res.status(400).json({ error: "html required" });
 
@@ -360,9 +361,9 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
       initWorkspace(dir, html);                  // seeds _v0.html + versions.json
       const { svc } = await mountDoc(name);
       if (fromSource) {
-        writeGenerationRequest(dir, { sourcePath, brief, documentId: name });
+        writeGenerationRequest(dir, { sourcePaths, brief, documentId: name });
         // Fan a generation event onto /api/events/all so the assist loop picks it up.
-        svc.broadcast("generation", { document_id: name, source_path: sourcePath, brief, base_html: "_v0.html", ts: new Date().toISOString() });
+        svc.broadcast("generation", { document_id: name, source_paths: sourcePaths, brief, base_html: "_v0.html", ts: new Date().toISOString() });
       }
       res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}) });
     } catch (e) {

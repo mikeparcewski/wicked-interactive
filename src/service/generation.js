@@ -21,14 +21,22 @@ export const GEN_REQUEST = "_gen.request.json";
 export const GEN_RESPONSE = "_gen.response.json";
 
 /** Placeholder shown at v0 while the agent builds the real draft from the user's content. */
-export function generationPlaceholder(name, sourcePath) {
+export function generationPlaceholder(name, sourcePaths) {
   const safe = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const paths = (Array.isArray(sourcePaths) ? sourcePaths : [sourcePaths]).filter(Boolean);
   const title = safe((name || "your document").replace(/-/g, " "));
+  const sources = paths.length === 1
+    ? `<code>${safe(paths[0])}</code>`
+    : `${paths.length} locations`;
+  const list = paths.length > 1
+    ? `<ul>${paths.map((p) => `<li><code>${safe(p)}</code></li>`).join("")}</ul>`
+    : "";
   return (
     `<section>` +
       `<h1>Building ${title}…</h1>` +
-      `<p class="lead">Reading <code>${safe(sourcePath)}</code> and drafting your document. ` +
+      `<p class="lead">Reading ${sources} and drafting your document. ` +
       `This view updates automatically the moment the first draft is ready.</p>` +
+      list +
     `</section>`
   );
 }
@@ -38,11 +46,12 @@ export function generationPlaceholder(name, sourcePath) {
  * this file (or the `generation` SSE event) and fulfills it.
  * @returns {{ requestFile: string }}
  */
-export function writeGenerationRequest(dir, { sourcePath, brief = "", documentId = dir, baseHtmlFile = "_v0.html" }) {
+export function writeGenerationRequest(dir, { sourcePaths, brief = "", documentId = dir, baseHtmlFile = "_v0.html" }) {
   mkdirSync(join(dir, REQUESTS_DIR), { recursive: true });
+  const paths = (Array.isArray(sourcePaths) ? sourcePaths : [sourcePaths]).map((s) => String(s).trim()).filter(Boolean);
   const body = {
     document_id: documentId,
-    source_path: sourcePath,
+    source_paths: paths,
     brief,
     base_html: baseHtmlFile,
     ts: new Date().toISOString(),

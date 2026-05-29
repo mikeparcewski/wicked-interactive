@@ -1,12 +1,41 @@
 :root {
   --wi-accent: #2563eb;
+  --wi-accent-2: #7c3aed;
+  --wi-accent-soft: #eff4ff;
+  --wi-ring: rgba(37, 99, 235, .35);
   --wi-pending: #f59e0b;
   --wi-bg: #0f172a;
   --wi-panel: #ffffff;
-  --wi-line: #e2e8f0;
+  --wi-surface: #f8fafc;
+  --wi-line: #e6eaf1;
+  --wi-ink: #0f172a;
+  --wi-ink-soft: #64748b;
+  /* radius scale */
+  --wi-r-sm: 8px;
+  --wi-r-md: 12px;
+  --wi-r-lg: 16px;
+  /* elevation scale */
+  --wi-sh-1: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.08);
+  --wi-sh-2: 0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.05);
+  --wi-sh-3: 0 24px 50px rgba(15,23,42,.22);
+  --wi-ease: cubic-bezier(.2, .8, .2, 1);
 }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f172a; }
+body {
+  margin: 0; color: var(--wi-ink);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Modern focus ring — visible only for keyboard users, on every interactive control. */
+:where(button, input, textarea, select, [tabindex]):focus-visible {
+  outline: none; border-color: var(--wi-accent);
+  box-shadow: 0 0 0 3px var(--wi-ring);
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
 
 .wi-app { display: flex; flex-direction: column; height: 100vh; }
 
@@ -139,12 +168,16 @@ body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 /* Modal (ADR-0015 new-document) */
 .wi-modal-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(15,23,42,.55);
   backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 24px; }
-.wi-modal { background: #fff; border-radius: 16px; padding: 24px 28px; width: 100%; max-width: 560px;
-  box-shadow: 0 30px 60px rgba(0,0,0,.4); }
-.wi-modal__title { margin: 0 0 6px; font-size: 20px; color: #0f172a; }
-.wi-modal__hint { margin: 0 0 16px; color: #64748b; font-size: 13px; }
-.wi-modal__field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; font-size: 13px; color: #334155; }
-.wi-modal__field input, .wi-modal__field textarea { font: inherit; padding: 8px; border: 1px solid var(--wi-line); border-radius: 8px; }
+.wi-modal { background: #fff; border-radius: var(--wi-r-lg); padding: 26px 28px; width: 100%; max-width: 560px;
+  box-shadow: var(--wi-sh-3); animation: wi-modal-in .22s var(--wi-ease) both; }
+@keyframes wi-modal-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.wi-modal__title { margin: 0 0 6px; font-size: 21px; font-weight: 700; letter-spacing: -.01em; color: var(--wi-ink); }
+.wi-modal__hint { margin: 0 0 16px; color: var(--wi-ink-soft); font-size: 13px; line-height: 1.5; }
+.wi-modal__field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; font-size: 13px; font-weight: 500; color: #334155; }
+.wi-modal__field input, .wi-modal__field textarea { font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid var(--wi-line);
+  border-radius: var(--wi-r-sm); background: var(--wi-surface); transition: border-color .15s var(--wi-ease), background .15s var(--wi-ease), box-shadow .15s var(--wi-ease); }
+.wi-modal__field input:hover, .wi-modal__field textarea:hover { border-color: #cbd5e1; }
+.wi-modal__field input:focus, .wi-modal__field textarea:focus { background: #fff; }
 .wi-modal__field textarea { font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 12px; resize: vertical; }
 .wi-modal__error { color: #b91c1c; background: #fef2f2; padding: 6px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
 .wi-modal__tabs { display: flex; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 8px; margin-bottom: 10px; }
@@ -186,8 +219,21 @@ body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   font: inherit; font-size: 13px; padding: 10px 12px; border-radius: 8px; cursor: pointer;
   text-align: left; width: 100%; margin-bottom: 12px; transition: border-color .15s, color .15s; }
 .wi-modal__disclosure:hover { border-color: var(--wi-accent); color: var(--wi-accent); }
-.wi-modal__disclosure span { float: right; color: #94a3b8; }
+.wi-modal__disclosure span { float: right; color: var(--wi-accent); font-weight: 600; }
 .wi-modal__optional { color: #94a3b8; font-weight: 400; font-size: 12px; margin-left: 4px; }
+
+/* Multi-location source rows ("From my content", ADR-0016) */
+.wi-paths { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.wi-paths__row { display: flex; gap: 8px; align-items: center; }
+.wi-paths__row input { flex: 1 1 auto; min-width: 0; }
+.wi-paths__remove { flex: 0 0 auto; width: 32px; height: 32px; border-radius: var(--wi-r-sm);
+  border: 1px solid var(--wi-line); background: var(--wi-surface); color: var(--wi-ink-soft);
+  font-size: 18px; line-height: 1; cursor: pointer; transition: color .15s var(--wi-ease), border-color .15s var(--wi-ease), background .15s var(--wi-ease); }
+.wi-paths__remove:hover { color: #dc2626; border-color: rgba(239,68,68,.4); background: #fef2f2; }
+.wi-paths__add { align-self: flex-start; margin-top: 8px; border: 1px dashed var(--wi-line);
+  background: transparent; color: var(--wi-accent); font: inherit; font-size: 13px; font-weight: 500;
+  padding: 7px 12px; border-radius: var(--wi-r-sm); cursor: pointer; transition: border-color .15s var(--wi-ease), background .15s var(--wi-ease); }
+.wi-paths__add:hover { border-color: var(--wi-accent); background: var(--wi-accent-soft); }
 
 /* Install gate (ADR-0016 slice B) — blocks the editor on missing sibling plugins */
 .wi-gate { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center;

@@ -114,7 +114,7 @@ test("POST /api/docs kind:source seeds a placeholder + writes a generation reque
   try {
     const res = await fetch(`${base}/api/docs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "from-content", kind: "source", source_path: "~/notes/q3", brief: "6 slides" }),
+      body: JSON.stringify({ name: "from-content", kind: "source", source_paths: ["~/notes/q3", "./extra.md"], brief: "6 slides" }),
     });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -131,20 +131,20 @@ test("POST /api/docs kind:source seeds a placeholder + writes a generation reque
     assert.ok(existsSync(reqPath), "generation request file written");
     const { readFileSync } = await import("node:fs");
     const reqBody = JSON.parse(readFileSync(reqPath, "utf-8"));
-    assert.equal(reqBody.source_path, "~/notes/q3");
+    assert.deepEqual(reqBody.source_paths, ["~/notes/q3", "./extra.md"]);
     assert.equal(reqBody.brief, "6 slides");
   } finally { await cleanup(); }
 });
 
-test("POST /api/docs kind:source requires a source_path", async () => {
+test("POST /api/docs kind:source requires at least one source path", async () => {
   const { base, cleanup } = await boot();
   try {
     const res = await fetch(`${base}/api/docs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "no-source", kind: "source", source_path: "" }),
+      body: JSON.stringify({ name: "no-source", kind: "source", source_paths: ["", "  "] }),
     });
     assert.equal(res.status, 400);
-    assert.match((await res.json()).error, /source_path/);
+    assert.match((await res.json()).error, /source path/);
   } finally { await cleanup(); }
 });
 

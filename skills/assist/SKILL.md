@@ -174,9 +174,12 @@ people start. The service is model-free, so building the draft is **yours**.
 `<DOCS>/<doc>/requests/_gen.request.json`:
 
 ```json
-{ "document_id": "<doc>", "source_path": "~/Documents/q3-notes", "brief": "6-slide investor update…",
-  "base_html": "_v0.html", "ts": "…" }
+{ "document_id": "<doc>", "source_paths": ["~/Documents/q3-notes", "./decks/raw.pptx"],
+  "brief": "6-slide investor update…", "base_html": "_v0.html", "ts": "…" }
 ```
+
+`source_paths` is a list — the user can point at several files and/or folders. Read them all
+(expand `~`; a folder means its contents) and synthesize one coherent document across them.
 
 Post a status immediately so the placeholder doesn't look stuck:
 
@@ -187,7 +190,7 @@ curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
 
 ### 5b. Index and generate (reuse the siblings — never reinvent)
 
-- Read the files under `source_path` (a single file or a folder; expand `~`).
+- Read every entry in `source_paths` (each a file or a folder; expand `~`).
 - **Ground it in knowledge** — ingest/consult **wicked-brain** so the draft uses the user's
   real numbers and prior decisions (Step 6 below has the detail). Don't invent figures the
   source doesn't support.

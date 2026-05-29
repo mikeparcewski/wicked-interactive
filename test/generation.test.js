@@ -11,27 +11,34 @@ import {
 
 function fresh() {
   const dir = mkdtempSync(join(tmpdir(), "wi-gen-"));
-  initWorkspace(dir, generationPlaceholder("my-deck", "~/notes"));
+  initWorkspace(dir, generationPlaceholder("my-deck", ["~/notes"]));
   return dir;
 }
 
 test("generationPlaceholder escapes and names the source", () => {
-  const html = generationPlaceholder("q3-update", "~/notes/<x>");
+  const html = generationPlaceholder("q3-update", ["~/notes/<x>"]);
   assert.match(html, /Building q3 update/);
   assert.match(html, /&lt;x&gt;/);          // source path is HTML-escaped
   assert.doesNotMatch(html, /<x>/);          // no raw injection
+});
+
+test("generationPlaceholder lists multiple locations", () => {
+  const html = generationPlaceholder("deck", ["~/a", "./b.pptx"]);
+  assert.match(html, /2 locations/);
+  assert.match(html, /<li><code>~\/a<\/code><\/li>/);
+  assert.match(html, /<li><code>\.\/b\.pptx<\/code><\/li>/);
 });
 
 test("writeGenerationRequest writes the request file the agent watches", () => {
   const dir = fresh();
   try {
     const { requestFile } = writeGenerationRequest(dir, {
-      sourcePath: "~/notes", brief: "6 slides", documentId: "my-deck",
+      sourcePaths: ["~/notes", " ", "./extra.md"], brief: "6 slides", documentId: "my-deck",
     });
     assert.equal(requestFile, GEN_REQUEST);
     const body = JSON.parse(readFileSync(join(dir, REQUESTS_DIR, GEN_REQUEST), "utf-8"));
     assert.equal(body.document_id, "my-deck");
-    assert.equal(body.source_path, "~/notes");
+    assert.deepEqual(body.source_paths, ["~/notes", "./extra.md"]); // trimmed + blanks dropped
     assert.equal(body.brief, "6 slides");
     assert.equal(body.base_html, "_v0.html");
   } finally { rmSync(dir, { recursive: true, force: true }); }
