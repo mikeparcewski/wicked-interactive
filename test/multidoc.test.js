@@ -136,7 +136,7 @@ test("POST /api/docs kind:source seeds a placeholder + writes a generation reque
   } finally { await cleanup(); }
 });
 
-test("POST /api/docs kind:source requires at least one source path", async () => {
+test("POST /api/docs kind:source requires source paths or a brief", async () => {
   const { base, cleanup } = await boot();
   try {
     const res = await fetch(`${base}/api/docs`, {
@@ -144,7 +144,28 @@ test("POST /api/docs kind:source requires at least one source path", async () =>
       body: JSON.stringify({ name: "no-source", kind: "source", source_paths: ["", "  "] }),
     });
     assert.equal(res.status, 400);
-    assert.match((await res.json()).error, /source path/);
+    assert.match((await res.json()).error, /source path|brief/);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/docs kind:source accepts a brief with no source paths (brief-only generation)", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "brief-only", kind: "source", brief: "A one-page product teaser" }),
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.generating, true);
+
+    // A generation request is written with the brief and an empty source-path list.
+    const { readFileSync } = await import("node:fs");
+    const reqPath = join(root, "brief-only", "requests", "_gen.request.json");
+    assert.ok(existsSync(reqPath), "generation request file written");
+    const reqBody = JSON.parse(readFileSync(reqPath, "utf-8"));
+    assert.deepEqual(reqBody.source_paths, []);
+    assert.equal(reqBody.brief, "A one-page product teaser");
   } finally { await cleanup(); }
 });
 

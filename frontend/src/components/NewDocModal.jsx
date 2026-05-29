@@ -36,20 +36,26 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
 
   const trimmedName = name.trim();
   const trimmedHtml = html.trim();
+  const trimmedBrief = brief.trim();
   const valid = trimmedName.length > 0;
 
   function submit(e) {
     e.preventDefault();
-    // Precedence: source > html > blank.
-    if (cleanPaths.length) {
-      onCreate(trimmedName, "", { kind: "source", sourcePaths: cleanPaths, brief: brief.trim() });
+    // Precedence: source > html > blank. A brief on its own is a first-class source path —
+    // the agent generates the draft from the brief alone, with no files to read.
+    if (cleanPaths.length || trimmedBrief) {
+      onCreate(trimmedName, "", { kind: "source", sourcePaths: cleanPaths, brief: trimmedBrief });
     } else {
       const seed = trimmedHtml || blankSeed(trimmedName);
       onCreate(trimmedName, seed, { kind: trimmedHtml ? "html" : "blank" });
     }
   }
 
-  const ctaLabel = cleanPaths.length ? "Build from my content" : trimmedHtml ? "Create from HTML" : "Create blank doc";
+  const ctaLabel = cleanPaths.length
+    ? "Build from my content"
+    : trimmedBrief
+      ? "Generate from brief"
+      : trimmedHtml ? "Create from HTML" : "Create blank doc";
 
   return (
     <div className="wi-modal-overlay" onClick={onCancel}>
@@ -68,12 +74,12 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
 
           {!showSource ? (
             <button type="button" className="wi-modal__disclosure" onClick={() => setShowSource(true)}>
-              Already have the content? <span>Build from my files →</span>
+              Have content or know what you want? <span>Build from files or a brief →</span>
             </button>
           ) : (
             <>
               <div className="wi-modal__field">
-                Build from my content <span className="wi-modal__optional">(files or folders on your machine)</span>
+                Build from my content <span className="wi-modal__optional">(optional — files or folders on your machine)</span>
                 <div className="wi-paths">
                   {sourcePaths.map((p, i) => (
                     <div className="wi-paths__row" key={i}>
@@ -87,7 +93,7 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
                 <button type="button" className="wi-paths__add" onClick={addPath}>+ Add another file or folder</button>
               </div>
               <label className="wi-modal__field">
-                What should it become? <span className="wi-modal__optional">(optional brief)</span>
+                What should it become? <span className="wi-modal__optional">(a brief alone is enough — no files needed)</span>
                 <textarea value={brief} onChange={(e) => setBrief(e.target.value)} rows={3}
                   placeholder="A 6-slide investor update — lead with the ARR chart, keep it punchy." />
               </label>

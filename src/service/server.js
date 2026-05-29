@@ -350,9 +350,11 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     // "From my content" (ADR-0010): the service is model-free, so it can't read files or
     // generate. It seeds a placeholder v0, then hands a generation request to the supervising
     // agent, which indexes the source(s) and lands the real first draft as a follow-on version.
-    if (fromSource && sourcePaths.length === 0) return res.status(400).json({ error: "at least one source path required for kind:source" });
+    // kind:source needs *something* to build from — either source files or a written brief.
+    // (Brief-only is a first-class path: the agent generates from the brief alone, no files.)
+    if (fromSource && sourcePaths.length === 0 && !brief) return res.status(400).json({ error: "add at least one source path or a brief" });
     const html = fromSource
-      ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePaths))
+      ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePaths, brief))
       : String(req.body?.html ?? "");
     if (!fromSource && !html.trim()) return res.status(400).json({ error: "html required" });
 

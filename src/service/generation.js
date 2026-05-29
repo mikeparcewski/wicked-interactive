@@ -21,21 +21,29 @@ export const GEN_REQUEST = "_gen.request.json";
 export const GEN_RESPONSE = "_gen.response.json";
 
 /** Placeholder shown at v0 while the agent builds the real draft from the user's content. */
-export function generationPlaceholder(name, sourcePaths) {
+export function generationPlaceholder(name, sourcePaths, brief = "") {
   const safe = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const paths = (Array.isArray(sourcePaths) ? sourcePaths : [sourcePaths]).filter(Boolean);
   const title = safe((name || "your document").replace(/-/g, " "));
-  const sources = paths.length === 1
-    ? `<code>${safe(paths[0])}</code>`
-    : `${paths.length} locations`;
+  // Brief-only generation is first-class: with no source files the agent drafts from the
+  // brief alone, so the placeholder describes that instead of "0 locations".
+  const sources = paths.length === 0
+    ? "your brief"
+    : paths.length === 1
+      ? `<code>${safe(paths[0])}</code>`
+      : `${paths.length} locations`;
   const list = paths.length > 1
     ? `<ul>${paths.map((p) => `<li><code>${safe(p)}</code></li>`).join("")}</ul>`
+    : "";
+  const briefBlock = paths.length === 0 && brief
+    ? `<blockquote>${safe(brief)}</blockquote>`
     : "";
   return (
     `<section>` +
       `<h1>Building ${title}…</h1>` +
       `<p class="lead">Reading ${sources} and drafting your document. ` +
       `This view updates automatically the moment the first draft is ready.</p>` +
+      briefBlock +
       list +
     `</section>`
   );

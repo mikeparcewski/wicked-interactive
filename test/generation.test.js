@@ -29,6 +29,15 @@ test("generationPlaceholder lists multiple locations", () => {
   assert.match(html, /<li><code>\.\/b\.pptx<\/code><\/li>/);
 });
 
+test("generationPlaceholder describes a brief-only build (no source paths)", () => {
+  const html = generationPlaceholder("teaser", [], "A punchy one-pager <for> launch");
+  assert.match(html, /your brief/);
+  assert.doesNotMatch(html, /0 locations/);     // no "0 locations" artifact
+  assert.match(html, /<blockquote>/);            // the brief is shown back
+  assert.match(html, /&lt;for&gt;/);             // brief is HTML-escaped
+  assert.doesNotMatch(html, /<for>/);            // no raw injection
+});
+
 test("writeGenerationRequest writes the request file the agent watches", () => {
   const dir = fresh();
   try {
