@@ -147,6 +147,31 @@ test("POST /api/message with empty text is rejected", async () => {
   } finally { await cleanup(); }
 });
 
+test("POST /api/message honors an explicit agent role; unknown roles fall back to user", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    // Supervising agent replies through this lane -> must land as "agent", not "user".
+    await fetch(`${base}/api/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "agent", text: "draft is ready" }),
+    });
+    // A bogus role is sanitized to "user" (value is used as a CSS class suffix).
+    await fetch(`${base}/api/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "wi-msg--evil", text: "spoof attempt" }),
+    });
+    // No role at all -> defaults to "user".
+    await fetch(`${base}/api/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "plain user note" }),
+    });
+    const convo = await (await fetch(`${base}/api/conversation`)).json();
+    assert.ok(convo.some((m) => m.role === "agent" && /draft is ready/.test(m.text)), "agent role honored");
+    assert.ok(convo.some((m) => m.role === "user" && /spoof attempt/.test(m.text)), "bogus role -> user");
+    assert.ok(convo.some((m) => m.role === "user" && /plain user note/.test(m.text)), "missing role -> user");
+  } finally { await cleanup(); }
+});
+
 // Regression guard: the chokidar watcher must actually process a posted feedback file
 // (chokidar v4 dropped glob support — watching a glob silently matched nothing).
 test("watcher processes posted feedback end-to-end (live loop)", async () => {

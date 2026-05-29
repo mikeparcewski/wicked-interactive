@@ -148,11 +148,17 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     res.json({ ok: true });
   });
 
-  // User -> agent message (ADR-0014). The agent's SSE listener receives the broadcast.
+  // User -> agent message (ADR-0014), and agent -> user when the supervising agent
+  // replies through this lane. Default to "user"; honor an explicit role so an agent
+  // post lands as "agent" instead of masquerading as the user. Whitelisted to keep
+  // the value safe as a CSS class suffix (wi-msg--{role}) on the frontend.
+  const MSG_ROLES = new Set(["user", "agent", "assistant"]);
   app.post("/api/message", (req, res) => {
     const text = (req.body?.text || "").toString().trim();
     if (!text) return res.status(400).json({ error: "text required" });
-    const entry = { role: "user", text, ts: new Date().toISOString() };
+    const reqRole = (req.body?.role || "").toString();
+    const role = MSG_ROLES.has(reqRole) ? reqRole : "user";
+    const entry = { role, text, ts: new Date().toISOString() };
     logConvo(entry);
     broadcast("message", entry);
     res.json({ ok: true });
