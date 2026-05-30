@@ -4,11 +4,14 @@ import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import ProcessingLock from "./components/ProcessingLock.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
+import SourcesPanel from "./components/SourcesPanel.jsx";
+import FsPicker from "./components/FsPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
+import NewDemoModal from "./components/NewDemoModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, getPreflight } from "./lib/api.js";
-import { getCurrentDoc, navigateToDoc, eventsUrl } from "./lib/apiPath.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, postDemoRecord, getPreflight, getSources, addSources } from "./lib/api.js";
+import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
 
@@ -26,8 +29,12 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(true);        // chat panel expand/collapse
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
+  const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
   const [newDocError, setNewDocError] = useState(null);
+  const [newDemoError, setNewDemoError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
+  const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
+  const [showPicker, setShowPicker] = useState(false);
   const currentDoc = getCurrentDoc();
 
   const iframeRef = useRef(null);
@@ -35,6 +42,11 @@ export default function App() {
   const submittedVersion = useRef(null);
   const viewingRef = useRef(null);
   const headRef = useRef(null);
+  const isDemoRef = useRef(false);                       // demos aren't HTML-editable (ADR-0018)
+  const canvasRef = useRef(null);                        // empty-state hint anchoring
+  const newDocRef = useRef(null);
+  const newDemoRef = useRef(null);
+  const [hintY, setHintY] = useState({ doc: 40, demo: 160 });
   useEffect(() => { viewingRef.current = viewing; }, [viewing]);
   useEffect(() => { headRef.current = manifest?.head ?? null; }, [manifest]);
 
@@ -55,7 +67,18 @@ export default function App() {
     refreshVersions().then((m) => setViewing((v) => (v == null ? m.head : v))).catch(() => {});
     getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
     listDocs().then(setDocs).catch(() => setDocs([]));
+    getSources().then((r) => setSources(r.sources || [])).catch(() => setSources([]));
   }, [refreshVersions, checkPreflight]);
+
+  async function attachSources(paths, note) {
+    setShowPicker(false);
+    try {
+      const r = await addSources(paths, note);   // broadcast echoes "sources" back to all clients
+      setSources(r.sources || []);
+    } catch (e) {
+      setStatus({ kind: "error", text: e.message });
+    }
+  }
 
   async function onCreateDoc(name, html, meta) {
     setNewDocError(null);
@@ -67,6 +90,16 @@ export default function App() {
       navigateToDoc(name);   // hard-reloads to ?doc=<name>
     } catch (e) {
       setNewDocError(e.message);
+    }
+  }
+
+  async function onCreateDemo(name, _html, meta) {
+    setNewDemoError(null);
+    try {
+      await createDoc(name, "", meta);   // kind:"demo" — service seeds the storyboard placeholder
+      navigateToDoc(name);               // the agent learns the app + records the first version
+    } catch (e) {
+      setNewDemoError(e.message);
     }
   }
 
@@ -112,6 +145,9 @@ export default function App() {
     if (!win || !doc) return;
     if (pendingScroll.current != null) { win.scrollTo(0, pendingScroll.current); pendingScroll.current = null; }
     recompute();
+    // Demos are a recorded video, not editable HTML — skip the highlight-to-edit wiring so
+    // a click/hover on the storyboard never opens the feedback affordance (download instead).
+    if (isDemoRef.current) return;
     doc.addEventListener("mousemove", (e) => {
       const el = nearestReviewable(e.target);
       setHovered(el ? el.getAttribute("data-wid") : null);
@@ -170,6 +206,7 @@ export default function App() {
       }
     },
     message: (data) => appendChat({ role: data.role || "user", text: data.text }),
+    sources: (data) => { if (Array.isArray(data.sources)) setSources(data.sources); },
     error: (data) => {
       setProcessing(false);
       setStatus({ kind: "error", text: data.error || "regeneration failed" });
@@ -260,6 +297,38 @@ export default function App() {
   const agentThinking = !processing && lastEntry?.role === "user";
 
   const openNewDoc = () => { setNewDocError(null); setShowNewDoc(true); };
+  const openNewDemo = () => { setNewDemoError(null); setShowNewDemo(true); };
+
+  // Partition the registry by kind (ADR-0018): demos render in their own nav section.
+  const docKind = (d) => (typeof d === "string" ? "doc" : d.kind || "doc");
+  const demos = docs.filter((d) => docKind(d) === "demo");
+  const documents = docs.filter((d) => docKind(d) !== "demo");
+  const currentIsDemo = currentDoc && demos.some((d) => (typeof d === "string" ? d : d.name) === currentDoc);
+  useEffect(() => { isDemoRef.current = !!currentIsDemo; }, [currentIsDemo]);
+
+  // Anchor the launch hints to the real "New" buttons so the arrows point at the badges
+  // regardless of how many docs/demos are listed (the demo button shifts as the list grows).
+  useEffect(() => {
+    if (currentDoc) return;
+    const measure = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const cTop = canvas.getBoundingClientRect().top;
+      const center = (el) => (el ? el.getBoundingClientRect().top - cTop + el.getBoundingClientRect().height / 2 : null);
+      const doc = center(newDocRef.current);
+      const demo = center(newDemoRef.current);
+      setHintY((p) => ({ doc: doc ?? p.doc, demo: demo ?? p.demo }));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [currentDoc, documents.length, demos.length]);
+
+  async function recordDemoNow() {
+    setStatus({ kind: "ok", text: "Recording…" });
+    try { await postDemoRecord(); }   // status + html-updated arrive over SSE
+    catch (e) { setStatus({ kind: "error", text: e.message }); }
+  }
 
   return (
     <div className={`wi-shell ${!chatOpen ? "wi-shell--chat-collapsed" : ""}`}>
@@ -287,31 +356,148 @@ export default function App() {
         </div>
         <div className="wi-toolbar__group">
           {status && currentDoc && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
-          <div className="wi-export" role="group" aria-label="Export">
-            <span className="wi-export__icon" aria-hidden="true">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
-              </svg>
-            </span>
-            <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("html")}>HTML</button>
-            <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>PDF</button>
-          </div>
+          {currentIsDemo && (
+            <button className="wi-btn wi-btn--ghost" disabled={processing} onClick={recordDemoNow} title="Re-run the recorded walkthrough">
+              ● Record
+            </button>
+          )}
+          {currentIsDemo ? (
+            <a
+              className={`wi-btn wi-btn--primary wi-download${viewing == null ? " wi-download--disabled" : ""}`}
+              href={viewing == null ? undefined : apiPath(`/api/demo/recording/_v${viewing}.webm`)}
+              download={`${currentDoc}-v${viewing}.webm`}
+              aria-disabled={viewing == null}
+              title="Download the recorded walkthrough"
+            >
+              <span className="wi-download__icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+                </svg>
+              </span>
+              Download video
+            </a>
+          ) : (
+            <div className="wi-export" role="group" aria-label="Export">
+              <span className="wi-export__icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+                </svg>
+              </span>
+              <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("html")}>HTML</button>
+              <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>PDF</button>
+            </div>
+          )}
         </div>
       </header>
 
       <nav className="wi-rail">
         <div className="wi-rail__inner">
-          <button className="wi-rail__row wi-rail__new-row" title="New document" onClick={openNewDoc}>
-            <span className="wi-rail__new" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </span>
-            <span className="wi-rail__label wi-rail__new-label">New document</span>
-          </button>
+          <RailSection
+            title="Documents"
+            newLabel="New document"
+            onNew={openNewDoc}
+            items={documents}
+            currentDoc={currentDoc}
+            glyph="doc"
+            newRef={newDocRef}
+          />
           <div className="wi-rail__sep" />
-          <div className="wi-rail__docs">
-            {docs.map((d) => {
+          <RailSection
+            title="Demos"
+            newLabel="New demo"
+            onNew={openNewDemo}
+            items={demos}
+            currentDoc={currentDoc}
+            glyph="demo"
+            newRef={newDemoRef}
+          />
+        </div>
+      </nav>
+
+      <main className="wi-canvas" ref={canvasRef}>
+        {!currentDoc && (
+          <>
+            <div className="wi-empty-hint" style={{ top: Math.max(4, hintY.doc - 22) }} aria-hidden="true">
+              <svg className="wi-empty-hint__arrow" width="86" height="44" viewBox="0 0 86 44" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M82 11C56 13 27 15 7 22" />
+                <path d="M7 22C13 19 18 16 22 12" />
+                <path d="M7 22C13 25 18 30 22 34" />
+              </svg>
+              <span className="wi-empty-hint__text">start a new document</span>
+            </div>
+            <div className="wi-empty-hint" style={{ top: Math.max(4, hintY.demo - 22) }} aria-hidden="true">
+              <svg className="wi-empty-hint__arrow" width="86" height="44" viewBox="0 0 86 44" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M82 11C56 13 27 15 7 22" />
+                <path d="M7 22C13 19 18 16 22 12" />
+                <path d="M7 22C13 25 18 30 22 34" />
+              </svg>
+              <span className="wi-empty-hint__text">…or record a demo of your app</span>
+            </div>
+          </>
+        )}
+        <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
+          <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
+          {!currentIsDemo && (
+            <>
+              <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
+              <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
+            </>
+          )}
+          <ProcessingLock active={processing} message={procMsg} question={question?.text} options={question?.options}
+            onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />
+        </div>
+      </main>
+
+      <div className="wi-side">
+        <SourcesPanel sources={sources} onAdd={() => setShowPicker(true)} narrow={!chatOpen} onExpand={() => setChatOpen(true)} />
+        <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
+      </div>
+
+      <FsPicker open={showPicker} onAdd={attachSources} onCancel={() => setShowPicker(false)} />
+
+      <NewDocModal
+        open={showNewDoc}
+        error={newDocError}
+        onCreate={onCreateDoc}
+        onCancel={() => setShowNewDoc(false)}
+      />
+
+      <NewDemoModal
+        open={showNewDemo}
+        error={newDemoError}
+        onCreate={onCreateDemo}
+        onCancel={() => setShowNewDemo(false)}
+      />
+
+      <InstallGate preflight={preflight} onRetry={checkPreflight} />
+    </div>
+  );
+}
+
+const EMPTY = new Set();
+
+const RAIL_GLYPHS = {
+  doc: <path d="M12 5v14M5 12h14" />,                                   // plus
+  demo: <path d="M8 5v14l11-7z" />,                                    // play triangle
+};
+
+/** One labelled nav section: a "New …" action row + a kind-filtered list of entries. */
+function RailSection({ title, newLabel, onNew, items, currentDoc, glyph, newRef }) {
+  return (
+    <div className="wi-rail__section">
+      <button ref={newRef} className="wi-rail__row wi-rail__new-row" title={newLabel} onClick={onNew}>
+        <span className="wi-rail__new" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            {RAIL_GLYPHS[glyph] || RAIL_GLYPHS.doc}
+          </svg>
+        </span>
+        <span className="wi-rail__label wi-rail__new-label">{newLabel}</span>
+      </button>
+      <div className="wi-rail__heading"><span className="wi-rail__label">{title}</span></div>
+      <div className="wi-rail__docs">
+        {items.length === 0
+          ? <div className="wi-rail__empty"><span className="wi-rail__label">None yet</span></div>
+          : items.map((d) => {
               const name = typeof d === "string" ? d : d.name;
               return (
                 <button
@@ -325,45 +511,10 @@ export default function App() {
                 </button>
               );
             })}
-          </div>
-        </div>
-      </nav>
-
-      <main className="wi-canvas">
-        {!currentDoc && (
-          <div className="wi-empty-hint" aria-hidden="true">
-            <svg className="wi-empty-hint__arrow" width="120" height="96" viewBox="0 0 120 96" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M112 92C74 90 38 74 20 44 14 34 11 24 10 12" />
-              <path d="M3 26C5 19 8 14 10 9" />
-              <path d="M24 20C19 16 14 13 10 9" />
-            </svg>
-            <span className="wi-empty-hint__text">click here to create a new document</span>
-          </div>
-        )}
-        <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
-          <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
-          <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
-          <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
-          <ProcessingLock active={processing} message={procMsg} question={question?.text} options={question?.options}
-            onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />
-        </div>
-      </main>
-
-      <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
-
-      <NewDocModal
-        open={showNewDoc}
-        error={newDocError}
-        onCreate={onCreateDoc}
-        onCancel={() => setShowNewDoc(false)}
-      />
-
-      <InstallGate preflight={preflight} onRetry={checkPreflight} />
+      </div>
     </div>
   );
 }
-
-const EMPTY = new Set();
 
 /** Trigger a browser download for a same-origin URL with an explicit filename. */
 function triggerDownload(url, filename) {

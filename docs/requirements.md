@@ -150,6 +150,29 @@ Form: `AC-N: Given … When … Then …` (observable, testable).
 - **AC-26 [v1]:** Given an export is requested, When it runs, Then it is triggered entirely from
   the browser UI (no CLI step) and the resulting file path is surfaced to the user.
 
+### R9 — Demos (ADR-0018)
+- **AC-27 [v1]:** Given the user opens "New demo" and supplies a live http(s) URL plus an optional
+  brief, When they create it, Then a doc of `kind: "demo"` is created, a placeholder ("Learning
+  <url>…") renders, and a `requests/_demo.request.json` work request is written for the agent.
+- **AC-28 [v1]:** Given a demo request, When the supervising agent has explored the app, Then it
+  authors a deterministic Playwright spec (`demo.spec.mjs`) expressing only the click-path as
+  labelled `step()`s — the service supplies the browser/recording lifecycle (model-free, ADR-0010).
+- **AC-29 [v1]:** Given an authored `demo.spec.mjs`, When a record is triggered (`POST
+  /api/demo/record`), Then the service executes it with Playwright, captures a video, and lands the
+  recording as a new version whose HTML is an instrumented storyboard (embedded video + ordered,
+  timed, `data-wid`-anchored steps) that hot-reloads in the browser.
+- **AC-30 [v1]:** Given a recorded demo, When the user highlights a step and asks for a change, Then
+  the agent re-authors the spec and re-records — a deterministic replay landing a new version via the
+  same feedback→regenerate→hot-reload loop as any document.
+- **AC-31 [v1]:** Given demo creation, When Playwright is not installed, Then the install gate
+  (ADR-0016) blocks demo creation only — ordinary documents remain usable — and the recording
+  endpoint is path-traversal-locked; no credentials are ever written to a version artifact.
+
+### R10 — Sources (ADR-0017)
+- **AC-32 [v1]:** Given the user attaches local reference paths in the Sources panel, When they are
+  submitted, Then the agent indexes them into the project brain (no uploads — read locally) and
+  narrates progress to the browser chat, drawing on that knowledge when generating/updating the doc.
+
 ---
 
 ## 4. Invariants (must-not-change guarantees)
@@ -179,7 +202,9 @@ Form: `AC-N: Given … When … Then …` (observable, testable).
 ---
 
 ## 6. Open questions → ADRs (RESOLVED — see `docs/adr/`)
-All nine are now formalized as ADRs 0001–0009 (`docs/adr/`). Listed below for traceability:
+The original nine are formalized as ADRs 0001–0009; build-phase and feature decisions added
+0010–0018 (`docs/adr/README.md` is the index). Note: ADR-0017 (Sources) is referenced in code
+but its ADR file is not yet written. The original nine, for traceability:
 
 1. **data-wid ID namespace contract** — exact `{slide}-{role}-{ordinal}` rules; behavior when the
    generator version changes.

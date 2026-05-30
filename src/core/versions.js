@@ -15,9 +15,14 @@
 
 const now = () => new Date().toISOString();
 
-/** A fresh manifest seeded with version 0 (the initial build). */
-export function initManifest(htmlFile = "_v0.html") {
+/**
+ * A fresh manifest seeded with version 0 (the initial build). `kind` distinguishes a
+ * demo workspace ("demo") from an ordinary document; it's omitted for plain docs so
+ * existing manifests stay byte-identical (listDocs defaults a missing kind to "doc").
+ */
+export function initManifest(htmlFile = "_v0.html", { kind } = {}) {
   return {
+    ...(kind && kind !== "doc" ? { kind } : {}),
     head: 0,
     versions: [{ version: 0, parent: null, feedback_file: null, html_file: htmlFile, created_at: now() }],
   };
@@ -48,7 +53,7 @@ export function addVersion(manifest, { parent = manifest.head, feedbackFile = nu
     created_at: now(),
   };
   return {
-    manifest: { head: version, versions: [...manifest.versions, entry] },
+    manifest: { ...manifest, head: version, versions: [...manifest.versions, entry] },
     version,
   };
 }
@@ -70,7 +75,7 @@ export function recordVersion(manifest, { version, parent, feedbackFile = null }
     html_file: `_v${version}.html`,
     created_at: now(),
   };
-  return { manifest: { head: version, versions: [...manifest.versions, entry] }, version };
+  return { manifest: { ...manifest, head: version, versions: [...manifest.versions, entry] }, version };
 }
 
 /** Next version number that would be allocated (max + 1). */

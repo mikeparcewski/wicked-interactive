@@ -30,6 +30,7 @@ It's powered by your Claude Code plan. If you can describe it, you can build it.
 > *"This slide is a wall of text. Three bullets."*
 > *"Make the whole thing feel premium."*
 > *"Actually, build me a deck about our Q3 results from scratch."*
+> *"Record a walkthrough of my app showing sign-up and the dashboard."*
 
 You click the block. You type that. You hit **UPDATE**. It happens — live, in front of you.
 Every version is saved automatically, so you can rewind to any draft, or **fork** and chase
@@ -43,6 +44,8 @@ to send. Done.
 - 🍴 **Try both directions.** Fork from any version and keep them side by side.
 - 📤 **Send it anywhere.** Export self-contained HTML or PDF — no broken links, nothing to install on their end.
 - ✨ **Start from a blank page.** Give it a topic, get a first draft.
+- 📎 **Bring your own facts.** Attach files and folders; it reads them so your real numbers and decisions show up in the draft.
+- 🎬 **Record a demo of your app.** Point it at a running app, say what to show, and get a narrated walkthrough video — with clickable chapter thumbnails, YouTube-style. Don't like the path? Just say so and it re-records.
 - 🙅 **Never see a terminal.** Once it's running, it's all browser.
 
 ## Get it running

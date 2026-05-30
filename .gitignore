@@ -14,6 +14,9 @@ frontend/.vite/
 # Local AI-tooling chat logs — never part of the shipped plugin
 .aider*
 
+# Local Claude Code state (scheduled-task locks, etc.) — never part of the shipped plugin
+.claude/
+
 # Secrets — guard against accidental commits
 .env
 .env.*

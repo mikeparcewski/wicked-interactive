@@ -80,6 +80,25 @@ auto-install can't run (e.g. launched outside Claude Code), showing the exact pe
 commands (ADR-0016). Shipped as a Claude Code plugin (`.claude-plugin/`) with the `serve` and
 `assist` skills as the entry point and supervising loop.
 
+**Increment 17 — sources.** A Sources panel lets a user attach reference material
+(files/folders) to a document; `POST /api/sources` registers them and the supervising
+agent indexes them into a wicked-brain knowledge base, narrating progress to the browser
+chat. Generative edits then draw on that brain so authored content stays true to the
+user's real material.
+
+**Increment 18 — demos** (`src/service/demo.js`, ADR-0018). A demo is a new doc `kind`,
+not a new subsystem: point wicked-interactive at a running app and describe what to show.
+The supervising agent (model-free service, ADR-0010) explores the app and authors
+`demo.spec.mjs` — a plain ES module exporting `meta = { url, title, steps[] }` and
+`run({ page, step, meta })` that expresses *only* the click-path. `recordDemo` executes
+it with Playwright (Chromium 1280×720), captures a `_v{n}.webm` video plus a per-step
+thumbnail, and lands a **storyboard** as a normal version: the embedded video over a
+YouTube-style chapter grid — one thumbnail per step with its label and time, clickable to
+seek the video. Because the video *is* the artifact, demos aren't highlight-editable; the
+toolbar offers **Download video** instead of HTML/PDF export, and refinement happens
+through chat → the agent re-authors the spec → the service re-records (deterministic
+replay). Same spec ⇒ same walkthrough. Playwright is gated at install for demos only.
+
 ## Theme, crews, and knowledge (ADR-0016)
 
 Three capabilities ride on the sibling plugins:

@@ -231,3 +231,87 @@ test("GET /api/export/file rejects path-traversal attempts", async () => {
     assert.equal(bad.status, 400);
   } finally { await cleanup(); }
 });
+
+// --- Sources + filesystem browse (ADR-0017) ---
+
+const jpost = (base, path, body) =>
+  fetch(`${base}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+test("GET /api/sources starts empty", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const r = await (await fetch(`${base}/api/sources`)).json();
+    assert.deepEqual(r.sources, []);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/sources persists, dedupes, and resolves to absolute paths", async () => {
+  const { base, dir, cleanup } = await boot();
+  try {
+    const res = await jpost(base, "/api/sources", { paths: ["/tmp/a.txt", "/tmp/a.txt", "/tmp/b"], note: "use these" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.sources.length, 2, "duplicate path is collapsed");
+    assert.equal(body.added.length, 2);
+    assert.equal(body.sources[0].status, "pending");
+    assert.equal(body.sources[0].note, "use these");
+    assert.ok(existsSync(join(dir, "requests", "sources.json")), "sources.json written under requests/");
+
+    // Re-posting a known path adds nothing new.
+    const again = await (await jpost(base, "/api/sources", { paths: ["/tmp/a.txt"] })).json();
+    assert.equal(again.added.length, 0);
+    assert.equal(again.sources.length, 2);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/sources with no paths is rejected", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    assert.equal((await jpost(base, "/api/sources", { paths: [] })).status, 400);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/sources/status marks a source indexed", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    await jpost(base, "/api/sources", { paths: ["/tmp/data"] });
+    const res = await jpost(base, "/api/sources/status", { path: "/tmp/data", status: "indexed" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.sources[0].status, "indexed");
+    assert.ok(body.sources[0].indexed_at, "indexed_at stamped");
+  } finally { await cleanup(); }
+});
+
+test("POST /api/sources/status rejects invalid status and unknown paths", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    await jpost(base, "/api/sources", { paths: ["/tmp/data"] });
+    assert.equal((await jpost(base, "/api/sources/status", { path: "/tmp/data", status: "bogus" })).status, 400);
+    assert.equal((await jpost(base, "/api/sources/status", { path: "/tmp/nope", status: "indexed" })).status, 404);
+    assert.equal((await jpost(base, "/api/sources/status", { status: "indexed" })).status, 400);
+  } finally { await cleanup(); }
+});
+
+test("GET /api/fs lists a directory with absolute paths and a parent", async () => {
+  const { base, dir, cleanup } = await boot();
+  try {
+    const r = await (await fetch(`${base}/api/fs?path=${encodeURIComponent(dir)}`)).json();
+    assert.equal(r.path, dir);
+    assert.ok(r.home, "home is reported");
+    assert.ok(Array.isArray(r.entries));
+    // initWorkspace seeds _v0.html + versions.json — both should appear as files with absolute paths.
+    const seed = r.entries.find((e) => e.name === "_v0.html");
+    assert.ok(seed && !seed.dir, "_v0.html present and flagged as a file");
+    assert.equal(seed.path, join(dir, "_v0.html"), "entry path is absolute");
+  } finally { await cleanup(); }
+});
+
+test("GET /api/fs hides dotfiles and 404s on a missing directory", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const r = await (await fetch(`${base}/api/fs?path=${encodeURIComponent("/")}`)).json();
+    assert.ok(!r.entries.some((e) => e.name.startsWith(".")), "dotfiles hidden");
+    assert.equal((await fetch(`${base}/api/fs?path=${encodeURIComponent("/no/such/dir/xyz")}`)).status, 404);
+  } finally { await cleanup(); }
+});

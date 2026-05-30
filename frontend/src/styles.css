@@ -180,6 +180,46 @@ body {
 .wi-rail__doc.is-active::before { transform: translateY(-50%) scaleY(1); }
 .wi-rail__doc.is-active .wi-rail__doc-glyph { background: var(--wi-accent); color: #fff; }
 
+/* Nav sections (ADR-0018): Documents + Demos each get a "New …" row, a quiet section
+   heading (only legible once the rail is open), and a kind-filtered tile list. */
+.wi-rail__section { display: flex; flex-direction: column; gap: 4px; }
+.wi-rail__heading { padding: 2px 3px 0; }
+.wi-rail__heading .wi-rail__label {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--wi-chrome-ink-soft); opacity: 0;
+}
+.wi-rail:hover .wi-rail__heading .wi-rail__label { opacity: .6; }
+.wi-rail__empty { padding: 2px 3px 4px 45px; }
+.wi-rail__empty .wi-rail__label { font-size: var(--wi-text-sm); color: var(--wi-chrome-ink-soft); opacity: .45; font-style: italic; }
+
+/* ---- Demo storyboard (ADR-0018) — the recorded walkthrough rendered as a versioned,
+   feedback-able document: a target line, the embedded video, then the ordered step list.
+   Each step is a data-wid anchor, so highlighting "step 3" and asking for a change works
+   exactly like any other block. ---- */
+.wi-demo { max-width: 860px; margin: 0 auto; padding: 8px 4px 40px; }
+.wi-demo__head { margin-bottom: 18px; }
+.wi-demo__target { color: var(--wi-ink-soft); font-size: var(--wi-text-sm); margin-top: 4px; }
+.wi-demo__target a { color: var(--wi-accent); text-decoration: none; }
+.wi-demo__target a:hover { text-decoration: underline; }
+.wi-demo__player {
+  border-radius: var(--wi-r-md); overflow: hidden; background: #0b1020;
+  box-shadow: var(--wi-sh-2, 0 8px 30px rgba(15,23,42,.18)); margin-bottom: 22px;
+}
+.wi-demo__player video { display: block; width: 100%; height: auto; background: #0b1020; }
+.wi-demo__steps { list-style: none; counter-reset: wi-step; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wi-demo__step {
+  counter-increment: wi-step; position: relative; display: flex; align-items: baseline; gap: 12px;
+  padding: 11px 14px 11px 46px; border: 1px solid var(--wi-line-2); border-radius: var(--wi-r-sm); background: #fff;
+}
+.wi-demo__step::before {
+  content: counter(wi-step); position: absolute; left: 12px; top: 10px;
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 12px; font-weight: 700; color: #fff; background: var(--wi-accent);
+}
+.wi-demo__step-label { font-weight: 500; color: var(--wi-ink); }
+.wi-demo__at { margin-left: auto; font-size: 12px; color: var(--wi-ink-faint); font-variant-numeric: tabular-nums; }
+.wi-demo__nosteps { color: var(--wi-ink-soft); font-style: italic; }
+
 /* Base button = light card; used in modals, inline popovers, the processing lock. */
 .wi-btn {
   border: 1px solid var(--wi-line-2); background: #fff; color: var(--wi-ink);
@@ -258,9 +298,64 @@ body {
 .wi-inline__scope button.on { color: var(--wi-accent); background: #fff; font-weight: 600; box-shadow: var(--wi-sh-1); }
 .wi-inline__actions { display: flex; gap: 8px; margin-top: 10px; }
 
-/* ---- Conversational panel (ADR-0014) — LIGHT plane, docked on the right (Plane 2) ---- */
-.wi-chat { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; min-height: 0; z-index: 4;
+/* ---- Right side column (Plane 2): Sources panel stacked above the chat ---- */
+.wi-side { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; min-height: 0; z-index: 4;
   background: var(--wi-panel-bg); color: var(--wi-ink); box-shadow: var(--wi-sep-right); }
+
+/* ---- Sources panel (ADR-0017) — reference material the agent draws on ---- */
+.wi-sources { flex: 0 0 auto; display: flex; flex-direction: column; min-height: 0; max-height: 42%;
+  border-bottom: 1px solid var(--wi-line); }
+.wi-sources__head { padding: 0 16px; height: 46px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  font-weight: 600; font-size: var(--wi-text-sm); letter-spacing: .04em; text-transform: uppercase; color: var(--wi-ink-soft); }
+.wi-sources__add { border: 1px dashed var(--wi-line); background: none; cursor: pointer; color: var(--wi-ink-soft);
+  font-size: var(--wi-text-sm); padding: 4px 9px; border-radius: var(--wi-r-sm); text-transform: none; letter-spacing: 0; font-weight: 500;
+  transition: border-color .15s var(--wi-ease), background .15s var(--wi-ease), color .15s var(--wi-ease); }
+.wi-sources__add:hover { border-color: var(--wi-accent); background: var(--wi-accent-soft); color: var(--wi-accent); }
+.wi-sources__list { flex: 1 1 auto; overflow-y: auto; padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.wi-sources__empty { color: var(--wi-ink-faint); font-size: var(--wi-text-sm); line-height: var(--wi-lh-base); margin: 2px 0 0; }
+.wi-source { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--wi-line); border-radius: var(--wi-r-md); background: var(--wi-panel-2); }
+.wi-source__name { font-weight: 600; font-size: var(--wi-text-sm); color: var(--wi-ink); }
+.wi-source__path { font-size: 11px; color: var(--wi-ink-faint); font-family: var(--wi-mono, ui-monospace, monospace); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.wi-source__note { font-size: var(--wi-text-sm); color: var(--wi-ink-soft); font-style: italic; }
+.wi-source__status { align-self: flex-start; margin-top: 3px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+.wi-source__status--pending { background: #f1f5f9; color: #64748b; }
+.wi-source__status--indexing { background: #fef9c3; color: #854d0e; }
+.wi-source__status--indexed { background: #dcfce7; color: #166534; }
+.wi-source__status--error { background: #fee2e2; color: #991b1b; }
+.wi-sources--collapsed { max-height: none; align-items: center; padding-top: 12px; border-bottom: 0; }
+.wi-sources__toggle { position: relative; border: 0; background: none; cursor: pointer; font-size: 20px; padding: 6px; border-radius: var(--wi-r-sm); }
+.wi-sources__toggle:hover { background: var(--wi-panel-2); }
+.wi-sources__badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+  background: var(--wi-accent); color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+/* ---- File-path picker (ADR-0017) ---- */
+.wi-fspicker { max-width: 620px; display: flex; flex-direction: column; }
+.wi-fspicker__bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.wi-fspicker__nav { flex: 0 0 auto; width: 32px; height: 32px; border-radius: var(--wi-r-sm); border: 1px solid var(--wi-line); background: #fff; cursor: pointer; font-size: 15px; color: var(--wi-ink-soft); }
+.wi-fspicker__nav:hover:not(:disabled) { border-color: var(--wi-accent); color: var(--wi-accent); }
+.wi-fspicker__nav:disabled { opacity: .4; cursor: default; }
+.wi-fspicker__crumbs { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 1px; overflow-x: auto; white-space: nowrap; padding: 4px 0; }
+.wi-fspicker__crumb { border: 0; background: none; cursor: pointer; color: var(--wi-ink-soft); font-size: var(--wi-text-sm); padding: 2px 5px; border-radius: var(--wi-r-sm); }
+.wi-fspicker__crumb:hover { background: var(--wi-accent-soft); color: var(--wi-accent); }
+.wi-fspicker__crumb::after { content: "/"; color: var(--wi-ink-faint); margin-left: 3px; }
+.wi-fspicker__crumb:last-child::after { content: ""; }
+.wi-fspicker__list { height: 300px; overflow-y: auto; border: 1px solid var(--wi-line); border-radius: var(--wi-r-md); padding: 4px; }
+.wi-fspicker__empty { color: var(--wi-ink-faint); font-size: var(--wi-text-sm); padding: 16px; text-align: center; }
+.wi-fspicker__row { display: flex; align-items: center; gap: 8px; border-radius: var(--wi-r-sm); }
+.wi-fspicker__row.is-picked { background: var(--wi-accent-soft); }
+.wi-fspicker__row:hover { background: var(--wi-panel-2); }
+.wi-fspicker__check { flex: 0 0 auto; padding: 0 4px 0 8px; display: flex; align-items: center; }
+.wi-fspicker__name { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; cursor: pointer; text-align: left; padding: 7px 8px; font: inherit; color: var(--wi-ink); }
+.wi-fspicker__name:disabled { cursor: default; }
+.wi-fspicker__glyph { flex: 0 0 auto; }
+.wi-fspicker__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wi-fspicker__chev { flex: 0 0 auto; color: var(--wi-ink-faint); }
+.wi-fspicker__picked { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.wi-fspicker__chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 9px; border-radius: 999px; background: var(--wi-accent-soft); color: var(--wi-accent); font-size: var(--wi-text-sm); font-weight: 500; }
+.wi-fspicker__chip button { border: 0; background: none; cursor: pointer; color: inherit; font-size: 15px; line-height: 1; padding: 0 2px; }
+
+.wi-chat { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
+  background: var(--wi-panel-bg); color: var(--wi-ink); }
 .wi-chat__head { padding: 0 16px; height: 46px; flex: 0 0 auto; font-weight: 600; font-size: var(--wi-text-sm); letter-spacing: .04em; text-transform: uppercase; color: var(--wi-ink-soft);
   display: flex; align-items: center; justify-content: space-between; }
 .wi-chat__toggle { border: 0; background: none; cursor: pointer; font-size: 16px; color: var(--wi-ink-faint); padding: 4px 7px; border-radius: var(--wi-r-sm); transition: background .15s var(--wi-ease), color .15s var(--wi-ease); }
@@ -391,12 +486,19 @@ body {
 .wi-export__seg:active:not(:disabled) { background: var(--wi-accent-h); }
 .wi-export__seg:disabled { opacity: .4; cursor: not-allowed; }
 
-/* Launch empty state — hand-scrawled arrow pointing at the rail's New button. */
-.wi-empty-hint { position: absolute; top: 18px; left: 14px; z-index: 3; pointer-events: none;
-  display: flex; align-items: flex-start; gap: 4px; animation: wi-frame-in .5s var(--wi-ease) both; }
-.wi-empty-hint__arrow { color: var(--wi-accent); flex: 0 0 auto; margin-top: -6px; }
+/* Download-video action — demos aren't HTML-editable, so they get this instead of export. */
+.wi-download { display: inline-flex; align-items: center; gap: 7px; text-decoration: none; height: 30px; }
+.wi-download__icon { display: grid; place-items: center; }
+.wi-download--disabled { opacity: .45; pointer-events: none; cursor: not-allowed; box-shadow: none; }
+
+/* Launch empty state — hand-scrawled arrows pointing left at the rail's New badges.
+   `top` is set inline per-hint from the measured button position (App.jsx), so each
+   arrow tracks its badge even as the doc/demo lists grow. */
+.wi-empty-hint { position: absolute; left: 8px; z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: 6px; animation: wi-frame-in .5s var(--wi-ease) both; }
+.wi-empty-hint__arrow { color: var(--wi-accent); flex: 0 0 auto; }
 .wi-empty-hint__text { font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", "Comic Sans", cursive;
-  font-size: 20px; line-height: 1.25; color: var(--wi-accent); transform: rotate(-3deg); max-width: 230px; margin-top: 26px;
+  font-size: 19px; line-height: 1.2; color: var(--wi-accent); transform: rotate(-2deg); max-width: 210px;
   text-shadow: 0 1px 0 rgba(255,255,255,.6); }
 
 /* Processing lock overlay (ADR-0012) */

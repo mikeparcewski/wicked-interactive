@@ -6,11 +6,13 @@ import express from "express";
 import chokidar from "chokidar";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { busEmit, EVENTS } from "./bus.js";
 import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 import { writeGenerationRequest, applyGeneratedDraft, generationPlaceholder, GEN_RESPONSE } from "./generation.js";
+import { demoPlaceholder, writeDemoRequest, recordDemo, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { preflight } from "./preflight.js";
 
@@ -133,6 +135,46 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     res.sendFile(filePath);
   });
 
+  // --- Demo (ADR-0018): the agent authors demo.spec.mjs (the click-path); this model-free
+  // service EXECUTES + RECORDS it with Playwright and lands the storyboard as a version.
+  // Deterministic replay — the same spec yields the same recording. Enqueued on the FIFO
+  // so a record never races a feedback regeneration on the manifest.
+  app.post("/api/demo/record", (req, res) => {
+    const headless = req.body?.headless !== false;
+    enqueue(async () => {
+      broadcast("status", { state: "working", message: "Recording the demo with Playwright…", ts: new Date().toISOString() });
+      try {
+        const result = await recordDemo(dir, {
+          emit, documentId, headless,
+          onStep: ({ index, total, label }) => broadcast("status", {
+            state: "working", message: `Step ${index}${total ? `/${total}` : ""}: ${label}`, ts: new Date().toISOString(),
+          }),
+        });
+        broadcast("status", { state: "complete", message: `Recorded v${result.version} (${result.steps.length} steps).`, version: result.version, ts: new Date().toISOString() });
+      } catch (e) {
+        broadcast("error", { file: "demo.spec.mjs", error: e.message });
+        broadcast("status", { state: "error", message: `Demo recording failed: ${e.message}`, ts: new Date().toISOString() });
+      }
+    });
+    res.json({ ok: true, recording: true });
+  });
+
+  // Stream a recorded demo video. Path-locked to the slug charset (same guard as the
+  // export download) so it can't path-traverse out of recordings/.
+  app.get("/api/demo/recording/:name", (req, res) => {
+    const name = req.params.name;
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
+    const filePath = join(dir, RECORDINGS_DIR, name);
+    if (!existsSync(filePath)) return res.status(404).send("not found");
+    const lower = name.toLowerCase();
+    const type = lower.endsWith(".webm") ? "video/webm"
+      : lower.endsWith(".png") ? "image/png"
+      : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
+      : "application/octet-stream";
+    res.setHeader("Content-Type", type);
+    res.sendFile(filePath);
+  });
+
   // Conversation log (ADR-0014): append-only transcript persisted across reloads.
   const convoFile = () => resolve(dir, "conversation.jsonl");
   function logConvo(entry) {
@@ -180,6 +222,98 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     writeFileSync(resolve(dir, REQUESTS_DIR, file), JSON.stringify({ requestId, answer, ts: new Date().toISOString() }, null, 2));
     broadcast("answer", { requestId, answer });
     res.json({ ok: true, file });
+  });
+
+  // --- Sources (ADR-0017): reference material the supervising agent indexes into the
+  // brain and draws on when generating/updating. No uploads — the service is local, so
+  // the agent reads these real absolute paths directly. The browser only picks paths.
+  const sourcesFile = () => resolve(dir, REQUESTS_DIR, "sources.json");
+  function readSources() {
+    try {
+      const f = sourcesFile();
+      if (!existsSync(f)) return [];
+      const parsed = JSON.parse(readFileSync(f, "utf-8"));
+      return Array.isArray(parsed?.sources) ? parsed.sources : [];
+    } catch { return []; }
+  }
+  function writeSources(sources) {
+    mkdirSync(resolve(dir, REQUESTS_DIR), { recursive: true });
+    writeFileSync(sourcesFile(), JSON.stringify({ sources }, null, 2));
+  }
+
+  app.get("/api/sources", (_req, res) => res.json({ sources: readSources() }));
+
+  // User attaches one or more local paths. Dedupe by absolute path; new paths start
+  // status "pending" until the agent indexes them. Broadcast so the agent's tail sees it.
+  app.post("/api/sources", (req, res) => {
+    const incoming = Array.isArray(req.body?.paths) ? req.body.paths : [];
+    const note = (req.body?.note || "").toString().trim();
+    const paths = incoming.map((p) => (p || "").toString().trim()).filter(Boolean).map((p) => resolve(p));
+    if (paths.length === 0) return res.status(400).json({ error: "paths required" });
+    const sources = readSources();
+    const known = new Set(sources.map((s) => s.path));
+    const added = [];
+    for (const p of paths) {
+      if (known.has(p)) continue;
+      known.add(p);
+      const entry = { path: p, note, status: "pending", added_at: new Date().toISOString(), indexed_at: null };
+      sources.push(entry);
+      added.push(entry);
+    }
+    writeSources(sources);
+    if (added.length) {
+      broadcast("sources", { sources, added });
+      logConvo({ role: "event", text: `Sources attached: ${added.map((s) => basename(s.path)).join(", ")}${note ? ` — ${note}` : ""}` });
+    }
+    res.json({ ok: true, sources, added });
+  });
+
+  // Agent marks a source's index status (pending -> indexing -> indexed | error).
+  const SOURCE_STATES = new Set(["pending", "indexing", "indexed", "error"]);
+  app.post("/api/sources/status", (req, res) => {
+    const path = (req.body?.path || "").toString().trim();
+    const status = (req.body?.status || "").toString();
+    if (!path) return res.status(400).json({ error: "path required" });
+    if (!SOURCE_STATES.has(status)) return res.status(400).json({ error: "invalid status" });
+    const target = resolve(path);
+    const sources = readSources();
+    const entry = sources.find((s) => s.path === target);
+    if (!entry) return res.status(404).json({ error: "unknown source" });
+    entry.status = status;
+    if (status === "indexed") entry.indexed_at = new Date().toISOString();
+    writeSources(sources);
+    broadcast("sources", { sources });
+    res.json({ ok: true, sources });
+  });
+
+  // Local filesystem browser for the path picker. The page can't read real disk paths
+  // from <input type=file>, so the user navigates the local tree here and we hand back
+  // absolute paths. Localhost-only; dotfiles hidden; never exposes file contents.
+  function isLocalRequest(req) {
+    const ip = (req.ip || req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+    return ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || ip === "";
+  }
+  app.get("/api/fs", (req, res) => {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: "local only" });
+    const home = homedir();
+    const target = resolve((req.query?.path || "").toString().trim() || home);
+    try {
+      const st = statSync(target);
+      if (!st.isDirectory()) return res.status(400).json({ error: "not a directory" });
+      const entries = readdirSync(target, { withFileTypes: true })
+        .filter((d) => !d.name.startsWith("."))
+        .map((d) => {
+          let dir = d.isDirectory();
+          if (d.isSymbolicLink()) { try { dir = statSync(join(target, d.name)).isDirectory(); } catch { dir = false; } }
+          return { name: d.name, path: join(target, d.name), dir };
+        })
+        .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+      const parent = dirname(target);
+      res.json({ path: target, parent: parent === target ? null : parent, home, entries });
+    } catch (e) {
+      const code = e.code === "EACCES" ? 403 : e.code === "ENOENT" ? 404 : 500;
+      res.status(code).json({ error: e.message });
+    }
   });
 
   app.get("/events", (req, res) => {
@@ -332,7 +466,7 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
       try {
         const m = JSON.parse(readFileSync(v, "utf-8"));
         const last = m.versions[m.versions.length - 1] || {};
-        out.push({ name, head: m.head, versions: m.versions.length, updated_at: last.created_at || null });
+        out.push({ name, kind: m.kind || "doc", head: m.head, versions: m.versions.length, updated_at: last.created_at || null });
       } catch { /* skip malformed */ }
     }
     return out.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
@@ -346,12 +480,33 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     const raw = req.body?.name;
     const kind = String(req.body?.kind || "").toLowerCase();
     const fromSource = kind === "source";
+    const isDemo = kind === "demo";
     const sourcePaths = (Array.isArray(req.body?.source_paths) ? req.body.source_paths : [])
       .map((s) => String(s).trim()).filter(Boolean);
     const brief = String(req.body?.brief ?? "").trim();
+    const demoUrl = String(req.body?.url ?? "").trim();
     const name = DOC_NAME.test(raw) ? raw : slugify(raw);
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
+
+    // Demo (ADR-0018): point at a live URL; the service seeds a placeholder storyboard v0 and
+    // hands a demo request to the supervising agent, which explores the app, authors
+    // demo.spec.mjs, then calls POST /d/<doc>/api/demo/record to execute + record it.
+    if (isDemo) {
+      let u;
+      try { u = new URL(demoUrl); } catch { return res.status(400).json({ error: "a valid http(s) url is required for a demo" }); }
+      if (u.protocol !== "http:" && u.protocol !== "https:") return res.status(400).json({ error: "demo url must be http or https" });
+      try {
+        const dir = docDir(name);
+        initWorkspace(dir, demoPlaceholder(name, demoUrl, brief), { kind: "demo" });
+        const { svc } = await mountDoc(name);
+        writeDemoRequest(dir, { url: demoUrl, brief, documentId: name });
+        svc.broadcast("demo", { document_id: name, url: demoUrl, brief, base_html: "_v0.html", ts: new Date().toISOString() });
+        return res.json({ name, head: 0, kind: "demo", learning: true });
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+    }
 
     // "From my content" (ADR-0010): the service is model-free, so it can't read files or
     // generate. It seeds a placeholder v0, then hands a generation request to the supervising

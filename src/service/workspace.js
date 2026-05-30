@@ -47,7 +47,7 @@ export function initWorkspace(dir, html, opts = {}) {
   // look (ADR-0016 Slice C). Idempotent + anchor-free, so INV-1/INV-2 are unaffected.
   const prepared = themed(anchored, opts);
   atomicWrite(join(dir, "_v0.html"), prepared);
-  const manifest = initManifest("_v0.html");
+  const manifest = initManifest("_v0.html", { kind: opts.kind });
   saveManifest(dir, manifest);
   return { manifest };
 }

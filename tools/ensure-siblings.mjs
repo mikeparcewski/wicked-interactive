@@ -13,7 +13,17 @@
 // macOS, Linux, and Windows.
 
 import { spawnSync } from "node:child_process";
-import { preflight } from "../src/service/preflight.js";
+import { preflight, playwrightInstalled } from "../src/service/preflight.js";
+
+// Playwright (ADR-0018) powers demo recording. It's an npm dependency, not a Claude plugin,
+// so it installs differently: pull the package + browser binaries, then the skills (the
+// supervising agent uses these to learn the target app). `playwright-cli install --skills`
+// relies on the softlinked skill dirs in the standard locations.
+const PLAYWRIGHT_STEPS = [
+  "npm install playwright",
+  "npx playwright install",
+  "playwright-cli install --skills",
+];
 
 // Each sibling installs differently — an ordered list of shell commands per plugin.
 //   prezzie / garden → Claude Code plugins (marketplace add, then install)
@@ -40,16 +50,19 @@ function run(cmd) {
 const checkOnly = process.argv.includes("--check") || process.env.WI_NO_AUTOINSTALL === "1";
 
 let pf = preflight();
-if (pf.ok) {
+const pwMissing = !playwrightInstalled();
+if (pf.ok && !pwMissing) {
   console.log("Helper tools: all present. Nothing to install.");
   process.exit(0);
 }
 
-console.log(`wicked-interactive needs ${pf.missing.length} helper tool(s): ${pf.missing.join(", ")}`);
+const wanted = [...pf.missing, ...(pwMissing ? ["playwright (demo recorder)"] : [])];
+console.log(`wicked-interactive needs ${wanted.length} helper tool(s): ${wanted.join(", ")}`);
 
 if (checkOnly) {
   console.log("\nAuto-install is off. Install these yourself, then restart:");
-  console.log(pf.install_hint);
+  if (pf.install_hint) console.log(pf.install_hint);
+  if (pwMissing) console.log(pf.playwright.install_hint);
   process.exit(1);
 }
 
@@ -60,14 +73,22 @@ for (const name of pf.missing) {
     if (!run(cmd)) console.error(`  ! '${cmd}' did not succeed — continuing.`);
   }
 }
+if (pwMissing) {
+  console.log(`\n• playwright (demo recorder)`);
+  for (const cmd of PLAYWRIGHT_STEPS) {
+    if (!run(cmd)) console.error(`  ! '${cmd}' did not succeed — continuing.`);
+  }
+}
 
 pf = preflight();
-if (pf.ok) {
+if (pf.ok && playwrightInstalled()) {
   console.log("\nAll set — every helper tool is installed.");
   process.exit(0);
 }
 
-console.error(`\nStill missing: ${pf.missing.join(", ")}. Finish these by hand, then restart:`);
-console.error(pf.install_hint);
+const stillMissing = [...pf.missing, ...(playwrightInstalled() ? [] : ["playwright"])];
+console.error(`\nStill missing: ${stillMissing.join(", ")}. Finish these by hand, then restart:`);
+if (pf.install_hint) console.error(pf.install_hint);
+if (!playwrightInstalled()) console.error(pf.playwright.install_hint);
 console.error("\n(If 'claude' isn't found, run this from inside Claude Code — that's where the plugin CLI lives.)");
 process.exit(1);

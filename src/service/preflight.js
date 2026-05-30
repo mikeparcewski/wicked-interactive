@@ -11,6 +11,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 // Exported so service-level plugin-cache lookups (e.g. theme-source) reuse the same paths.
 export function pluginSearchPaths() {
@@ -53,6 +56,16 @@ const INSTALL_CMD = {
   "wicked-brain":   "npx wicked-brain",
 };
 
+// Playwright (ADR-0018) is the demo recorder. Unlike the sibling plugins it's an npm
+// dependency, so the durable signal is whether the package resolves from this project.
+// (Browser binaries are a second gate surfaced at record time — Playwright throws a clear
+// "Executable doesn't exist, run npx playwright install" we already wrap in recordDemo.)
+// Kept OUT of `required`/`missing` so it gates only demo creation, not ordinary documents.
+export const PLAYWRIGHT_INSTALL = "npx playwright install\nplaywright-cli install --skills";
+export function playwrightInstalled() {
+  try { require.resolve("playwright"); return true; } catch { return false; }
+}
+
 /** Snapshot the install state of every required plugin. */
 export function preflight() {
   const required = {};
@@ -65,5 +78,7 @@ export function preflight() {
     required,
     missing,
     install_hint: missing.length ? missing.map((n) => INSTALL_CMD[n]).join("\n\n") : null,
+    // Demo-only dependency, reported alongside (not folded into `ok`/`missing`).
+    playwright: { detected: playwrightInstalled(), install_hint: PLAYWRIGHT_INSTALL },
   };
 }
