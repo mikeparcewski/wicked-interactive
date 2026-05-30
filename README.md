@@ -8,44 +8,54 @@
 
 # wicked-interactive
 
-### Vibe-code your slides and docs. It's Replit for stuff you actually present.
+### Make the decks, docs, marketing pages, and demo videos you have to ship — just by describing them.
 
-You know how Replit lets you build an app by just *talking* to it? This is that, for the
-deck you have to show the board on Monday. Open it in your browser, **point at the thing you
-don't like, say what you want, and watch it change.** No code. No design tickets. No "let me
-loop in the team." Just you, your draft, and a running Claude that does what you ask.
+You know how Replit lets you build an app by just *talking* to it? This is that — for the
+board deck due Monday, the launch one-pager, the sales landing page, the walkthrough video of
+your product. **Describe what you need and it builds it, live in your browser.** Then point at
+anything you want to change, say it, and watch it update. No code. No design tickets. No "let
+me loop in the team." Just you, a running Claude, and the thing you actually have to deliver.
 
 ```
-Point at it  →  Say it  →  Watch it change  →  (don't like it? undo, or fork and try both)
+Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · video)
 ```
 
 It's powered by your Claude Code plan. If you can describe it, you can build it.
 
 ---
 
+## What you can make
+
+- 📊 **Presentations & decks** — board updates, pitch decks, QBRs. Themed, on-brand, export-ready.
+- 📄 **Documents & one-pagers** — reports, briefs, proposals, FAQs.
+- 📣 **Marketing materials** — landing pages, launch announcements, sales one-pagers, anything web.
+- 🎬 **Demo videos of your app** — point it at a running app, say what to show, and get a narrated walkthrough with clickable chapter thumbnails.
+
+It's all interactive HTML under the hood — built, refined, and exported entirely in your browser.
+
 ## Try it in 30 seconds
 
-> *"Make this headline punchier."*
-> *"That number's wrong — it's $4.2M, not $4M."*
-> *"This slide is a wall of text. Three bullets."*
-> *"Make the whole thing feel premium."*
-> *"Actually, build me a deck about our Q3 results from scratch."*
+> *"Build me a deck about our Q3 results from scratch."*
+> *"Make a landing page for the new pricing tier."*
 > *"Record a walkthrough of my app showing sign-up and the dashboard."*
+> *"Write a one-pager pitching the migration to the leadership team."*
+> *"Make this headline punchier — and that number's $4.2M, not $4M."*
+> *"Make the whole thing feel premium."*
 
-You click the block. You type that. You hit **UPDATE**. It happens — live, in front of you.
-Every version is saved automatically, so you can rewind to any draft, or **fork** and chase
-two ideas at once. When it's gorgeous, hit export and you've got a clean HTML file or a PDF
-to send. Done.
+Describe what you want and it builds a first draft. Then click any block, say what to change,
+and it happens — live, in front of you. Every version is saved automatically, so you can
+rewind to any draft, or **fork** and chase two ideas at once. When it's ready, export a clean
+HTML file or PDF — or download your demo video. Done.
 
 ## Why people actually like it
 
-- 🖱️ **You edit by pointing.** Highlight anything, say what you want in normal words.
+- 🪄 **You make it by describing it.** Decks, docs, pages, videos — start from a topic, get a real first draft.
+- 🖱️ **You refine by pointing.** Highlight anything, say what you want in normal words.
+- 📎 **Bring your own facts.** Attach files and folders; it reads them so your real numbers and decisions show up.
+- 🎬 **Turn your app into a video.** A narrated walkthrough with YouTube-style chapter thumbnails — re-record just by asking.
 - ⏪ **You can't lose work.** Every change is a new saved version. Rewind anytime.
 - 🍴 **Try both directions.** Fork from any version and keep them side by side.
-- 📤 **Send it anywhere.** Export self-contained HTML or PDF — no broken links, nothing to install on their end.
-- ✨ **Start from a blank page.** Give it a topic, get a first draft.
-- 📎 **Bring your own facts.** Attach files and folders; it reads them so your real numbers and decisions show up in the draft.
-- 🎬 **Record a demo of your app.** Point it at a running app, say what to show, and get a narrated walkthrough video — with clickable chapter thumbnails, YouTube-style. Don't like the path? Just say so and it re-records.
+- 📤 **Send it anywhere.** Export self-contained HTML or PDF, or download the video — nothing to install on their end.
 - 🙅 **Never see a terminal.** Once it's running, it's all browser.
 
 ## Get it running
