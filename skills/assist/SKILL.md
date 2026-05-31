@@ -342,15 +342,18 @@ Rules that keep the recording deterministic and safe:
 - **Wrap every meaningful action in `step(label, fn)`** — each becomes a timed, anchored
   entry in the storyboard, so the user can highlight "step 2" and ask for a change. A failure
   also points at the exact step.
-- **Narrate with `say`, not the label.** The on-screen caption comes from the step's `say`
-  (3rd arg) — and **only** then. The `label` drives the storyboard chapter list, so keep it
-  terse; it never becomes on-screen text. Write `say` to describe **what's happening and why it
-  matters to the viewer** — the outcome/insight, not the mechanical action. Bad: "Open the
-  rationalization scope" (means nothing to most). Good: "Two apps overlap 51% — should we merge
-  them?". **Not every step needs a caption** — omit `say` on connective/navigation beats so the
-  narration stays meaningful, not noisy. The caption renders as a full-width blue bar pinned to
-  the bottom (stands out, click-through), re-asserted on the settled view and held
-  `captionHoldMs` so it survives navigation; the thumbnail is captured caption-free.
+- **Narrate the action, not the data.** The on-screen caption comes from the step's `say` (3rd
+  arg) — and **only** then; the terse `label` drives the storyboard chapter list and never
+  appears on-screen. A demo teaches **what you can do**, so narrate the user's intent and the
+  capability being shown — *not* the specific records on screen (those change per user and aren't
+  the point). Rule of thumb — frame each `say` as one of: **what am I doing** ("Compare two
+  apps"), **what am I showing** ("how it scores their overlap"), or **what do I get** ("it tells
+  me what to consolidate"). Avoid proper nouns, figures, and raw UI verbs. Bad: "Open the
+  rationalization scope" / "Keep ruflo, retire command_iq — 51% overlap". Good: "Compare two
+  apps to see if they do the same thing." **Not every step needs a caption** — omit `say` on
+  connective/navigation beats so the narration stays meaningful, not noisy. Renders as a
+  full-width blue bar (stands out, click-through), re-asserted on the settled view and held
+  `captionHoldMs`; the thumbnail is captured caption-free.
 - **Prefer stable selectors** (roles, text, `data-*`) over brittle nth-child paths, so a
   re-record replays cleanly.
 - **Never write credentials into the spec or any version artifact.** Use a public or
