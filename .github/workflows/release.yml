@@ -5,6 +5,8 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:        # manual publish of the current main (e.g. the first release, whose
+                            # tag predates this workflow). Publishes whatever version is in package.json.
 
 permissions:
   contents: read
@@ -52,7 +54,7 @@ jobs:
   # package (Settings -> Publishing access) naming this repo + this workflow file.
   publish:
     needs: verify
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
