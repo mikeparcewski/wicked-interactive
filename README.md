@@ -18,6 +18,10 @@ Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HT
 
 If you can say it, you can make it.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mikeparcewski/wicked-interactive/main/assets/wicked-interactive-demo.gif" alt="wicked-interactive in action: describe a launch page in chat, watch it build live, point at text to change it, remove a block, ask to make it premium, and rewind any version — all in the browser" width="100%">
+</p>
+
 ---
 
 ## Stuff you'd normally dread making
