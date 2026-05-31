@@ -6,74 +6,67 @@
    \_/\_/ |_|\___|_|\_\___|\__,_|     |_|_| |_|\__\___|_|  \__,_|\___|\__|_| \_/ \___|
 ```
 
-# wicked-interactive
+## It's 11pm. The deck's due tomorrow. You haven't opened PowerPoint.
 
-### The deck's due Monday. Just tell it what you need.
+Good news: you don't have to. Just tell it what you need — out loud, like you'd tell a coworker — and watch it build the thing in your browser. The board deck. The launch one-pager. The sales page. A narrated demo video of your product. Then point at anything you don't like and say what to fix.
 
-You know how Replit lets you build an app by *talking* to it? This is that — for the
-board deck, the launch one-pager, the sales landing page, the walkthrough video of your
-product. **Describe it, watch it build in your browser, then point at anything and say
-what to change.** No code. No design tickets. No "let me loop in the team."
+No code. No design tickets. No "let me loop in the team." Just you, describing what's in your head, watching it appear.
 
 ```
 Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · video)
 ```
 
-If you can describe it, you can build it. It runs on your Claude Code plan.
+If you can say it, you can make it.
 
 ---
 
-## Make basically anything you'd have to ship
+## Stuff you'd normally dread making
 
-- 📊 **Decks** — board updates, pitch decks, QBRs. Themed, on-brand, export-ready.
-- 📄 **Docs & one-pagers** — reports, briefs, proposals, FAQs.
-- 📣 **Marketing** — landing pages, launch announcements, sales pages, anything web.
-- 🎬 **Demo videos** — point it at your running app, say what to show, get a narrated walkthrough with clickable chapter thumbnails.
+- 📊 **Decks** — board updates, pitch decks, QBRs. On-brand and export-ready, not a sad bulleted list.
+- 📄 **Docs & one-pagers** — reports, briefs, proposals, the FAQ nobody wants to write.
+- 📣 **Marketing** — landing pages, launch posts, sales pages, anything that lives on the web.
+- 🎬 **Demo videos** — point it at your live app, say what to show, get a narrated walkthrough with clickable chapter thumbnails.
 
-It's all interactive HTML under the hood — built, refined, and exported entirely in your browser.
+Under the hood it's all real, interactive HTML — built, polished, and exported without you ever leaving the browser.
 
 ## Try it in 30 seconds
+
+Talk to it like this:
 
 > *"Build me a deck about our Q3 results from scratch."*
 > *"Make a landing page for the new pricing tier."*
 > *"Record a walkthrough of my app showing sign-up and the dashboard."*
 > *"Make this headline punchier — and that number's $4.2M, not $4M."*
-> *"Make the whole thing feel premium."*
+> *"Honestly? Make the whole thing feel more expensive."*
 
-Say what you want → it builds a first draft. Click any block → say what to change → watch it
-happen, live. Every version saves itself, so you can rewind to any draft or **fork** and chase
-two ideas at once. When it's ready, export clean HTML or PDF — or download your video. Done.
+It hands you a first draft. You click a thing, say what's wrong, and watch it fix itself — live, while you're looking at it. Every version quietly saves, so you can rewind to that one you liked three changes ago — or **fork** it and chase two ideas at once without losing either. When it looks right, export clean HTML or PDF, or grab the video. Done. Go to bed.
 
-## Why it sticks
+## Why people get hooked
 
-- 🪄 **Build by describing.** Start from a topic, get a real first draft — decks, docs, pages, videos.
-- 🖱️ **Refine by pointing.** Highlight anything, say what you want in plain words.
-- 📎 **Bring your own facts.** Attach files and folders; it reads them so your real numbers show up.
-- 🎬 **Turn your app into a video.** Narrated walkthrough with YouTube-style chapter thumbnails — re-record just by asking.
-- ⏪ **You can't lose work.** Every change is a new saved version. Rewind anytime.
-- 🍴 **Try both directions.** Fork from any version and keep them side by side.
-- 📤 **Send it anywhere.** Self-contained HTML, PDF, or video — nothing for them to install.
-- 🙅 **Never see a terminal.** Once it's running, it's all browser.
+- 🪄 **Just start talking.** Give it a topic, get a real first draft back. No blank page, ever.
+- 🖱️ **Fix it by pointing.** See something off? Highlight it, say what you want in plain English, done.
+- 📎 **It uses your actual numbers.** Drop in your files and folders; it reads them so the real figures show up — no copy-paste.
+- 🎬 **Your app becomes a video.** Narrated walkthrough with YouTube-style chapters. Want a different take? Just ask again.
+- ⏪ **You literally cannot lose work.** Every change is a saved version. Rewind to any of them, anytime.
+- 🍴 **Can't decide? Don't.** Fork any version and keep both, side by side.
+- 📤 **Send it to anyone.** One self-contained file — HTML, PDF, or video. Nothing for them to download or figure out.
+- 🙅 **No scary black terminal.** Once it's going, it all happens in your browser.
 
 ## Get it running
 
-You'll need [Claude Code](https://claude.com/claude-code). Then:
+First, a one-time bit of setup. You'll need [Claude Code](https://claude.com/claude-code) — install it, then paste these two lines where it asks:
 
 ```
 /plugin marketplace add mikeparcewski/wicked-interactive
 /plugin install wicked-interactive
 ```
 
-Now just say:
+And from then on, the only thing you ever type is:
 
 > **"start wicked-interactive"**
 
-That's it. The first time, it quietly sets up a few helper tools it needs — you'll see exactly
-what it's installing, nothing sneaky — then your browser pops open and you're off. Prefer to
-install the helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.
+That's genuinely it. The first time, it sets up a few helper tools behind the scenes — it'll show you exactly what it's installing, nothing sneaky — then your browser pops open and you're off. (Rather install the helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.)
 
 ---
 
-MIT licensed — see [LICENSE](LICENSE). Built on [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie),
-[wicked-garden](https://github.com/mikeparcewski/wicked-garden), and
-[wicked-brain](https://github.com/mikeparcewski/wicked-brain).
+MIT licensed — see [LICENSE](LICENSE). Built on [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain).
