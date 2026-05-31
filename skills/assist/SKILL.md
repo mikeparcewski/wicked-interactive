@@ -24,7 +24,7 @@ architecture assumes is present. There is no second embedded model; do not add o
 
 Run this as a continuous loop until the user stops the session.
 
-## The four things you fulfill
+## The five things you fulfill
 
 1. **Structural-change requests** — the service writes `requests/_v{n}.request.json`; you
    edit each fragment and write `requests/_v{n}.response.json`.
@@ -36,6 +36,9 @@ Run this as a continuous loop until the user stops the session.
 4. **Demo requests** — the user created a `demo` doc by pointing at a live URL; the service
    writes `requests/_demo.request.json` and seeds a placeholder. You explore the app, author
    `demo.spec.mjs`, and trigger the service to record it (Step 8, ADR-0018).
+5. **Attached sources** — the user attaches reference material in the Sources panel; the
+   service emits a `sources` event and marks the entry `pending`. You index it into a
+   wicked-brain knowledge base, narrating progress to the browser (Step 9, ADR-0017).
 
 ## Step 1 — Watch the event stream
 
@@ -54,6 +57,7 @@ Each line is `HH:MM:SS <doc> <event> <json>`. The events you act on:
 | `message` (role `user`)                    | the user typed in chat                 | reply / make the change (Step 4) |
 | `generation`                               | a new "from my content" doc to build   | build the first draft (Step 5) |
 | `demo`                                     | a new live-URL demo doc to learn       | author the spec + record (Step 8) |
+| `sources`                                  | reference material attached (`pending`) | index it into a brain, live (Step 9) |
 | `status`, `html-updated`, `error`          | informational                          | none (the UI handles these) |
 
 Per-doc workspaces live under the docs root at `<DOCS>/<doc>/`. The request/response
@@ -342,6 +346,9 @@ Rules that keep the recording deterministic and safe:
 - **Wrap every meaningful action in `step(label, fn)`** — each becomes a timed, anchored
   entry in the storyboard, so the user can highlight "step 2" and ask for a change. A failure
   also points at the exact step.
+- **Always narrate — every demo gets captions.** This is the default, not an extra: a demo
+  without narration is incomplete. Caption the meaningful beats so a viewer who can't see your
+  cursor still follows along.
 - **Narrate the action, not the data.** The on-screen caption comes from the step's `say` (3rd
   arg) — and **only** then; the terse `label` drives the storyboard chapter list and never
   appears on-screen. A demo teaches **what you can do**, so narrate the user's intent and the
@@ -384,7 +391,38 @@ demo, "make the change" means **edit `demo.spec.mjs`** (adjust the step, add/rem
 and call `POST …/api/demo/record` again — same spec ⇒ same click-path ⇒ a new version.
 Deterministic replay, just like every other version.
 
-## Step 9 — Loop
+## Step 9 — Index attached reference sources (ADR-0017)
+
+When a user attaches reference material in the Sources panel, the service emits a `sources`
+event and marks the entry `pending`. Indexing it into a wicked-brain knowledge base — **with
+live progress narrated to the browser chat** — is a standing part of the loop, not an ad-hoc
+favor. The substrate supports all of it.
+
+1. **Pick up the work.** New attachments arrive as a `sources` event on the tail; on session
+   start, also reconcile `GET <BASE>/d/<doc>/api/sources` for any `pending` entries left while
+   the tail was down.
+2. **Flip to `indexing`.** `POST <BASE>/d/<doc>/api/sources/status {path, status:"indexing"}`.
+3. **Stream progress** with `POST <BASE>/d/<doc>/api/status {state:"working", message:…}` (the
+   agent→user lane — renders as "Assistant", logs `role:agent`). Post at each milestone:
+   kickoff → scope decision → ingesting → done. Use `"working"` (a non-lock state) so the doc
+   isn't covered by the processing overlay; use `"complete"` on the final message.
+4. **Check coverage AND freshness before ingesting.** Query the target brain first — presence
+   is not enough, **already-indexed ≠ current**. Compare the brain's last index time against the
+   source's real state (`git log -1` for a repo, file mtimes otherwise); if it moved since,
+   **re-ingest** (the batch script archives stale chunks by `safeName`, so a refresh doesn't
+   duplicate). Only skip when the index genuinely reflects current content, and say which check
+   let you skip.
+5. **Scope sanely.** Skip `node_modules`, build artifacts (`.pyc`/`.map`), binaries, and
+   vendored deps; index the high-signal surface (docs, READMEs, source). Name the scope decision
+   in chat so the user can widen it.
+6. **Land it.** `POST <BASE>/d/<doc>/api/sources/status {path, status:"indexed"}` (or
+   `"error"`), with a final `complete` status message. Then draw on that brain (query with
+   `--brain` if it's a different project's brain) when generating or updating the doc.
+
+Brain choice: index into the source's natural project brain when one exists (keeps each
+project's brain clean); otherwise this doc's project brain.
+
+## Step 10 — Loop
 
 Return to watching. Keep going until the user says to stop. The session staying alive IS
 the product guarantee — `serve` + `assist` together are why a non-technical user can click

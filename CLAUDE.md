@@ -5,57 +5,23 @@ non-technical business users. Inline `(ADR-00NN)` tags throughout the code mark
 the load-bearing decisions; this file is the operating manual for the
 supervising agent.
 
-## The local service — I own its lifecycle
+## Working on this plugin locally
 
-The model-free service (ADR-0010) is the running substrate: I am its supervising
-agent, so **I am responsible for starting it and stopping it**.
+**Runtime behavior lives in the skills, not here.** How the supervising agent starts the
+service, runs the in-browser loop, indexes attached sources, and records demos is defined
+entirely by the shipped skills — `skills/serve/SKILL.md` and `skills/assist/SKILL.md`. That's
+what an installed user actually gets (this `CLAUDE.md` never loads for them). **Change agent
+behavior in the skills; this file is only dev guidance for working on the repo.**
 
-- **Start it** when work needs it live (testing a feature, hot-swapping a draft,
-  responding to in-browser feedback). Canonical command:
-  `node bin/wicked-interactive.js serve --root /tmp/wi-docs --port 4400 --watch`
-  (run in the background). Docs persist on disk under `--root`, so a restart is
-  non-destructive — the browser just needs a refresh.
-- **Restart it after editing `src/service/**` or rebuilding `frontend/dist`** —
-  the running process serves the old backend + the old static bundle until
-  restarted. A 404 on a route I just added almost always means a stale process.
-  Verify a restart with a quick `curl` of the changed route before reporting done.
-- **Stop it in session cleanup** — kill the `serve` process (and the `wi-watch`
-  tail if I started one) at the end of the session so I don't leave an orphaned
-  service bound to the port. Leave the wicked-brain servers alone.
+When developing/testing locally I run the service myself:
 
-## Source indexing — always with live progress
-
-When a user attaches reference material (the Sources panel → `sources` SSE event,
-ADR-0017), I index it and **narrate every step back to the browser chat** so the
-user watches it happen. This is a standing feature, not an ad-hoc favor.
-
-The protocol (the substrate already supports all of it):
-
-1. **Pick up the work.** New attachments push to me on the `wi-watch` tail; on
-   session start, also reconcile `GET /d/<doc>/api/sources` for any `pending`
-   entries left while the tail was down.
-2. **Flip to `indexing`.** `POST /d/<doc>/api/sources/status {path,status:"indexing"}`.
-3. **Stream progress** via `POST /d/<doc>/api/status {state:"working",message:…}` —
-   this is the agent→user lane (renders as "Assistant", logs `role:agent`). Post at
-   each milestone: kickoff → scale/scope decision → ingesting → done. Use a non-lock
-   state like `"working"` so the doc isn't covered by the processing overlay; use
-   `"complete"` on the final message.
-4. **Check coverage AND freshness before ingesting.** Query the target brain first.
-   Presence is not enough — **already-indexed ≠ current**. Before deciding to skip,
-   compare the brain's last index time against the source's real state (`git log -1`
-   for a repo, file mtimes otherwise). If the source moved since the index (new
-   commits, edited docs), **re-ingest** — the batch script archives stale chunks by
-   `safeName`, so a refresh doesn't duplicate. Only skip when the index genuinely
-   reflects current content, and say which check let you skip.
-5. **Scope sanely.** Skip `node_modules`, build artifacts (`.pyc`/`.map`), binaries,
-   and vendored deps; index the high-signal surface (docs, READMEs, source). Name the
-   scope decision in chat so the user can widen it.
-6. **Land it.** `POST …/api/sources/status {path,status:"indexed"}` (or `"error"`),
-   with a final `/api/status` `complete` message. Then draw on that brain (query with
-   `--brain` if it's a different project's brain) when generating/updating the doc.
-
-Brain choice: index into the source's natural project brain when one exists
-(keeps each project's brain clean); otherwise this doc's project brain.
+- **Start it:** `node bin/wicked-interactive.js serve --root /tmp/wi-docs --port 4400 --watch`
+  (in the background). Docs persist under `--root`, so a restart is non-destructive.
+- **Restart after editing `src/service/**` or rebuilding `frontend/dist`** — the running
+  process serves the old backend + old static bundle until restarted; a 404 on a route I just
+  added almost always means a stale process. Verify with a quick `curl` of the changed route.
+- **Stop it when done** — kill the `serve` process (and any `wi-watch` tail) so nothing is left
+  bound to the port. Leave the wicked-brain servers alone.
 
 ## wicked-brain
 

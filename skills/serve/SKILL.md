@@ -109,3 +109,11 @@ Tell the user, in the browser-facing chat is best, but the terminal is fine here
 Immediately invoke the **`assist`** skill, pointed at the same base URL. Do not consider
 `serve` complete until `assist` is running — without it the UPDATE button and chat hang
 forever. `assist` is what makes the agent-in-the-loop guarantee real.
+
+## Step 7 — Stop it when the user is done
+
+You started the service, so you own stopping it. When the user is finished (they say so, or
+the session is wrapping up), **kill the `serve` process** (and the `wi-watch` tail if you
+started one) so nothing is left bound to the port. Documents persist on disk under `--root`,
+so stopping is non-destructive — restarting `serve` later picks up right where they left off.
+Leave any sibling servers (wicked-brain, etc.) alone.
