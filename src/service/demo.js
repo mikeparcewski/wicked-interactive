@@ -213,9 +213,12 @@ export async function recordDemo(dir, opts = {}) {
     const page = await context.newPage();
 
     // On-screen narration: each step's label (or its `say` override) is burned into the
-    // recording as a caption banner, held for a readable beat so the viewer can take in the
-    // screen + the text before the action fires. Defaults on; tune globally with
-    // meta.captions / meta.captionHoldMs, or per step via the 3rd arg { say, holdMs }.
+    // recording as a caption banner, held for a readable beat so the viewer takes in the
+    // resulting view + the text. The caption is shown BEFORE the action (covers same-page
+    // steps) AND re-asserted AFTER it — a step that navigates (page.goto / waitForURL) wipes
+    // the injected node, so the post-action re-show is what guarantees it's visible on the
+    // settled view. Defaults on; tune with meta.captions / meta.captionHoldMs, or per step
+    // via the 3rd arg { say, holdMs }.
     const captionsOn = meta.captions !== false;
     const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? Math.max(0, meta.captionHoldMs) : 2500;
     const totalSteps = Array.isArray(meta.steps) ? meta.steps.length : 0;
@@ -230,16 +233,20 @@ export async function recordDemo(dir, opts = {}) {
       stepTimings.push(entry);
       opts.onStep?.({ index, label: String(label), at });
 
-      // Show the narration and pause so the viewer reads it against the current screen, THEN
-      // run the action (the caption stays up through it, until cleared for the thumbnail).
+      const text = sopts.say != null ? String(sopts.say) : String(label);
+      const hold = Number.isFinite(sopts.holdMs) ? Math.max(0, sopts.holdMs) : defaultHoldMs;
+
+      // Caption before the action — covers same-page steps where it stays put through fn.
+      if (captionsOn) await showCaption(page, { index, total: totalSteps, text });
+
+      if (typeof fn === "function") await fn();
+
+      // Re-assert after the action (fn may have navigated and wiped the node), then pause so
+      // the viewer reads it against the settled, resulting view.
       if (captionsOn) {
-        const text = sopts.say != null ? String(sopts.say) : String(label);
-        const hold = Number.isFinite(sopts.holdMs) ? Math.max(0, sopts.holdMs) : defaultHoldMs;
         await showCaption(page, { index, total: totalSteps, text });
         if (hold > 0) await page.waitForTimeout(hold);
       }
-
-      if (typeof fn === "function") await fn();
 
       // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action.
       // The seek target stays `at` (chapter start); the frame is the post-action state, which
