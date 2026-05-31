@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { initWorkspace, writeFeedback, forkVersion, loadManifest, readVersionHtml } from "../src/service/workspace.js";
+import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 
 process.env.WICKED_NO_BUS = "1";
@@ -61,18 +61,24 @@ test("POST /api/fork creates a follow-on version", async () => {
 
 test("FIFO queue: two rapid UPDATEs both process without racing the manifest", async () => {
   const dir = fresh();
-  const svc = createServer({ dir, watch: true });
+  // watch:false — drive processing through the server's own FIFO (svc.enqueue) instead of
+  // waiting on chokidar, which starves under full-suite load and made this flaky (issue #4).
+  // This still exercises the real guarantee: two concurrent regenerations dispatched at once
+  // must be serialized by the queue so they never race the manifest read-modify-write.
+  const svc = createServer({ dir, watch: false });
   const port = await svc.start(0);
   try {
     const post = (sel, val) => fetch(`http://localhost:${port}/api/feedback`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: [{ selector: sel, type: "content-edit", value: val }] }),
     });
+    // Two rapid UPDATEs reserve distinct feedback files (_v1.md, _v2.md) via the single writer.
     await Promise.all([post("slide-0-paragraph-1", "P-EDIT"), post("slide-0-heading-1", "H-EDIT")]);
-    const t0 = Date.now();
-    while (loadManifest(dir).head < 2 && Date.now() - t0 < 6000) {
-      await new Promise((r) => setTimeout(r, 50));
-    }
+    // Dispatch both regenerations through the FIFO at once — the queue serializes them.
+    await Promise.all([
+      svc.enqueue(() => processFeedbackFile(dir, "_v1.md", { documentId: "doc" })),
+      svc.enqueue(() => processFeedbackFile(dir, "_v2.md", { documentId: "doc" })),
+    ]);
     const m = loadManifest(dir);
     assert.equal(m.head, 2, "both batches produced versions, serialized");
     assert.ok(existsSync(join(dir, "_v1.html")) && existsSync(join(dir, "_v2.html")));

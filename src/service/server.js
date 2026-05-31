@@ -46,7 +46,8 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
   }
 
   // FIFO serialization (ADR-0007): process watcher events one at a time so concurrent
-  // regenerations never race on the manifest.
+  // regenerations never race on the manifest. Exposed on the returned object so callers
+  // (and tests) can drive processing through the same queue deterministically.
   let queue = Promise.resolve();
   const enqueue = (task) => { queue = queue.then(task).catch(() => {}); return queue; };
 
@@ -400,7 +401,7 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     sseClients.clear();
   }
 
-  return { app, start, stop, startWatching, emit, broadcast, get clients() { return sseClients.size; } };
+  return { app, start, stop, startWatching, enqueue, emit, broadcast, get clients() { return sseClients.size; } };
 }
 
 // ---------------------------------------------------------------------------
