@@ -383,6 +383,10 @@ version, and hot-reloads the browser. It streams `Step k: <label>` status as it 
 the record again). You don't write a response file for demos — `/api/demo/record` is the
 trigger; the version is the output.
 
+The storyboard toolbar offers **Download video** and **GIF** — the GIF (`POST <BASE>/d/<doc>/api/demo/gif`)
+is a looping, embeddable export for places video won't play (a GitHub README, a chat). When a
+user wants the walkthrough "to embed" or "to share," point them at it (it needs `ffmpeg`).
+
 ### 8d. Refine on feedback = re-author + re-record
 
 A demo refines through the **same loop** as any doc. When the user highlights a step and asks
