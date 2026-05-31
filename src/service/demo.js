@@ -212,47 +212,47 @@ export async function recordDemo(dir, opts = {}) {
     await context.tracing.start({ screenshots: true, snapshots: true });
     const page = await context.newPage();
 
-    // On-screen narration: each step's label (or its `say` override) is burned into the
-    // recording as a caption banner, held for a readable beat so the viewer takes in the
-    // resulting view + the text. The caption is shown BEFORE the action (covers same-page
-    // steps) AND re-asserted AFTER it — a step that navigates (page.goto / waitForURL) wipes
-    // the injected node, so the post-action re-show is what guarantees it's visible on the
-    // settled view. Defaults on; tune with meta.captions / meta.captionHoldMs, or per step
-    // via the 3rd arg { say, holdMs }.
+    // On-screen narration: the caption is the curated `say` — describe what's HAPPENING and
+    // why it matters, NOT the mechanical action. The step `label` drives the storyboard chapter
+    // list, not the overlay, so a terse label ("Open the scope") never becomes meaningless
+    // on-screen text. No `say` => no caption for that step (not every beat needs words). It's
+    // shown BEFORE the action (covers same-page steps) AND re-asserted AFTER it — a step that
+    // navigates (page.goto / waitForURL) wipes the injected node, so the post-action re-show is
+    // what guarantees it's visible on the settled view. meta.captions:false suppresses all;
+    // tune the read-pause with meta.captionHoldMs or per step via { say, holdMs }.
     const captionsOn = meta.captions !== false;
     const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? Math.max(0, meta.captionHoldMs) : 2500;
-    const totalSteps = Array.isArray(meta.steps) ? meta.steps.length : 0;
 
     // `step` annotates a labelled segment so the storyboard can show ordered, timed steps
     // and so a failure points at the exact step. The agent wraps each action in step().
     let index = 0;
     const step = async (label, fn, sopts = {}) => {
       index += 1;
-      const at = (Date.now() - startedAt) / 1000; // chapter start = when the caption appears
+      const at = (Date.now() - startedAt) / 1000; // chapter start
       const entry = { label: String(label), at };
       stepTimings.push(entry);
       opts.onStep?.({ index, label: String(label), at });
 
-      const text = sopts.say != null ? String(sopts.say) : String(label);
+      const say = sopts.say != null ? String(sopts.say).trim() : "";
+      const showCap = captionsOn && say.length > 0;
       const hold = Number.isFinite(sopts.holdMs) ? Math.max(0, sopts.holdMs) : defaultHoldMs;
 
-      // Caption before the action — covers same-page steps where it stays put through fn.
-      if (captionsOn) await showCaption(page, { index, total: totalSteps, text });
+      if (showCap) await showCaption(page, say);          // before the action (same-page steps)
 
       if (typeof fn === "function") await fn();
 
       // Re-assert after the action (fn may have navigated and wiped the node), then pause so
       // the viewer reads it against the settled, resulting view.
-      if (captionsOn) {
-        await showCaption(page, { index, total: totalSteps, text });
+      if (showCap) {
+        await showCaption(page, say);
         if (hold > 0) await page.waitForTimeout(hold);
       }
 
       // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action.
       // The seek target stays `at` (chapter start); the frame is the post-action state, which
-      // reads best as a thumbnail. Clear the caption first so the still is clean (the chapter
-      // list already shows the label). A thumbnail is nice-to-have — never fail over it.
-      if (captionsOn) await clearCaption(page);
+      // reads best as a thumbnail. Clear the caption first so the still is clean. A thumbnail
+      // is nice-to-have — never fail over it.
+      if (showCap) await clearCaption(page);
       const thumb = `_v${version}.step${String(index).padStart(2, "0")}.png`;
       try {
         await page.screenshot({ path: join(recDir, thumb) });
@@ -305,48 +305,35 @@ export async function recordDemo(dir, opts = {}) {
 }
 
 // --- Narration captions -------------------------------------------------------------------
-// Injected into the live page so they're captured by recordVideo and burned into the .webm.
-// pointer-events:none keeps clicks passing through; a fixed max z-index keeps it above app UI;
-// the gradient/scrim keeps text legible over any background without hiding the screen. The
-// node is wiped by navigation — that's fine, it's re-created on the next step. Best-effort:
-// a mid-navigation page may reject evaluate(), so a failed caption never fails the recording.
+// A full-width lower-third BAR injected into the live page so it's captured by recordVideo and
+// burned into the .webm. A bold blue bar (not a subtle pill) so the narration stands out over
+// any page rather than blending in. pointer-events:none keeps clicks passing through; a fixed
+// max z-index keeps it above app UI. The node is wiped by navigation — that's fine, it's
+// re-created on the next showCaption(). Best-effort: a mid-navigation page may reject
+// evaluate(), so a failed caption never fails the recording.
 const CAPTION_ID = "__wi_caption__";
 
-async function showCaption(page, { index, total, text }) {
+async function showCaption(page, text) {
   try {
-    await page.evaluate(({ id, index, total, text }) => {
-      let wrap = document.getElementById(id);
-      if (!wrap) {
-        wrap = document.createElement("div");
-        wrap.id = id;
-        wrap.setAttribute("aria-hidden", "true");
-        wrap.style.cssText =
-          "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;" +
-          "justify-content:center;padding:0 24px 30px;pointer-events:none;opacity:0;" +
-          "transition:opacity .3s ease;font-family:-apple-system,BlinkMacSystemFont," +
-          "'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
-        const box = document.createElement("div");
-        box.style.cssText =
-          "max-width:82%;display:flex;align-items:center;gap:12px;padding:14px 20px;" +
-          "border-radius:14px;background:rgba(10,14,26,.86);box-shadow:0 8px 30px rgba(0,0,0,.45);";
-        const num = document.createElement("span");
-        num.id = id + "_num";
-        num.style.cssText =
-          "flex:none;display:inline-flex;align-items:center;justify-content:center;" +
-          "min-width:26px;height:26px;padding:0 8px;border-radius:13px;background:#22d3ee;" +
-          "color:#06222a;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;";
-        const txt = document.createElement("span");
-        txt.id = id + "_txt";
-        txt.style.cssText =
-          "color:#fff;font-size:20px;font-weight:600;line-height:1.35;text-shadow:0 1px 2px rgba(0,0,0,.5);";
-        box.appendChild(num); box.appendChild(txt);
-        wrap.appendChild(box);
-        (document.body || document.documentElement).appendChild(wrap);
+    await page.evaluate(({ id, text }) => {
+      let bar = document.getElementById(id);
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.id = id;
+        bar.setAttribute("aria-hidden", "true");
+        bar.style.cssText =
+          "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;" +
+          "padding:20px 40px;box-sizing:border-box;text-align:center;pointer-events:none;" +
+          "background:linear-gradient(90deg,#1e40af 0%,#2563eb 50%,#1e40af 100%);" +
+          "color:#fff;font:600 23px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
+          "letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.35);" +
+          "box-shadow:0 -8px 30px rgba(37,99,235,.45);border-top:2px solid rgba(255,255,255,.35);" +
+          "opacity:0;transform:translateY(8px);transition:opacity .28s ease,transform .28s ease;";
+        (document.body || document.documentElement).appendChild(bar);
       }
-      document.getElementById(id + "_num").textContent = total > 0 ? index + "/" + total : String(index);
-      document.getElementById(id + "_txt").textContent = text;
-      requestAnimationFrame(() => { wrap.style.opacity = "1"; });
-    }, { id: CAPTION_ID, index, total, text });
+      bar.textContent = text;
+      requestAnimationFrame(() => { bar.style.opacity = "1"; bar.style.transform = "translateY(0)"; });
+    }, { id: CAPTION_ID, text });
   } catch { /* page navigating / no document yet — skip the caption for this beat */ }
 }
 

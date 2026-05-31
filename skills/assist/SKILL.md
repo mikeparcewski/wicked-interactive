@@ -311,9 +311,9 @@ export const meta = {
   url: "https://staging.example.com/app",
   title: "Checkout demo",
   steps: ["Sign in", "Add Pro plan", "Checkout"],   // labels, for reference
-  // Narration (optional): captions are ON by default. Tune the read-time, or turn off.
-  captionHoldMs: 2500,   // pause per step so the viewer reads the caption (default 2500)
-  // captions: false,    // disable on-screen narration entirely
+  // Narration: a step shows an on-screen caption only if you give it `say` (below).
+  captionHoldMs: 2500,   // how long each caption holds so it can be read (default 2500ms)
+  // captions: false,    // hard-disable all on-screen narration
 };
 
 export async function run({ page, step, meta }) {
@@ -328,11 +328,12 @@ export async function run({ page, step, meta }) {
     await page.click("text=Pro");
     await page.click("text=Add to cart");
   });
-  // 3rd arg overrides narration: `say` = caption text (instead of the label), `holdMs` = pause.
+  // `say` = the on-screen narration for this step (omit it and the step shows no caption);
+  // `holdMs` = how long it holds. Describe the outcome, not the click.
   await step("Checkout", async () => {
     await page.click("text=Checkout");
     await page.waitForSelector("text=Order confirmed");
-  }, { say: "Confirming the order — and we're done", holdMs: 3500 });
+  }, { say: "One click and the order's placed — no forms, no waiting.", holdMs: 3500 });
 }
 ```
 
@@ -341,11 +342,15 @@ Rules that keep the recording deterministic and safe:
 - **Wrap every meaningful action in `step(label, fn)`** — each becomes a timed, anchored
   entry in the storyboard, so the user can highlight "step 2" and ask for a change. A failure
   also points at the exact step.
-- **The label is the narration.** The service burns each step's label (or its `say` override)
-  into the recording as a caption banner and pauses `captionHoldMs` so the viewer reads it
-  against the screen before the action fires — so write labels as short spoken-style narration
-  ("Now we open the dashboard"), not terse internal names ("nav"). Captions never cover the
-  action (bottom-centered, click-through); the post-action thumbnail is captured caption-free.
+- **Narrate with `say`, not the label.** The on-screen caption comes from the step's `say`
+  (3rd arg) — and **only** then. The `label` drives the storyboard chapter list, so keep it
+  terse; it never becomes on-screen text. Write `say` to describe **what's happening and why it
+  matters to the viewer** — the outcome/insight, not the mechanical action. Bad: "Open the
+  rationalization scope" (means nothing to most). Good: "Two apps overlap 51% — should we merge
+  them?". **Not every step needs a caption** — omit `say` on connective/navigation beats so the
+  narration stays meaningful, not noisy. The caption renders as a full-width blue bar pinned to
+  the bottom (stands out, click-through), re-asserted on the settled view and held
+  `captionHoldMs` so it survives navigation; the thumbnail is captured caption-free.
 - **Prefer stable selectors** (roles, text, `data-*`) over brittle nth-child paths, so a
   re-record replays cleanly.
 - **Never write credentials into the spec or any version artifact.** Use a public or
