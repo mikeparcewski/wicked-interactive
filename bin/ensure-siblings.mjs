@@ -5,8 +5,8 @@
 // install command — transparently: every command is printed before it runs, so the user
 // always sees exactly what's happening on their machine. Nothing is installed silently.
 //
-//   node tools/ensure-siblings.mjs           # auto-install anything missing
-//   node tools/ensure-siblings.mjs --check   # report only, install nothing
+//   node bin/ensure-siblings.mjs           # auto-install anything missing
+//   node bin/ensure-siblings.mjs --check   # report only, install nothing
 //   WI_NO_AUTOINSTALL=1 node …               # same as --check (opt out of auto-install)
 //
 // Cross-platform: spawnSync(..., { shell:true }) resolves `claude`/`npx` via PATH on

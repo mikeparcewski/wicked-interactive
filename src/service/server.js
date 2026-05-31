@@ -418,7 +418,7 @@ export function createMultiServer({ root, frontendDir, llm } = {}) {
     for (const res of topClients) res.write(frame);
   }
   // SSE heartbeat — a comment frame every 15s so half-open sockets surface as errors
-  // promptly and downstream watchdogs (tools/wi-watch.mjs has STALL_MS=180s) stay green
+  // promptly and downstream watchdogs (bin/wi-watch.mjs has STALL_MS=180s) stay green
   // even if several pings are lost. SSE comments start with `:` and are ignored by EventSource.
   //
   // We also `setNoDelay(true)` on the socket so the kernel doesn't buffer the (small)

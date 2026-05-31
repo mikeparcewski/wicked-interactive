@@ -8,9 +8,6 @@ node_modules/
 frontend/.vite/
 .DS_Store
 
-# wicked-vault derived query cache (source of truth is entries/ + payloads/)
-.wicked-vault/index.sqlite
-
 # Local AI-tooling chat logs — never part of the shipped plugin
 .aider*
 

@@ -29,7 +29,7 @@ script, which installs **only what's missing** and prints every command before i
 (transparency — nothing installed silently):
 
 ```bash
-node tools/ensure-siblings.mjs
+node bin/ensure-siblings.mjs
 ```
 
 Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the

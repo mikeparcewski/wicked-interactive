@@ -43,7 +43,7 @@ Tail the cross-doc multiplexer with the Monitor tool so every per-doc event arri
 line. `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`).
 
 ```bash
-node tools/wi-watch.mjs --base <BASE>
+node bin/wi-watch.mjs --base <BASE>
 ```
 
 Each line is `HH:MM:SS <doc> <event> <json>`. The events you act on:

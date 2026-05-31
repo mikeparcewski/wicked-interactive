@@ -33,9 +33,9 @@ function parseArgs(argv) {
   return args;
 }
 
-/** Spawn tools/wi-watch.mjs as a child and pipe its lines into the parent's stdout. */
+/** Spawn wi-watch.mjs (sibling in bin/) as a child and pipe its lines into the parent's stdout. */
 function spawnWatcher(base) {
-  const script = resolve(HERE, "..", "tools", "wi-watch.mjs");
+  const script = resolve(HERE, "wi-watch.mjs");
   const child = spawn(process.execPath, [script, "--base", base], { stdio: ["ignore", "inherit", "inherit"] });
   child.on("exit", (code, sig) => console.log(`[watch] exited (code=${code} sig=${sig})`));
   return child;

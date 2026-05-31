@@ -1,8 +1,9 @@
 # wicked-interactive
 
 Interactive HTML & Presentation Builder with an in-browser feedback loop for
-non-technical business users. See `docs/requirements.md` (approved ACs) and
-`docs/adr/` (17 architecture decisions).
+non-technical business users. Inline `(ADR-00NN)` tags throughout the code mark
+the load-bearing decisions; this file is the operating manual for the
+supervising agent.
 
 ## The local service — I own its lifecycle
 
