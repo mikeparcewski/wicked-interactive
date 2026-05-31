@@ -12,7 +12,7 @@ import { busEmit, EVENTS } from "./bus.js";
 import { initWorkspace, writeFeedback, processFeedbackFile, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { applyStructuralResponse, REQUESTS_DIR } from "./structural.js";
 import { writeGenerationRequest, applyGeneratedDraft, generationPlaceholder, GEN_RESPONSE } from "./generation.js";
-import { demoPlaceholder, writeDemoRequest, recordDemo, RECORDINGS_DIR } from "./demo.js";
+import { demoPlaceholder, writeDemoRequest, recordDemo, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { preflight } from "./preflight.js";
 
@@ -159,8 +159,24 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     res.json({ ok: true, recording: true });
   });
 
-  // Stream a recorded demo video. Path-locked to the slug charset (same guard as the
-  // export download) so it can't path-traverse out of recordings/.
+  // Convert a recorded version's webm -> animated GIF (embeddable where video isn't, e.g. a
+  // GitHub README). Lazy + cached; ffmpeg is an optional system dep, so a missing binary comes
+  // back as a 400 with an install hint rather than a crash. Synchronous like /api/export.
+  app.post("/api/demo/gif", (req, res) => {
+    const version = Number(req.body?.version);
+    if (!Number.isInteger(version)) return res.status(400).json({ error: "version (number) required" });
+    try {
+      const { path, bytes, cached } = exportGif(dir, version);
+      const name = basename(path);
+      const download = `${req.baseUrl || ""}/api/demo/recording/${encodeURIComponent(name)}`;
+      res.json({ ok: true, file: name, bytes, cached, download });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Stream a recorded demo video / thumbnail / GIF. Path-locked to the slug charset (same
+  // guard as the export download) so it can't path-traverse out of recordings/.
   app.get("/api/demo/recording/:name", (req, res) => {
     const name = req.params.name;
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
@@ -168,6 +184,7 @@ export function createServer({ dir, documentId = "doc", watch = true, frontendDi
     if (!existsSync(filePath)) return res.status(404).send("not found");
     const lower = name.toLowerCase();
     const type = lower.endsWith(".webm") ? "video/webm"
+      : lower.endsWith(".gif") ? "image/gif"
       : lower.endsWith(".png") ? "image/png"
       : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
       : "application/octet-stream";

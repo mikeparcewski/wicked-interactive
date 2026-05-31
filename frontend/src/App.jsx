@@ -10,7 +10,7 @@ import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, postDemoRecord, getPreflight, getSources, addSources } from "./lib/api.js";
+import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, postDemoRecord, postDemoGif, getPreflight, getSources, addSources } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -330,6 +330,23 @@ export default function App() {
     catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
+  const [gifBusy, setGifBusy] = useState(false);
+  async function downloadGif() {
+    if (viewing == null) return;
+    setGifBusy(true);
+    setStatus({ kind: "ok", text: `Building GIF of v${viewing}…` });
+    try {
+      const { download, file, bytes } = await postDemoGif(viewing);
+      if (download) triggerDownload(download, `${currentDoc}-v${viewing}.gif`);
+      const mb = bytes ? ` (${(bytes / 1048576).toFixed(1)} MB)` : "";
+      setStatus({ kind: "ok", text: `Downloaded ${file}${mb}` });
+    } catch (e) {
+      setStatus({ kind: "error", text: e.message });
+    } finally {
+      setGifBusy(false);
+    }
+  }
+
   return (
     <div className={`wi-shell ${!chatOpen ? "wi-shell--chat-collapsed" : ""}`}>
       <header className="wi-toolbar">
@@ -376,7 +393,18 @@ export default function App() {
               </span>
               Download video
             </a>
-          ) : (
+          ) : null}
+          {currentIsDemo && (
+            <button
+              className="wi-btn wi-btn--ghost"
+              disabled={viewing == null || gifBusy}
+              onClick={downloadGif}
+              title="Convert the walkthrough to an animated GIF you can embed (e.g. in a GitHub README)"
+            >
+              {gifBusy ? "Building GIF…" : "GIF"}
+            </button>
+          )}
+          {!currentIsDemo && (
             <div className="wi-export" role="group" aria-label="Export">
               <span className="wi-export__icon" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

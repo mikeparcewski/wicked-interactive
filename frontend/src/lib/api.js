@@ -90,3 +90,7 @@ export async function createDoc(name, html, meta = {}) {
 // Trigger a (re-)record of a demo's authored spec (ADR-0018). The service executes
 // demo.spec.mjs with Playwright and lands the storyboard as a new version. Doc-scoped.
 export const postDemoRecord = () => jpost("/api/demo/record", {});
+
+// Convert a recorded version's video to an embeddable animated GIF (cached server-side).
+// Returns { download, file, bytes } — the caller fetches `download` to save it.
+export const postDemoGif = (version) => jpost("/api/demo/gif", { version });

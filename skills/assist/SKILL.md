@@ -311,6 +311,9 @@ export const meta = {
   url: "https://staging.example.com/app",
   title: "Checkout demo",
   steps: ["Sign in", "Add Pro plan", "Checkout"],   // labels, for reference
+  // Narration (optional): captions are ON by default. Tune the read-time, or turn off.
+  captionHoldMs: 2500,   // pause per step so the viewer reads the caption (default 2500)
+  // captions: false,    // disable on-screen narration entirely
 };
 
 export async function run({ page, step, meta }) {
@@ -325,10 +328,11 @@ export async function run({ page, step, meta }) {
     await page.click("text=Pro");
     await page.click("text=Add to cart");
   });
+  // 3rd arg overrides narration: `say` = caption text (instead of the label), `holdMs` = pause.
   await step("Checkout", async () => {
     await page.click("text=Checkout");
     await page.waitForSelector("text=Order confirmed");
-  });
+  }, { say: "Confirming the order — and we're done", holdMs: 3500 });
 }
 ```
 
@@ -337,6 +341,11 @@ Rules that keep the recording deterministic and safe:
 - **Wrap every meaningful action in `step(label, fn)`** — each becomes a timed, anchored
   entry in the storyboard, so the user can highlight "step 2" and ask for a change. A failure
   also points at the exact step.
+- **The label is the narration.** The service burns each step's label (or its `say` override)
+  into the recording as a caption banner and pauses `captionHoldMs` so the viewer reads it
+  against the screen before the action fires — so write labels as short spoken-style narration
+  ("Now we open the dashboard"), not terse internal names ("nav"). Captions never cover the
+  action (bottom-centered, click-through); the post-action thumbnail is captured caption-free.
 - **Prefer stable selectors** (roles, text, `data-*`) over brittle nth-child paths, so a
   re-record replays cleanly.
 - **Never write credentials into the spec or any version artifact.** Use a public or

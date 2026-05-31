@@ -11,6 +11,7 @@
 //     artifact paths, versioning. It never decides WHAT to click — only runs the script.
 
 import { mkdirSync, readdirSync, renameSync, existsSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { instrument } from "../core/instrument.js";
@@ -211,19 +212,40 @@ export async function recordDemo(dir, opts = {}) {
     await context.tracing.start({ screenshots: true, snapshots: true });
     const page = await context.newPage();
 
+    // On-screen narration: each step's label (or its `say` override) is burned into the
+    // recording as a caption banner, held for a readable beat so the viewer can take in the
+    // screen + the text before the action fires. Defaults on; tune globally with
+    // meta.captions / meta.captionHoldMs, or per step via the 3rd arg { say, holdMs }.
+    const captionsOn = meta.captions !== false;
+    const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? Math.max(0, meta.captionHoldMs) : 2500;
+    const totalSteps = Array.isArray(meta.steps) ? meta.steps.length : 0;
+
     // `step` annotates a labelled segment so the storyboard can show ordered, timed steps
     // and so a failure points at the exact step. The agent wraps each action in step().
     let index = 0;
-    const step = async (label, fn) => {
+    const step = async (label, fn, sopts = {}) => {
       index += 1;
-      const at = (Date.now() - startedAt) / 1000;
+      const at = (Date.now() - startedAt) / 1000; // chapter start = when the caption appears
       const entry = { label: String(label), at };
       stepTimings.push(entry);
       opts.onStep?.({ index, label: String(label), at });
+
+      // Show the narration and pause so the viewer reads it against the current screen, THEN
+      // run the action (the caption stays up through it, until cleared for the thumbnail).
+      if (captionsOn) {
+        const text = sopts.say != null ? String(sopts.say) : String(label);
+        const hold = Number.isFinite(sopts.holdMs) ? Math.max(0, sopts.holdMs) : defaultHoldMs;
+        await showCaption(page, { index, total: totalSteps, text });
+        if (hold > 0) await page.waitForTimeout(hold);
+      }
+
       if (typeof fn === "function") await fn();
-      // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action
-      // + dwell. The seek target stays `at` (chapter start); the frame is the post-action
-      // state, which reads best as a thumbnail. A thumbnail is nice-to-have — never fail over it.
+
+      // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action.
+      // The seek target stays `at` (chapter start); the frame is the post-action state, which
+      // reads best as a thumbnail. Clear the caption first so the still is clean (the chapter
+      // list already shows the label). A thumbnail is nice-to-have — never fail over it.
+      if (captionsOn) await clearCaption(page);
       const thumb = `_v${version}.step${String(index).padStart(2, "0")}.png`;
       try {
         await page.screenshot({ path: join(recDir, thumb) });
@@ -273,6 +295,111 @@ export async function recordDemo(dir, opts = {}) {
   });
 
   return { version, parent, video: videoFile, steps: stepTimings };
+}
+
+// --- Narration captions -------------------------------------------------------------------
+// Injected into the live page so they're captured by recordVideo and burned into the .webm.
+// pointer-events:none keeps clicks passing through; a fixed max z-index keeps it above app UI;
+// the gradient/scrim keeps text legible over any background without hiding the screen. The
+// node is wiped by navigation — that's fine, it's re-created on the next step. Best-effort:
+// a mid-navigation page may reject evaluate(), so a failed caption never fails the recording.
+const CAPTION_ID = "__wi_caption__";
+
+async function showCaption(page, { index, total, text }) {
+  try {
+    await page.evaluate(({ id, index, total, text }) => {
+      let wrap = document.getElementById(id);
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.id = id;
+        wrap.setAttribute("aria-hidden", "true");
+        wrap.style.cssText =
+          "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;" +
+          "justify-content:center;padding:0 24px 30px;pointer-events:none;opacity:0;" +
+          "transition:opacity .3s ease;font-family:-apple-system,BlinkMacSystemFont," +
+          "'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
+        const box = document.createElement("div");
+        box.style.cssText =
+          "max-width:82%;display:flex;align-items:center;gap:12px;padding:14px 20px;" +
+          "border-radius:14px;background:rgba(10,14,26,.86);box-shadow:0 8px 30px rgba(0,0,0,.45);";
+        const num = document.createElement("span");
+        num.id = id + "_num";
+        num.style.cssText =
+          "flex:none;display:inline-flex;align-items:center;justify-content:center;" +
+          "min-width:26px;height:26px;padding:0 8px;border-radius:13px;background:#22d3ee;" +
+          "color:#06222a;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;";
+        const txt = document.createElement("span");
+        txt.id = id + "_txt";
+        txt.style.cssText =
+          "color:#fff;font-size:20px;font-weight:600;line-height:1.35;text-shadow:0 1px 2px rgba(0,0,0,.5);";
+        box.appendChild(num); box.appendChild(txt);
+        wrap.appendChild(box);
+        (document.body || document.documentElement).appendChild(wrap);
+      }
+      document.getElementById(id + "_num").textContent = total > 0 ? index + "/" + total : String(index);
+      document.getElementById(id + "_txt").textContent = text;
+      requestAnimationFrame(() => { wrap.style.opacity = "1"; });
+    }, { id: CAPTION_ID, index, total, text });
+  } catch { /* page navigating / no document yet — skip the caption for this beat */ }
+}
+
+async function clearCaption(page) {
+  try {
+    await page.evaluate((id) => { const el = document.getElementById(id); if (el) el.remove(); }, CAPTION_ID);
+  } catch { /* nothing to clear */ }
+}
+
+// --- GIF export ---------------------------------------------------------------------------
+// A recorded demo's .webm is great for downloading but useless for embedding where it counts
+// (a GitHub README renders an animated GIF inline; it will not play a webm/mp4). So we offer a
+// webm -> looping GIF conversion. ffmpeg is the converter — a system dep, NOT bundled, so this
+// degrades gracefully: missing ffmpeg yields a clear install hint rather than a crash (mirrors
+// the Chrome-for-PDF gate in export.js). The injectable `encoder` keeps it unit-testable
+// without ffmpeg in CI.
+
+/** Locate an ffmpeg binary (env/arg override wins, then PATH, then common install dirs). */
+export function findFfmpeg(override) {
+  const candidates = [override, process.env.WI_FFMPEG, "ffmpeg",
+    "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"].filter(Boolean);
+  for (const c of candidates) {
+    try { if (spawnSync(c, ["-version"], { stdio: "ignore" }).status === 0) return c; }
+    catch { /* not this one */ }
+  }
+  return null;
+}
+
+/**
+ * Default encoder: ffmpeg webm -> high-quality looping GIF. Two-pass palette (palettegen +
+ * paletteuse) so colours don't band; GitHub-friendly defaults (10fps, 720px wide) keep the
+ * file small enough to embed. Blocks while encoding (spawnSync) — same tradeoff as PDF render.
+ */
+export function ffmpegGifEncoder(webmPath, gifPath, { ffmpegPath, fps = 10, width = 720 } = {}) {
+  const ffmpeg = findFfmpeg(ffmpegPath);
+  if (!ffmpeg) throw new Error("ffmpeg not found — install it (e.g. `brew install ffmpeg` / `apt install ffmpeg`) or set WI_FFMPEG to enable GIF export");
+  const filter =
+    `fps=${fps},scale=${width}:-1:flags=lanczos,split[s0][s1];` +
+    `[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3`;
+  const r = spawnSync(ffmpeg, ["-y", "-i", webmPath, "-vf", filter, "-loop", "0", gifPath], { timeout: 180000 });
+  if (r.status !== 0 || !existsSync(gifPath)) {
+    throw new Error(`ffmpeg GIF encode failed (status ${r.status}): ${String(r.stderr || "").slice(0, 300)}`);
+  }
+}
+
+/**
+ * Export a recorded version's webm -> animated GIF, cached next to the recording. Re-encodes
+ * only when the GIF is missing or older than its source webm (a re-record supersedes it).
+ * @returns {{ path: string, bytes: number, cached: boolean }}
+ */
+export function exportGif(dir, version, { encoder = ffmpegGifEncoder, ffmpegPath, fps, width } = {}) {
+  const recDir = join(dir, RECORDINGS_DIR);
+  const webmPath = join(recDir, `_v${version}.webm`);
+  if (!existsSync(webmPath)) throw new Error(`no recording for v${version} — record the demo first`);
+  const gifPath = join(recDir, `_v${version}.gif`);
+  if (existsSync(gifPath) && statSync(gifPath).mtimeMs >= statSync(webmPath).mtimeMs) {
+    return { path: gifPath, bytes: statSync(gifPath).size, cached: true };
+  }
+  encoder(webmPath, gifPath, { ffmpegPath, fps, width });
+  return { path: gifPath, bytes: statSync(gifPath).size, cached: false };
 }
 
 /** Newest .webm written into `dir` since `sinceMs` — fallback when page.video() path is unavailable. */
