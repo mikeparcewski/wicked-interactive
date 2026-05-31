@@ -17,3 +17,6 @@ frontend/.vite/
 # Secrets — guard against accidental commits
 .env
 .env.*
+
+# npm pack output (CI/local smoke)
+*.tgz

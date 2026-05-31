@@ -43,10 +43,13 @@ Run this as a continuous loop until the user stops the session.
 ## Step 1 — Watch the event stream
 
 Tail the cross-doc multiplexer with the Monitor tool so every per-doc event arrives as a
-line. `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`).
+line. `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`). Run the tail by
+absolute path — it's builtin-only (no deps), so it works straight from the plugin dir no
+matter the current directory:
 
 ```bash
-node bin/wi-watch.mjs --base <BASE>
+WI_HOME="${CLAUDE_PLUGIN_ROOT:-$PWD}"
+node "$WI_HOME/bin/wi-watch.mjs" --base <BASE>
 ```
 
 Each line is `HH:MM:SS <doc> <event> <json>`. The events you act on:

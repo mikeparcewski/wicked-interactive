@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs on every push/PR/tag. Proves the package is correct AND that it works on a machine
+  # that is NOT this repo: it packs the npm tarball, installs it into a throwaway consumer
+  # dir, and serves it via npx from there — exactly what an end user gets.
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'   # playwright is a dep; demos gate the browser separately
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Plugin version is consistent (and matches the tag, if tagged)
+        run: npm run check:version
+      - name: Cross-machine smoke — packaged tarball installs & serves from a foreign dir
+        run: |
+          set -euo pipefail
+          TGZ="$(npm pack | tail -1)"
+          echo "packed $TGZ"
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          npm init -y >/dev/null 2>&1
+          npm install "$GITHUB_WORKSPACE/$TGZ" >/dev/null
+          mkdir -p /tmp/wi-docs
+          npx --no-install wicked-interactive serve --root /tmp/wi-docs --port 4411 &
+          SVC=$!
+          up=
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null "http://127.0.0.1:4411/api/docs" && { up=1; break; }; sleep 1; done
+          [ -n "$up" ] || { echo "::error::service did not come up from the packaged install"; kill "$SVC" 2>/dev/null || true; exit 1; }
+          curl -fsS -o /dev/null -w "GET /api/docs   -> HTTP %{http_code}\n" "http://127.0.0.1:4411/api/docs"
+          curl -fsS -o /dev/null -w "GET / (built UI) -> HTTP %{http_code}\n" "http://127.0.0.1:4411/"
+          kill "$SVC" 2>/dev/null || true
+
+  # Publishes to npm on a vX.Y.Z tag using npm Trusted Publishing (OIDC) — no NPM_TOKEN secret,
+  # provenance attached automatically. Requires a one-time trusted-publisher config on the npm
+  # package (Settings -> Publishing access) naming this repo + this workflow file.
+  publish:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # OIDC token for npm trusted publishing + provenance
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Upgrade npm (trusted publishing needs >= 11.5.1)
+        run: npm install -g npm@latest
+      - run: npm ci
+      - name: Publish (trusted publishing — OIDC, no token)
+        run: npm publish

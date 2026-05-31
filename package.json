@@ -20,7 +20,9 @@
   ],
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
-    "acceptance": "npm run build --prefix frontend && node test/e2e.mjs"
+    "acceptance": "npm run build --prefix frontend && node test/e2e.mjs",
+    "check:version": "node .github/scripts/check-version.mjs",
+    "version": "node .github/scripts/sync-plugin-version.mjs && git add .claude-plugin/plugin.json .claude-plugin/marketplace.json"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
