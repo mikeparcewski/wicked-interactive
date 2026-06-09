@@ -21,9 +21,10 @@ export function docSrc(version) {
   return apiPath(version == null ? "/doc" : `/doc/${version}`);
 }
 
-/** Convenience for the SSE endpoint. */
+/** The SSE bridge is top-level (one bus stream for all docs, ADR-0019) — never doc-prefixed.
+ *  The frontend filters frames by payload.document_id. */
 export function eventsUrl() {
-  return apiPath("/events");
+  return "/api/events";
 }
 
 /** Navigate to a doc by name (sets ?doc=<name> and reloads). */
