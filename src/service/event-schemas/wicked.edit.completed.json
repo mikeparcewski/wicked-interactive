@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Structural edit completed",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "version",
+    "results"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "results": {
+      "type": "array",
+      "items": {}
+    }
+  },
+  "additionalProperties": true
+}

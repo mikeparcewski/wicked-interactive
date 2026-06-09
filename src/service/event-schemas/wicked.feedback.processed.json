@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Feedback processed",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "version",
+    "awaiting_structural"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "applied": {
+      "type": "array",
+      "items": {}
+    },
+    "rejected": {
+      "type": "array",
+      "items": {}
+    },
+    "stale": {
+      "type": "array",
+      "items": {}
+    },
+    "awaiting_structural": {
+      "type": "integer"
+    },
+    "structural_items": {
+      "type": "array",
+      "items": {}
+    }
+  },
+  "additionalProperties": true
+}

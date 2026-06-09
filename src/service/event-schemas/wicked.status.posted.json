@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent status posted",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "state"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "processing",
+        "working",
+        "asking",
+        "complete",
+        "error"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "question": {
+      "type": "string"
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

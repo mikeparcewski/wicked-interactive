@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Feedback submitted",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "version_target",
+    "items"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "version_target": {
+      "type": "integer"
+    },
+    "items": {
+      "type": "array",
+      "items": {}
+    },
+    "author": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}
