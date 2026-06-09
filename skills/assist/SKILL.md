@@ -1,11 +1,11 @@
 ---
 name: assist
 description: |
-  Be the supervising agent in the wicked-interactive feedback loop. Watch the service's
-  event stream and fulfill what the browser cannot do on its own: structural edits
-  (delegated via request/response files, ADR-0010) and conversational requests from the
-  assistant chat. Deterministic edits (exact-text, style, remove) already apply without
-  you; you handle everything that needs intelligence.
+  Be the supervising agent in the wicked-interactive feedback loop. Subscribe to the
+  wicked-bus control plane and fulfil what the browser cannot do on its own: structural
+  edits, first-draft generation, demo authoring, conversational requests, and source
+  indexing. Deterministic edits (exact-text, style, remove) are applied by the service the
+  moment the user submits them; you handle everything that needs intelligence.
 
   Use when: "assist the builder", "watch for edits", "be the agent in the loop",
   "fulfill structural edits", "respond to the chat", "the UPDATE button is spinning",
@@ -14,315 +14,269 @@ phase: loop
 pipeline_position: 2
 ---
 
-# assist — the agent in the loop
+# assist — the agent in the loop (bus edition)
 
-The service is **model-free infrastructure** (ADR-0010). It watches files, applies
-deterministic cheerio edits, serves versions, and pushes hot-reloads. Anything requiring
-judgment — rewriting a block, restyling a section, answering "make this more premium",
-brainstorming a blank doc into a deck — is **yours**. You are the intelligence the
+The service is **model-free infrastructure** (ADR-0010). It applies deterministic cheerio
+edits, serves versions, materializes state, and bridges the bus to the browser. Anything
+requiring judgment — rewriting a block, restyling a section, answering "make this more
+premium", brainstorming a blank doc into a deck — is **yours**. You are the intelligence the
 architecture assumes is present. There is no second embedded model; do not add one.
 
-Run this as a continuous loop until the user stops the session.
+**Everything flows over wicked-bus (ADR-0019).** You *subscribe* to learn what the user did and
+*emit* to make changes and narrate progress. One vocabulary, both directions — no request
+files, no HTTP endpoints, no bespoke tail. Run this as a continuous loop until the user stops.
 
-## The five things you fulfill
+## Step 0 — Set your bus identity
 
-1. **Structural-change requests** — the service writes `requests/_v{n}.request.json`; you
-   edit each fragment and write `requests/_v{n}.response.json`.
-2. **Chat messages** — the user types in the assistant panel; you reply and, when they ask
-   for a change, you make it.
-3. **Generation requests ("From my content")** — the user created a doc by pointing at files;
-   the service writes `requests/_gen.request.json` and seeds a placeholder. You read the
-   source, build the first draft, and write `requests/_gen.response.json` (Step 5).
-4. **Demo requests** — the user created a `demo` doc by pointing at a live URL; the service
-   writes `requests/_demo.request.json` and seeds a placeholder. You explore the app, author
-   `demo.spec.mjs`, and trigger the service to record it (Step 8, ADR-0018).
-5. **Attached sources** — the user attaches reference material in the Sources panel; the
-   service emits a `sources` event and marks the entry `pending`. You index it into a
-   wicked-brain knowledge base, narrating progress to the browser (Step 9, ADR-0017).
-
-## Step 1 — Watch the event stream
-
-Tail the cross-doc multiplexer with the Monitor tool so every per-doc event arrives as a
-line. `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`). Run the tail by
-absolute path — it's builtin-only (no deps), so it works straight from the plugin dir no
-matter the current directory:
+Every event you emit must be stamped as the agent so the service can tell your work apart from
+the UI's (loop safety). Export this once at the start of the loop — `wicked-bus emit` reads it:
 
 ```bash
-WI_HOME="${CLAUDE_PLUGIN_ROOT:-$PWD}"
-node "$WI_HOME/bin/wi-watch.mjs" --base <BASE>
+export WICKED_BUS_PRODUCER_ID=wi-agent
 ```
 
-Each line is `HH:MM:SS <doc> <event> <json>`. The events you act on:
+A tiny helper keeps emits readable — it writes the payload to a temp file and emits by
+`@file` (never hand-escape JSON with embedded HTML):
 
-| event       | meaning                                            | your action |
-|-------------|----------------------------------------------------|-------------|
-| `processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfill the request file (Step 3) |
-| `message` (role `user`)                    | the user typed in chat                 | reply / make the change (Step 4) |
-| `generation`                               | a new "from my content" doc to build   | build the first draft (Step 5) |
-| `demo`                                     | a new live-URL demo doc to learn       | author the spec + record (Step 8) |
-| `sources`                                  | reference material attached (`pending`) | index it into a brain, live (Step 9) |
-| `status`, `html-updated`, `error`          | informational                          | none (the UI handles these) |
+```bash
+wibus() {  # wibus <event_type> <subdomain> <json-payload>
+  local f; f="$(mktemp)"; printf '%s' "$3" > "$f"
+  wicked-bus emit --type "$1" --domain wicked-interactive --subdomain "$2" --payload "@$f"
+  rm -f "$f"
+}
+```
 
-Per-doc workspaces live under the docs root at `<DOCS>/<doc>/`. The request/response
-files are in `<DOCS>/<doc>/requests/`.
+## Step 1 — Subscribe to the loop
+
+Tail the bus with the Monitor tool — `wicked-bus subscribe` prints one JSON event per line, so
+it composes with Monitor's line-as-event model. The durable cursor means events that arrive
+while you're away replay when you reconnect (this is why there's no "reconcile on restart"
+dance anymore):
+
+```bash
+wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
+  --cursor-init latest --poll-interval-ms 1000
+```
+
+Each line is an event envelope: `{ "event_type", "payload": { "document_id", … }, "producer_id", … }`.
+`<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`); per-doc state-plane reads
+live under `<BASE>/d/<doc>/…`. The events you act on:
+
+| event_type | when | your action |
+|------------|------|-------------|
+| `wicked.doc.created` (kind `source`) | user built a doc "from my content" | generate the first draft (Step 5) |
+| `wicked.doc.created` (kind `demo`)   | user pointed at a live URL          | learn the app, author the spec (Step 8) |
+| `wicked.feedback.processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfil them (Step 3) |
+| `wicked.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
+| `wicked.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
+| `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
+
+Ignore your own emissions (`producer_id: "wi-agent"`) and the service's facts
+(`wicked.version.created`, `wicked.export.requested`) — the browser handles those.
 
 ## Step 2 — The one rule that must never break: preserve every `data-wid`
 
-`data-wid` anchors are how the browser maps a click back to an element (ADR-0001) and how
-versions stay navigable. The INV-2 gate **rejects any fragment that drops a pre-existing
-`data-wid`** (regenerate.js). A rejected fragment means the user's edit silently does
-nothing. So:
+`data-wid` anchors map a click back to an element (ADR-0001) and keep versions navigable. The
+INV-2 gate **rejects any fragment that drops a pre-existing `data-wid`** (regenerate.js) — a
+rejected fragment means the user's edit silently does nothing. So:
 
 - Build every edited fragment from the **current** element markup, not from memory.
-- Keep all existing `data-wid="..."` attributes byte-for-byte. You may ADD new content
-  (it gets instrumented automatically), never remove an existing anchor.
-- Verify before you write (Step 3c).
+- Keep all existing `data-wid="…"` attributes byte-for-byte. You may ADD new content (it gets
+  instrumented automatically), never remove an existing anchor.
+- Verify before you emit (Step 3c).
 
-## Step 3 — Fulfill a structural request
+## Step 3 — Fulfil a structural request
 
-### 3a. Read the request
+### 3a. Read the event
 
-`<DOCS>/<doc>/requests/_v{n}.request.json`:
+A `wicked.feedback.processed` line with `awaiting_structural > 0` carries the items inline —
+there's no request file to read. Its payload:
 
 ```json
-{ "document_id": "<doc>", "version": <n>, "base_html": "_v<n>.html",
-  "items": [ { "selector": "slide-3-card-2", "instruction": "make this punchier",
-               "fragment": "<div data-wid=\"slide-3-card-2\" data-card>…</div>" } ] }
+{ "document_id": "<doc>", "version": 5, "awaiting_structural": 1,
+  "structural_items": [ { "selector": "slide-3-card-2", "instruction": "make this punchier",
+                          "fragment": "<div data-wid=\"slide-3-card-2\" data-card>…</div>" } ] }
 ```
+
+`version` is the partial the service just landed — it becomes the **parent** of the version
+you produce.
 
 ### 3b. Edit each fragment
 
-For each item, produce the new `outerHTML` for that element, applying `instruction`,
-**keeping every `data-wid`**. A removal is expressed as `{ selector, remove: true }`
-instead of a fragment.
+For each item, produce the new `outerHTML` for that element, applying `instruction`, **keeping
+every `data-wid`**. A removal is `{ "selector", "remove": true }` instead of a fragment.
 
-### 3c. Verify, then write the response
+### 3c. Verify, then emit `wicked.edit.completed`
 
-Write a small Node script (don't hand-edit JSON with escaped HTML) that builds the
-response AND self-checks before writing — this is the procedure that keeps INV-2 green:
+Write a small Node script (don't hand-edit JSON with escaped HTML) that builds the results AND
+self-checks before emitting — this is the procedure that keeps INV-2 green:
 
 ```js
-import fs from "node:fs";
-const dir = process.argv[2];          // <DOCS>/<doc>
-const n   = Number(process.argv[3]);  // version
-const req = JSON.parse(fs.readFileSync(`${dir}/requests/_v${n}.request.json`, "utf-8"));
+import { writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+const doc = "<doc>", version = 5;            // from the event
+const edited = { "slide-3-card-2": `<div data-wid="slide-3-card-2" data-card>…new…</div>` };
+const items = [/* the structural_items from the event */];
 
-// Map each selector -> edited fragment string you produced.
-const edited = {
-  "slide-3-card-2": `<div data-wid="slide-3-card-2" data-card>…new…</div>`,
-};
-
-const results = req.items.map((it) => {
+const results = items.map((it) => {
   const fragment = edited[it.selector];
-  // Self-check: every data-wid in the ORIGINAL fragment must survive in the edit.
-  const before = [...it.fragment.matchAll(/data-wid="([^"]+)"/g)].map(m => m[1]);
-  const after  = [...(fragment||"").matchAll(/data-wid="([^"]+)"/g)].map(m => m[1]);
-  const dropped = before.filter(w => !after.includes(w));
+  const before = [...it.fragment.matchAll(/data-wid="([^"]+)"/g)].map((m) => m[1]);
+  const after  = [...(fragment || "").matchAll(/data-wid="([^"]+)"/g)].map((m) => m[1]);
+  const dropped = before.filter((w) => !after.includes(w));
   if (dropped.length) throw new Error(`INV-2 would drop ${dropped} on ${it.selector}`);
-  // Cheap balance check: equal <div ... </div> counts in the fragment.
-  const open = (fragment.match(/<div\b/g)||[]).length, close = (fragment.match(/<\/div>/g)||[]).length;
+  const open = (fragment.match(/<div\b/g) || []).length, close = (fragment.match(/<\/div>/g) || []).length;
   if (open !== close) throw new Error(`unbalanced divs (${open}/${close}) on ${it.selector}`);
   return { selector: it.selector, fragment };
 });
 
-fs.writeFileSync(`${dir}/requests/_v${n}.response.json`,
-  JSON.stringify({ version: n, results }, null, 2));
-console.log("wrote response:", results.length, "result(s)");
+const payload = JSON.stringify({ document_id: doc, version, results });
+const f = "/tmp/wi-edit.json"; writeFileSync(f, payload);
+execFileSync("wicked-bus", ["emit", "--type", "wicked.edit.completed", "--domain", "wicked-interactive",
+  "--subdomain", "feedback", "--payload", `@${f}`], { stdio: "inherit", env: { ...process.env, WICKED_BUS_PRODUCER_ID: "wi-agent" } });
+console.log("emitted edit.completed with", results.length, "result(s)");
 ```
 
-The service's watcher picks up `_v{n}.response.json`, applies it through the INV-2 gate,
-produces a follow-on version, and hot-reloads the browser. If you see an `error` event or
-a `processed` with the selector in `rejected`, your fragment dropped an anchor — rebuild
-it from the current markup and write the response again.
+The service applies your results through the INV-2 gate, lands a follow-on version, and emits
+`wicked.version.created` (the browser hot-reloads). If a fragment dropped an anchor, the apply
+fails and the change is dead — rebuild from the current markup (`GET <BASE>/d/<doc>/doc`) and
+emit again.
 
 ### 3d. Keep the user informed
 
-Post status to the doc so the in-browser overlay reflects progress (substantive replies
-to the user belong in the browser, not just the terminal):
+Post status so the in-browser overlay reflects progress (substantive replies belong in the
+browser, not just your terminal):
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"processing","message":"Reworking that card…","version":<n>}'
-# …after the response is written and the new version lands:
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"complete","message":"Done — updated.","version":<m>}'
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","message":"Reworking that card…","version":5}'
+# …after the new version lands:
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"complete","message":"Done — updated.","version":6}'
 ```
 
-If you need a decision from the user, ask with options (renders as buttons in the lock):
+If you need a decision, ask with options (renders as buttons in the lock):
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"asking","question":"Two-column or stacked?","options":["Two-column","Stacked"],"requestId":"q1"}'
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"asking","question":"Two-column or stacked?","options":["Two-column","Stacked"],"request_id":"q1"}'
 ```
 
-Their choice arrives as an `answer` event and as `requests/q1.answer.json`.
+Their choice arrives as a `wicked.question.answered` event carrying `request_id` + `answer`.
+
+### 3e. Idempotency
+
+The cursor is durable, so a reconnect can redeliver an event you already handled. Before
+fulfilling `feedback.processed` for version N, check the doc isn't already past it:
+`GET <BASE>/d/<doc>/api/versions` — if `head` already has a child of N, skip. Never produce a
+second follow-on for the same handoff.
 
 ## Step 4 — Respond to chat
 
-On a `message` event (role `user`):
+On a `wicked.chat.posted` event with `role: "user"`:
 
-- **Conversational** ("what can you do?", "how do I export?") — reply via
-  `POST <BASE>/d/<doc>/api/message` with `{ "text": "…" }`. It appears in the panel.
-- **A change request** ("make the hero bolder", "add a pricing slide") — translate it:
-  - Small exact-text or style tweaks → post a feedback batch to
-    `POST <BASE>/d/<doc>/api/feedback` with deterministic items (`content-edit`,
-    `style-edit`, `remove`); the service applies them instantly.
-  - Anything structural (new sections, reworked layout, "make it premium") → build the new
-    markup yourself from the current head HTML (`GET <BASE>/d/<doc>/doc`), preserving every
-    `data-wid`, and land it as a new version. For a brand-new/blank doc, this is where you
-    generate the first real draft from the conversation.
-  - Always post a `processing` status when you start and `complete` when the new version
-    lands, so the document shows the loading state.
+- **Conversational** ("what can you do?", "how do I export?") — reply with a chat post:
+  `wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"agent","text":"…"}'`.
+- **A targeted change** ("make the hero bolder", "fix that number") — fetch the current head
+  (`GET <BASE>/d/<doc>/doc`), build the edited fragment(s) preserving every `data-wid`, and emit
+  `wicked.edit.completed` with `version` set to the **current head** (Step 3c). The service lands
+  a follow-on from head.
+- **A whole-document change** ("add a pricing slide", "make the whole thing premium", or the
+  first real draft of a blank doc) — build the complete new markup and emit
+  `wicked.draft.completed` with `{ "document_id", "html" }` (or `html_path` for a large draft,
+  ADR-0019 D5). The service instruments fresh anchors, themes it, and lands a new version.
+- Always post a `processing` status when you start and `complete` when the version lands, so
+  the document shows the loading state.
 
 ## Step 5 — Build a document from the user's content ("From my content")
 
-When a `generation` event arrives (or you find `requests/_gen.request.json` with no `_v1.html`
-yet), the user created a doc by pointing at material instead of typing — the most common way
-people start. The service is model-free, so building the draft is **yours**.
-
-### 5a. Read the request
-
-`<DOCS>/<doc>/requests/_gen.request.json`:
-
-```json
-{ "document_id": "<doc>", "source_paths": ["~/Documents/q3-notes", "./decks/raw.pptx"],
-  "brief": "6-slide investor update…", "base_html": "_v0.html", "ts": "…" }
-```
-
-`source_paths` is a list — the user can point at several files and/or folders. Read them all
-(expand `~`; a folder means its contents) and synthesize one coherent document across them.
-
-Post a status immediately so the placeholder doesn't look stuck:
+A `wicked.doc.created` event with `kind: "source"` means the user created a doc by pointing at
+material instead of typing. Its payload carries `source_paths` (files/folders — expand `~`) and
+an optional `brief`. The service is model-free, so building the draft is **yours**.
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"processing","message":"Reading your files and drafting…"}'
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","message":"Reading your files and drafting…"}'
 ```
 
-### 5b. Index and generate (reuse the siblings — never reinvent)
+- Read every entry in `source_paths` (each a file or a folder).
+- **Ground it in knowledge** — consult/ingest **wicked-brain** so the draft uses the user's real
+  numbers and prior decisions (Step 6). Don't invent figures the source doesn't support.
+- **Generate the document** — use the craft references under `skills/assist/references/`
+  (outline method, story arc, HTML/CSS constraints). For a multi-discipline brief, route through
+  a **wicked-garden crew** (Step 7) so design + copy + structure are reasoned about together.
+- Honor the `brief` (length, audience, tone, what to lead with).
 
-- Read every entry in `source_paths` (each a file or a folder; expand `~`).
-- **Ground it in knowledge** — ingest/consult **wicked-brain** so the draft uses the user's
-  real numbers and prior decisions (Step 6 below has the detail). Don't invent figures the
-  source doesn't support.
-- **Generate with wicked-prezzie** — use its deck/HTML generation + theming primitives to turn
-  the material into a real document. For a multi-discipline brief, route through a
-  **wicked-garden crew** (Step 7) so design + copy + structure are reasoned about together.
-- Honor the `brief` if present (length, audience, tone, what to lead with).
-
-### 5c. Write the response — full HTML, not fragments
-
-Unlike a structural edit, this is a **whole new document**, so there are no pre-existing
-`data-wid` anchors to preserve — the service assigns fresh ones and applies the theme. Write a
-small Node script (don't hand-build JSON with escaped HTML):
-
-```js
-import fs from "node:fs";
-const dir = process.argv[2];            // <DOCS>/<doc>
-const html = `<section>…your generated document…</section>`;
-fs.writeFileSync(`${dir}/requests/_gen.response.json`, JSON.stringify({ html }, null, 2));
-console.log("wrote generated draft:", html.length, "bytes");
-```
-
-The watcher picks up `_gen.response.json`, instruments + themes it, lands it as `_v1`, and
-hot-reloads the browser. Then post `complete`:
+Then emit the whole draft (fresh document — no pre-existing anchors to preserve):
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"complete","message":"Here's a first draft — click any block to refine it.","version":1}'
+# build the HTML in a Node script, write it to a file, then:
+wibus wicked.draft.completed generation "$(node -e 'const fs=require("fs");process.stdout.write(JSON.stringify({document_id:"<doc>",html:fs.readFileSync("/tmp/wi-draft.html","utf8")}))')"
+# or for a large draft, pass it by path and skip inlining:
+wibus wicked.draft.completed generation '{"document_id":"<doc>","html_path":"/tmp/wi-draft.html"}'
+```
+
+The service lands it as `_v1` and the browser hot-reloads. Post `complete`:
+
+```bash
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"complete","message":"Here'\''s a first draft — click any block to refine it.","version":1}'
 ```
 
 From here the normal click-to-edit loop (Steps 3–4) takes over.
 
 ## Step 6 — Consult project knowledge before you rewrite (wicked-brain)
 
-Before any **structural** edit or first-draft generation (Step 3, Step 5, or the structural
-branch of Step 4), check whether the project's brain knows something the document should respect —
-prior decisions, terminology, the customer's positioning, numbers that must stay accurate.
-This is what keeps agent-authored content grounded instead of plausibly-wrong (ADR-0016
-Slice E).
+Before any **structural** edit or first-draft generation (Step 3, Step 5, or the change branch
+of Step 4), check whether the project's brain knows something the document should respect — prior
+decisions, terminology, the customer's positioning, numbers that must stay accurate. This keeps
+agent-authored content grounded instead of plausibly-wrong (ADR-0016 Slice E).
 
-- Post `{"state":"processing","message":"Checking project knowledge…"}` so the user sees why
-  there's a beat before the edit.
-- Query the brain for the topic of the edit, e.g. `wicked-brain:search` with the section's
-  subject (or `wicked-brain:query` for a "what does X say" question). Always pass a stable
+- Post `{"state":"processing","message":"Checking project knowledge…"}` so the beat reads as work.
+- Query the brain for the topic (`wicked-brain:search` / `wicked-brain:query`) with a stable
   `session_id`.
-- Fold any **citable** facts into the markup you produce, and when a fact drove a choice,
-  say so in your chat reply ("kept the ARR figure at $4.2M per the Q3 board deck"). If the
-  brain returns nothing relevant, proceed — never block an edit on a knowledge miss.
+- Fold any **citable** facts into the markup, and when a fact drove a choice, say so in your chat
+  reply ("kept the ARR figure at $4.2M per the Q3 board deck"). If the brain returns nothing
+  relevant, proceed — never block an edit on a knowledge miss.
 
-Skip this for deterministic tweaks (exact-text, style, remove); those carry no authorship
-risk. It's the generative edits that need grounding.
+Skip this for deterministic tweaks; those carry no authorship risk.
 
 ## Step 7 — Assemble a crew for multi-discipline requests (wicked-garden)
 
-Some chat requests are bigger than one editing pass — they need design + copy + structure
-reasoned about together ("turn this into an investor-ready deck", "make the whole thing feel
-premium and tighten the narrative", "redesign this section and rewrite the story around it").
-Route these to a **wicked-garden crew** rather than doing a shallow single-shot edit
-(ADR-0016 Slice D).
+Some chat requests need design + copy + structure reasoned about together ("turn this into an
+investor-ready deck", "make the whole thing premium and tighten the narrative"). Route these to a
+**wicked-garden crew** rather than a shallow single-shot edit (ADR-0016 Slice D).
 
-- Recognise the trigger: the request spans **more than one discipline** (visual design AND
-  narrative AND structure), asks for a whole-document transformation, or is open-ended enough
-  that a crew's plan→build→review beats a single edit.
-- Post `{"state":"processing","message":"Assembling a crew…"}` so the wait reads as
-  deliberate work, not a hang.
-- Dispatch the relevant wicked-garden crew/agents (e.g. a product/design/engineering crew via
-  the Task tool) with the current head HTML and the user's goal. Let the crew produce the
-  plan and the new markup.
+- Recognise the trigger: the request spans **more than one discipline**, asks for a whole-document
+  transformation, or is open-ended enough that a crew's plan→build→review beats one edit.
+- Post `{"state":"processing","message":"Assembling a crew…"}`.
+- Dispatch the relevant crew/agents (via the Task tool) with the current head HTML and the goal.
 - You remain the **single writer back into the loop**: take the crew's output, preserve every
-  `data-wid` (Step 2), and land it as a new version exactly as in Step 3c / Step 4. The crew
-  reasons; you are still the one who satisfies the INV-2 gate.
-- Keep the user posted (`processing` → `complete`) and summarise what the crew changed in a
-  chat reply.
+  `data-wid` (Step 2), and land it via `wicked.edit.completed` (targeted) or
+  `wicked.draft.completed` (whole-doc). The crew reasons; you satisfy the INV-2 gate.
 
-For a single-discipline ask ("make this headline bolder", "punch up this one card"), don't
-over-engineer it — handle it inline (Step 3/4). Crews are for breadth, not every edit.
+For a single-discipline ask, handle it inline (Step 3/4). Crews are for breadth.
 
 ## Step 8 — Learn an app and record a demo (ADR-0018)
 
-A `demo` doc points at a **live URL**. The service is model-free: deciding *what to click*
-is yours; launching the browser and recording is the service's. So you author a deterministic
-Playwright spec and let the service execute + record it — and re-recording on feedback is a
-deterministic replay of that spec.
-
-### 8a. Read the request
-
-When a `demo` event arrives (or you find `requests/_demo.request.json` with no `_v1.html`
-yet), read `<DOCS>/<doc>/requests/_demo.request.json`:
-
-```json
-{ "document_id": "<doc>", "url": "https://staging.example.com/app",
-  "brief": "Sign in, add the Pro plan, walk through checkout.",
-  "spec_file": "demo.spec.mjs", "ts": "…" }
-```
-
-Post a status immediately so the placeholder doesn't look stuck (use `working`, not
-`processing` — recording narrates without locking the doc):
+A `wicked.doc.created` event with `kind: "demo"` points at a **live URL** (in `payload.url`, with
+an optional `brief`). The service is model-free: deciding *what to click* is yours; launching the
+browser and recording is the service's. Author a deterministic Playwright spec, then ask the
+service to execute + record it.
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/status -H 'Content-Type: application/json' \
-  -d '{"state":"working","message":"Exploring the app and working out the click-path…"}'
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"working","message":"Exploring the app and working out the click-path…"}'
 ```
 
-### 8b. Explore the app, then author `demo.spec.mjs`
+### 8a. Explore the app, then author `demo.spec.mjs`
 
-Drive the live URL yourself (Playwright is installed — the install gate, ADR-0016, requires
-it before a demo can be created) to learn the selectors and the flow the `brief` describes.
-Then write `<DOCS>/<doc>/demo.spec.mjs` — a plain ES module that exports `meta` and an async
-`run`. You express **only** the click-path; the service supplies `page` and the `step`
-annotator and owns the browser/recording lifecycle.
+Drive the live URL yourself (Playwright is installed — the install gate requires it before a
+demo can be created) to learn the selectors and the flow the `brief` describes. Then write
+`<DOCS>/<doc>/demo.spec.mjs` — a plain ES module exporting `meta` and an async `run`. You express
+**only** the click-path; the service supplies `page` and the `step` annotator and owns the
+browser/recording lifecycle.
 
 ```js
 export const meta = {
   url: "https://staging.example.com/app",
   title: "Checkout demo",
-  steps: ["Sign in", "Add Pro plan", "Checkout"],   // labels, for reference
-  // Narration: a step shows an on-screen caption only if you give it `say` (below).
-  captionHoldMs: 2500,   // how long each caption holds so it can be read (default 2500ms)
-  // captions: false,    // hard-disable all on-screen narration
+  steps: ["Sign in", "Add Pro plan", "Checkout"],
+  captionHoldMs: 2500,
 };
-
 export async function run({ page, step, meta }) {
   await page.goto(meta.url);
   await step("Sign in", async () => {
@@ -331,12 +285,6 @@ export async function run({ page, step, meta }) {
     await page.click("button[type=submit]");
     await page.waitForURL("**/dashboard");
   });
-  await step("Add Pro plan", async () => {
-    await page.click("text=Pro");
-    await page.click("text=Add to cart");
-  });
-  // `say` = the on-screen narration for this step (omit it and the step shows no caption);
-  // `holdMs` = how long it holds. Describe the outcome, not the click.
   await step("Checkout", async () => {
     await page.click("text=Checkout");
     await page.waitForSelector("text=Order confirmed");
@@ -344,93 +292,62 @@ export async function run({ page, step, meta }) {
 }
 ```
 
-Rules that keep the recording deterministic and safe:
+Rules that keep the recording deterministic and safe (unchanged from the file era): wrap every
+meaningful action in `step(label, fn)`; **always narrate** (caption the meaningful beats via the
+`say` 3rd arg — narrate the capability, not the on-screen data); prefer stable selectors; **never
+write credentials into the spec or any version artifact** (read secrets from env at run time);
+`await` your waits so the recording captures settled UI.
 
-- **Wrap every meaningful action in `step(label, fn)`** — each becomes a timed, anchored
-  entry in the storyboard, so the user can highlight "step 2" and ask for a change. A failure
-  also points at the exact step.
-- **Always narrate — every demo gets captions.** This is the default, not an extra: a demo
-  without narration is incomplete. Caption the meaningful beats so a viewer who can't see your
-  cursor still follows along.
-- **Narrate the action, not the data.** The on-screen caption comes from the step's `say` (3rd
-  arg) — and **only** then; the terse `label` drives the storyboard chapter list and never
-  appears on-screen. A demo teaches **what you can do**, so narrate the user's intent and the
-  capability being shown — *not* the specific records on screen (those change per user and aren't
-  the point). Rule of thumb — frame each `say` as one of: **what am I doing** ("Compare two
-  apps"), **what am I showing** ("how it scores their overlap"), or **what do I get** ("it tells
-  me what to consolidate"). Avoid proper nouns, figures, and raw UI verbs. Bad: "Open the
-  rationalization scope" / "Keep ruflo, retire command_iq — 51% overlap". Good: "Compare two
-  apps to see if they do the same thing." **Not every step needs a caption** — omit `say` on
-  connective/navigation beats so the narration stays meaningful, not noisy. Renders as a
-  full-width blue bar (stands out, click-through), re-asserted on the settled view and held
-  `captionHoldMs`; the thumbnail is captured caption-free.
-- **Prefer stable selectors** (roles, text, `data-*`) over brittle nth-child paths, so a
-  re-record replays cleanly.
-- **Never write credentials into the spec or any version artifact.** Use a public or
-  already-authed URL, or read secrets from an env var at run time (as above) — the spec is
-  the source, and version files are exportable. This is a standing security constraint.
-- `await` your waits (`waitForURL` / `waitForSelector`) so the recording captures settled UI.
-
-### 8c. Trigger the record
-
-Ask the service to execute the spec and land the recording as a new version:
+### 8b. Trigger the record over the bus
 
 ```bash
-curl -s -X POST <BASE>/d/<doc>/api/demo/record -H 'Content-Type: application/json' -d '{}'
+wibus wicked.demo.requested demo '{"document_id":"<doc>"}'
 ```
 
-The service launches Chromium, runs your `run()`, captures `_v{n}.webm` + a trace, builds the
-storyboard (video + ordered steps), instruments it (fresh `data-wid` per step), lands the
-version, and hot-reloads the browser. It streams `Step k: <label>` status as it goes and a
-`complete` when the version lands (or `error` if a step throws — fix the selector and trigger
-the record again). You don't write a response file for demos — `/api/demo/record` is the
-trigger; the version is the output.
+The service launches Chromium, runs your `run()`, captures the video + storyboard, instruments it
+(fresh `data-wid` per step), lands the version, and hot-reloads. It streams `Step k: <label>`
+progress as `wicked.status.posted` and emits `wicked.version.created` when the version lands (or a
+`wicked.status.posted` with `state:"error"` if a step throws — fix the selector and emit
+`wicked.demo.requested` again). The storyboard toolbar offers **Download video** and **GIF**.
 
-The storyboard toolbar offers **Download video** and **GIF** — the GIF (`POST <BASE>/d/<doc>/api/demo/gif`)
-is a looping, embeddable export for places video won't play (a GitHub README, a chat). When a
-user wants the walkthrough "to embed" or "to share," point them at it (it needs `ffmpeg`).
+### 8c. Refine = re-author + re-record
 
-### 8d. Refine on feedback = re-author + re-record
-
-A demo refines through the **same loop** as any doc. When the user highlights a step and asks
-for a change, it arrives as a structural request (Step 3) or a chat message (Step 4). For a
-demo, "make the change" means **edit `demo.spec.mjs`** (adjust the step, add/remove an action)
-and call `POST …/api/demo/record` again — same spec ⇒ same click-path ⇒ a new version.
-Deterministic replay, just like every other version.
+A demo refines through the **same loop**. When the user highlights a step and asks for a change,
+it arrives as a `wicked.feedback.processed` (Step 3) or `wicked.chat.posted` (Step 4). For a demo,
+"make the change" means **edit `demo.spec.mjs`** and emit `wicked.demo.requested` again — same spec
+⇒ same click-path ⇒ a new version. Deterministic replay.
 
 ## Step 9 — Index attached reference sources (ADR-0017)
 
-When a user attaches reference material in the Sources panel, the service emits a `sources`
-event and marks the entry `pending`. Indexing it into a wicked-brain knowledge base — **with
-live progress narrated to the browser chat** — is a standing part of the loop, not an ad-hoc
-favor. The substrate supports all of it.
+A `wicked.source.attached` event carries `added: [{ path, note }]` — reference material to index
+into a wicked-brain knowledge base, **with live progress narrated to the browser**. This is a
+standing part of the loop.
 
-1. **Pick up the work.** New attachments arrive as a `sources` event on the tail; on session
-   start, also reconcile `GET <BASE>/d/<doc>/api/sources` for any `pending` entries left while
-   the tail was down.
-2. **Flip to `indexing`.** `POST <BASE>/d/<doc>/api/sources/status {path, status:"indexing"}`.
-3. **Stream progress** with `POST <BASE>/d/<doc>/api/status {state:"working", message:…}` (the
-   agent→user lane — renders as "Assistant", logs `role:agent`). Post at each milestone:
-   kickoff → scope decision → ingesting → done. Use `"working"` (a non-lock state) so the doc
-   isn't covered by the processing overlay; use `"complete"` on the final message.
-4. **Check coverage AND freshness before ingesting.** Query the target brain first — presence
-   is not enough, **already-indexed ≠ current**. Compare the brain's last index time against the
-   source's real state (`git log -1` for a repo, file mtimes otherwise); if it moved since,
-   **re-ingest** (the batch script archives stale chunks by `safeName`, so a refresh doesn't
-   duplicate). Only skip when the index genuinely reflects current content, and say which check
-   let you skip.
-5. **Scope sanely.** Skip `node_modules`, build artifacts (`.pyc`/`.map`), binaries, and
-   vendored deps; index the high-signal surface (docs, READMEs, source). Name the scope decision
-   in chat so the user can widen it.
-6. **Land it.** `POST <BASE>/d/<doc>/api/sources/status {path, status:"indexed"}` (or
-   `"error"`), with a final `complete` status message. Then draw on that brain (query with
-   `--brain` if it's a different project's brain) when generating or updating the doc.
+1. **Flip to indexing.** `wibus wicked.source.updated sources '{"document_id":"<doc>","path":"<abs>","status":"indexing"}'`.
+2. **Stream progress** with `wicked.status.posted` (`state:"working"` — a non-lock state, so the
+   doc isn't covered by the overlay) at each milestone: kickoff → scope → ingesting → done.
+3. **Check coverage AND freshness before ingesting.** Query the target brain first — already-indexed
+   ≠ current. Compare the brain's last index time against the source's real state (`git log -1` for a
+   repo, file mtimes otherwise); re-ingest if it moved.
+4. **Scope sanely.** Skip `node_modules`, build artifacts, binaries, vendored deps; index the
+   high-signal surface (docs, READMEs, source). Name the scope decision in chat.
+5. **Land it.** `wibus wicked.source.updated sources '{"document_id":"<doc>","path":"<abs>","status":"indexed"}'`
+   (or `"error"`), with a final `complete` status. Then draw on that brain when generating/updating.
 
-Brain choice: index into the source's natural project brain when one exists (keeps each
-project's brain clean); otherwise this doc's project brain.
+Brain choice: index into the source's natural project brain when one exists; otherwise this doc's
+project brain.
 
-## Step 10 — Loop
+## Step 10 — Recover a stale cursor (rare)
 
-Return to watching. Keep going until the user says to stop. The session staying alive IS
-the product guarantee — `serve` + `assist` together are why a non-technical user can click
-a block and watch it change without ever touching a terminal.
+If you were away long enough that the bus swept events past your cursor, `wicked-bus subscribe`
+reports `WB-003` (cursor behind the retention window). The bus is transport, not storage
+(ADR-0021) — recover from the **state plane**, which is authoritative: reset the cursor
+(`wicked-bus replay --cursor-id <id> --from-event-id <oldest>`) and reconcile from files —
+`GET <BASE>/d/<doc>/api/sources` for any `pending` sources, `GET …/api/versions` for where each
+doc actually is. Then resume the loop.
+
+## Step 11 — Loop
+
+Return to watching. Keep going until the user says to stop. The session staying alive IS the
+product guarantee — `serve` + `assist` together are why a non-technical user can click a block and
+watch it change without ever touching a terminal.

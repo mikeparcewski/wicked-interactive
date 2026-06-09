@@ -65,18 +65,27 @@ DOCS="${WI_DOCS:-$HOME/wicked-interactive/docs}"; mkdir -p "$DOCS"; echo "$DOCS"
 The service (express + the built UI + its npm deps) runs from the **published package via
 `npx`** — so it works on any machine without the cloned plugin needing `node_modules` or a
 frontend build. `npx` fetches + caches the matching version, and `frontend/dist` ships inside the
-package. Pin to the plugin's own version so the runtime matches the installed plugin. Run it
-with `--watch` as a background Bash invocation — do NOT block on it:
+package. Pin to the plugin's own version so the runtime matches the installed plugin.
+
+First, warm the bus — it is the REQUIRED control plane (ADR-0019/0021), and this also seeds its
+data dir + warms the `npx` cache so the agent's later `wicked-bus subscribe`/`emit` calls are
+instant:
 
 ```bash
-npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS" --watch
+npx -y wicked-bus init >/dev/null 2>&1 || true
+```
+
+Then start the service as a background Bash invocation — do NOT block on it:
+
+```bash
+npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS"
 ```
 
 Developing locally from the repo, where `$WI_VER` may not be published yet? Run the local binary
 instead (it resolves its deps from the repo's `node_modules`):
 
 ```bash
-node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS" --watch
+node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS"
 ```
 
 Read the first lines of output to learn the actual port:
@@ -114,7 +123,8 @@ forever. `assist` is what makes the agent-in-the-loop guarantee real.
 ## Step 6 — Stop it when the user is done
 
 You started the service, so you own stopping it. When the user is finished (they say so, or
-the session is wrapping up), **kill the `serve` process** (and the `wi-watch` tail if you
-started one) so nothing is left bound to the port. Documents persist on disk under `--root`,
-so stopping is non-destructive — restarting `serve` later picks up right where they left off.
-Leave any sibling servers (wicked-brain, etc.) alone.
+the session is wrapping up), **kill the `serve` process** (and stop the `wicked-bus subscribe`
+tail you started in `assist`) so nothing is left bound to the port. Documents persist on disk
+under `--root` and the bus is just transport, so stopping is non-destructive — restarting
+`serve` later picks up right where they left off. Leave any sibling servers (wicked-brain, the
+shared wicked-bus, etc.) alone.
