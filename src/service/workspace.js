@@ -17,7 +17,7 @@ import { parseFeedback, serializeFeedback } from "../core/feedback-schema.js";
 import { regenerate } from "../core/regenerate.js";
 import { initManifest, recordVersion, getVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest, readVersionHtml } from "./fsstore.js";
-import { splitItems, writeStructuralRequest } from "./structural.js";
+import { splitItems, writeStructuralRequest, extractFragment } from "./structural.js";
 import { themed } from "./theme-source.js";
 
 // Re-export the store reads so existing callers (server, tests) keep their import path.
@@ -72,7 +72,40 @@ export function writeFeedback(dir, { items, author }) {
   parseFeedback(md); // validate by round-trip; throws on invalid schema
   const file = `_v${version}.md`;
   atomicWrite(join(dir, file), md);
-  return { version, file };
+  return { version, file, parent: manifest.head };
+}
+
+/**
+ * Event-native core (ADR-0019): apply the DETERMINISTIC edits for a feedback batch, land the
+ * partial _v{n}.html write-once, record the version, and RETURN the structural items (with
+ * their freshly-extracted fragments) for the agent to fulfil — instead of writing a request
+ * file. Pure: no emit, no bus. Idempotent on (version): a re-run for a version already in the
+ * manifest is a no-op that still reports the (now-empty) structural set.
+ * @returns {Promise<{version,html_file,applied,rejected,stale,structural_items}>}
+ */
+export async function applyFeedbackItems(dir, { version, parent, items }, opts = {}) {
+  let manifest = loadManifest(dir);
+  if (getVersion(manifest, version) != null) {
+    const existing = getVersion(manifest, version);
+    return { version, html_file: existing.html_file, applied: [], rejected: [], stale: [], structural_items: [], idempotent: true };
+  }
+  const { deterministic, structural } = splitItems(items);
+  const prevHtml = readVersionHtml(dir, parent);
+  const { html: regenerated, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
+  // Re-instrument (adds wids to new blocks, INV-1 preserves existing) then re-theme
+  // (idempotent), exactly as the legacy path — so a partial version stays clickable + themed.
+  const html = themed(instrument(regenerated).html, opts);
+  atomicWrite(join(dir, `_v${version}.html`), html);
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: `_v${version}.md` }));
+  saveManifest(dir, manifest);
+  // Extract each structural item's CURRENT fragment from the landed partial so the agent
+  // edits real markup (the data-wid contract — ADR-0001 — rides in the fragment).
+  const structural_items = structural.map((it) => ({
+    selector: it.selector,
+    instruction: it.instruction,
+    fragment: extractFragment(html, it.selector),
+  }));
+  return { version, html_file: `_v${version}.html`, applied, rejected, stale, structural_items };
 }
 
 /**

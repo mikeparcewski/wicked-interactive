@@ -76,15 +76,24 @@ export function writeGenerationRequest(dir, { sourcePaths, brief = "", documentI
  */
 export async function applyGeneratedDraft(dir, responseFile, opts = {}) {
   const resp = JSON.parse(readFileSync(join(dir, REQUESTS_DIR, responseFile), "utf-8"));
-  const html = String(resp.html ?? "");
-  if (!html.trim()) throw new Error("generation response missing html");
+  return applyGeneratedHtml(dir, String(resp.html ?? ""), { ...opts, feedbackFile: responseFile });
+}
+
+/**
+ * Event-native core (ADR-0019): land the agent's generated draft (from a
+ * `wicked.draft.completed` event) as a follow-on version. Fresh data-wids + base theme.
+ * @returns {Promise<{version:number, parent:number}>}
+ */
+export async function applyGeneratedHtml(dir, html, opts = {}) {
+  html = String(html ?? "");
+  if (!html.trim()) throw new Error("generated draft missing html");
 
   let manifest = loadManifest(dir);
   const parent = manifest.head;
   const version = nextVersionNumber(manifest);
   const prepared = themed(instrument(html).html, opts);
   atomicWrite(join(dir, `_v${version}.html`), prepared);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: responseFile }));
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: opts.feedbackFile ?? null }));
   saveManifest(dir, manifest);
 
   if (typeof opts.emit === "function") {

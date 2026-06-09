@@ -62,12 +62,21 @@ export function writeStructuralRequest(dir, { version, baseHtmlFile, structural,
  */
 export async function applyStructuralResponse(dir, responseFile, opts = {}) {
   const resp = JSON.parse(readFileSync(join(dir, REQUESTS_DIR, responseFile), "utf-8"));
-  const parent = resp.version;
-  const bySelector = new Map(resp.results.map((r) => [r.selector, r.fragment]));
+  return applyStructuralResults(dir, { version: resp.version, results: resp.results }, { ...opts, feedbackFile: responseFile });
+}
 
+/**
+ * Event-native core (ADR-0019): apply the agent's structural results (from a
+ * `wicked.edit.completed` event) as a follow-on version. Same INV-2 gate as the file path.
+ * Result shape: { version (the parent partial), results: [{selector, fragment} | {selector, remove:true}] }.
+ * @returns {Promise<{version:number, parent:number, applied:string[], rejected:object[]}>}
+ */
+export async function applyStructuralResults(dir, { version, results }, opts = {}) {
+  const parent = version;
+  const bySelector = new Map(results.map((r) => [r.selector, r.fragment]));
   const baseHtml = readVersionHtml(dir, parent);
   const feedback = {
-    items: resp.results.map((r) => (r.remove
+    items: results.map((r) => (r.remove
       ? { selector: r.selector, type: "remove" }
       : { selector: r.selector, type: "structural-change", instruction: "(delegated)" })),
   };
@@ -88,16 +97,16 @@ export async function applyStructuralResponse(dir, responseFile, opts = {}) {
   const html = themed(instrument(regenerated).html, opts);
 
   let manifest = loadManifest(dir);
-  const version = nextVersionNumber(manifest);
-  atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: responseFile }));
+  const newVersion = nextVersionNumber(manifest);
+  atomicWrite(join(dir, `_v${newVersion}.html`), html);
+  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? null }));
   saveManifest(dir, manifest);
 
   if (typeof opts.emit === "function") {
     opts.emit("HTML_UPDATED", {
       document_id: opts.documentId ?? dir,
-      version, html_file: `_v${version}.html`, prev_version: parent, ts: new Date().toISOString(),
+      version: newVersion, html_file: `_v${newVersion}.html`, prev_version: parent, ts: new Date().toISOString(),
     });
   }
-  return { version, parent, applied, rejected };
+  return { version: newVersion, parent, applied, rejected };
 }
