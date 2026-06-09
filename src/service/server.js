@@ -258,7 +258,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
   }
 
   // ── Browser SSE bridge (down) ─────────────────────────────────────────────
-  // One stream of bus envelopes (replaces per-doc /events + /api/events/all). The frontend
+  // One stream of bus envelopes (replaces the old per-doc + cross-doc SSE streams). The frontend
   // routes on event_type and filters on payload.document_id. 15s heartbeat keeps proxies +
   // any downstream watchdog warm; setNoDelay defeats Nagle on the tiny comment frames.
   const sseClients = new Set();

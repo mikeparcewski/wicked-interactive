@@ -19,8 +19,6 @@ import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
 
-export const REQUESTS_DIR = "requests";
-export const DEMO_REQUEST = "_demo.request.json";
 export const RECORDINGS_DIR = "recordings";
 // The agent authors this file: a plain ES module exporting `meta` (url, title, steps[])
 // and `async run({ page, step, meta })`. The service supplies page/step; the agent only
@@ -48,23 +46,6 @@ export function demoPlaceholder(name, url, brief = "") {
   );
 }
 
-/**
- * Write the demo work request for a freshly-created demo doc. The agent watches for this
- * file (or the `demo` SSE event), learns the target app, authors demo.spec.mjs, then calls
- * POST /api/demo/record to have the service execute + record it.
- */
-export function writeDemoRequest(dir, { url, brief = "", documentId = dir }) {
-  mkdirSync(join(dir, REQUESTS_DIR), { recursive: true });
-  const body = {
-    document_id: documentId,
-    url: String(url).trim(),
-    brief: String(brief).trim(),
-    spec_file: DEMO_SPEC,
-    ts: new Date().toISOString(),
-  };
-  atomicWrite(join(dir, REQUESTS_DIR, DEMO_REQUEST), JSON.stringify(body, null, 2));
-  return { requestFile: DEMO_REQUEST };
-}
 
 /**
  * Build the storyboard HTML for a recorded demo: the embedded video plus an anchored,

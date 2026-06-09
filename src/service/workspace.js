@@ -10,20 +10,18 @@
 // watcher never reads a half-written file. Deterministic edits apply immediately;
 // structural edits are delegated to the supervising agent (ADR-0010).
 
-import { readFileSync, mkdirSync, readdirSync, copyFileSync } from "node:fs";
+import { mkdirSync, readdirSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { instrument } from "../core/instrument.js";
 import { parseFeedback, serializeFeedback } from "../core/feedback-schema.js";
 import { regenerate } from "../core/regenerate.js";
 import { initManifest, recordVersion, getVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest, readVersionHtml } from "./fsstore.js";
-import { splitItems, writeStructuralRequest, extractFragment } from "./structural.js";
+import { splitItems, extractFragment } from "./structural.js";
 import { themed } from "./theme-source.js";
 
 // Re-export the store reads so existing callers (server, tests) keep their import path.
 export { loadManifest, readVersionHtml } from "./fsstore.js";
-
-const versionFromHtmlFile = (f) => Number(/_v(\d+)\.html$/.exec(f)?.[1]);
 
 // Highest _v{n}.{md,html} on disk — so rapid writes reserve distinct numbers even before
 // the manifest is updated (two quick UPDATEs must not both grab _v1.md).
@@ -124,51 +122,3 @@ export function forkVersion(dir, from) {
   return { version, parent: from };
 }
 
-/**
- * Process a feedback file: apply the DETERMINISTIC edits immediately (cheerio), write the
- * partial _v{n}.html, record the version, and emit. STRUCTURAL items are delegated to the
- * supervising agent via a request file (ADR-0010) and finalized later as a follow-on
- * version. Idempotent on (version).
- * @returns {Promise<{version,html_file,applied,rejected,stale,awaiting_structural}>}
- */
-export async function processFeedbackFile(dir, mdFile, opts = {}) {
-  const md = readFileSync(join(dir, mdFile), "utf-8");
-  const feedback = parseFeedback(md);
-  const version = feedback.frontmatter.version;
-  const parent = versionFromHtmlFile(feedback.frontmatter.base_html);
-
-  let manifest = loadManifest(dir);
-  if (getVersion(manifest, version) != null) {
-    const existing = getVersion(manifest, version);
-    return { version, html_file: existing.html_file, applied: [], rejected: [], stale: [], awaiting_structural: 0, idempotent: true };
-  }
-
-  const { deterministic, structural } = splitItems(feedback.items);
-  const prevHtml = readVersionHtml(dir, parent);
-  const { html: regenerated, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
-  // Re-instrument so any new h2/p/li introduced by the regen pick up a data-wid.
-  // instrument() preserves existing wids (INV-1), only ADDS for untagged blocks; safe to
-  // run after INV-2 has already passed. Without this, content added via structural-change
-  // stays unclickable in the editor.
-  // Re-apply the base theme (idempotent — replaces the inherited block) so the version stays
-  // themed after regeneration (ADR-0016 Slice C).
-  const html = themed(instrument(regenerated).html, opts);
-  atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: mdFile }));
-  saveManifest(dir, manifest);
-
-  if (typeof opts.emit === "function") {
-    opts.emit("HTML_UPDATED", {
-      document_id: opts.documentId ?? dir,
-      version, html_file: `_v${version}.html`, prev_version: parent, ts: new Date().toISOString(),
-    });
-  }
-
-  let awaiting_structural = 0;
-  if (structural.length) {
-    ({ count: awaiting_structural } = writeStructuralRequest(dir, {
-      version, baseHtmlFile: `_v${version}.html`, structural, documentId: opts.documentId ?? dir,
-    }));
-  }
-  return { version, html_file: `_v${version}.html`, applied, rejected, stale, awaiting_structural };
-}
