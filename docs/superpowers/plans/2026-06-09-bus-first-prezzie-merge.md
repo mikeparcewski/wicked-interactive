@@ -1,5 +1,15 @@
 # Bus-First Transport + Prezzie Merge Implementation Plan
 
+> **STATUS: COMPLETE (2026-06-09, branch `bus-first-migration`).** All six phases shipped across
+> 9 commits. 143 unit tests + the browser e2e pass over a real wicked-bus; both service
+> subscribers register with advancing cursors and an empty DLQ; ADR-0019/0020/0021 are tagged at
+> every load-bearing site; version is 0.5.0 with synced manifests. **One open follow-up:** run
+> `npm install` to sync `package-lock.json` (+wicked-bus / −chokidar) before release — `npm` was
+> unavailable in the build env, so the lock still lags the manifest and `npm ci` would fail until
+> synced. The 5b PPTX-export stretch remains a separate future plan; the wicked-prezzie repo's
+> own deprecation banner is a one-line follow-up in that (separate) repo.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Scope note:** This is the master plan for a multi-subsystem migration. Phase 1 is specified at full task granularity. Phases 2–6 are locked at the decision/file-map/acceptance level and MUST each be expanded with `superpowers:writing-plans` into their own task file (`docs/superpowers/plans/`) before execution — several depend on artifacts Phase 1 produces.
