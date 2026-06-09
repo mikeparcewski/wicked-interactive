@@ -1,23 +1,12 @@
 #!/usr/bin/env node
 // wicked-interactive CLI — the one command a business user runs (INV-6).
 //
-//   wicked-interactive serve --root <docs-dir> [--port N] [--watch]
-//       Multi-document mode (ADR-0015). Hosts every workspace under <docs-dir>;
-//       new docs are created from the UI ("New document" modal). Preferred.
-//       --watch also tails /api/events/all in the same terminal — operator visibility
-//       into every per-doc broadcast.
-//
-//   wicked-interactive serve --dir <workspace> [--html <file>] [--port N]
-//       Legacy single-document mode. Workspace must exist; --html seeds _v0.
+//   wicked-interactive serve --root <docs-dir> [--port N]
+//       Multi-document mode (ADR-0015). Hosts every workspace under <docs-dir>; new docs are
+//       created from the UI. The control plane is wicked-bus (ADR-0019): the agent watches the
+//       loop with `wicked-bus subscribe --filter '*@wicked-interactive'`, not a bespoke tail.
 
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { createServer, createMultiServer } from "../src/service/server.js";
-import { initWorkspace } from "../src/service/workspace.js";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
+import { createMultiServer } from "../src/service/server.js";
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -26,68 +15,29 @@ function parseArgs(argv) {
     if (!a.startsWith("--")) { args._.push(a); continue; }
     const key = a.slice(2);
     const next = argv[i + 1];
-    // Boolean flag if the next arg is missing or itself another --flag; otherwise consume it.
     if (next === undefined || next.startsWith("--")) args[key] = true;
     else { args[key] = next; i++; }
   }
   return args;
 }
 
-/** Spawn wi-watch.mjs (sibling in bin/) as a child and pipe its lines into the parent's stdout. */
-function spawnWatcher(base) {
-  const script = resolve(HERE, "wi-watch.mjs");
-  const child = spawn(process.execPath, [script, "--base", base], { stdio: ["ignore", "inherit", "inherit"] });
-  child.on("exit", (code, sig) => console.log(`[watch] exited (code=${code} sig=${sig})`));
-  return child;
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0];
-  if (cmd !== "serve") {
-    console.error("usage: wicked-interactive serve { --root <docs-dir> | --dir <workspace> [--html <file>] } [--port N]");
+  if (cmd !== "serve" || !args.root) {
+    console.error("usage: wicked-interactive serve --root <docs-dir> [--port N]");
     process.exit(1);
   }
 
   const port = args.port ? Number(args.port) : 4400;
-
-  if (args.root) {
-    const svc = createMultiServer({ root: args.root });
-    const actualPort = await svc.start(port);
-    const base = `http://localhost:${actualPort}`;
-    console.log(`wicked-interactive (multi-doc) serving ${args.root} on ${base}`);
-    console.log(`  docs:   ${base}/api/docs`);
-    console.log(`  open:   ${base}/?doc=<name>`);
-    console.log(`  tail:   ${base}/api/events/all`);
-    let watcher = null;
-    if (args.watch) {
-      console.log("  --watch: tailing events in this terminal");
-      watcher = spawnWatcher(base);
-    }
-    const shutdown = async () => { if (watcher) watcher.kill(); await svc.stop(); process.exit(0); };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-    return;
-  }
-
-  if (!args.dir) {
-    console.error("error: pass --root <docs-dir> (multi-doc) or --dir <workspace> (legacy)");
-    process.exit(1);
-  }
-  const dir = args.dir;
-  if (!existsSync(join(dir, "versions.json"))) {
-    if (!args.html) {
-      console.error(`error: workspace ${dir} is not initialised; pass --html <file> to seed it`);
-      process.exit(1);
-    }
-    initWorkspace(dir, readFileSync(args.html, "utf-8"));
-    console.log(`initialised workspace at ${dir} from ${args.html}`);
-  }
-  const svc = createServer({ dir, documentId: dir });
+  const svc = createMultiServer({ root: args.root });
   const actualPort = await svc.start(port);
-  console.log(`wicked-interactive (single-doc) serving ${dir} on http://localhost:${actualPort}`);
-  console.log(`  head:   http://localhost:${actualPort}/doc`);
-  console.log(`  events: http://localhost:${actualPort}/events`);
+  const base = `http://localhost:${actualPort}`;
+  console.log(`wicked-interactive (multi-doc) serving ${args.root} on ${base}`);
+  console.log(`  docs:   ${base}/api/docs`);
+  console.log(`  open:   ${base}/?doc=<name>`);
+  console.log(`  loop:   wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --cursor-init latest`);
+
   const shutdown = async () => { await svc.stop(); process.exit(0); };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
