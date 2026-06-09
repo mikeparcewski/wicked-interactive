@@ -8,9 +8,6 @@ export default function InstallGate({ preflight, onRetry }) {
   if (!preflight || preflight.ok) return null;
   const required = preflight.required || {};
   const hint = preflight.install_hint || [
-    "/plugin marketplace add mikeparcewski/wicked-prezzie",
-    "/plugin install wicked-prezzie",
-    "",
     "/plugin marketplace add mikeparcewski/wicked-garden",
     "/plugin install wicked-garden",
     "",

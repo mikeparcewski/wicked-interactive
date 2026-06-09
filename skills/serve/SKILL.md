@@ -34,18 +34,19 @@ WI_VER="$(node -p "require('$WI_HOME/package.json').version")"
 
 ## Step 1 — Set up the helper tools (auto-install)
 
-The editor needs three sibling tools — `wicked-prezzie`, `wicked-garden`, and `wicked-brain`
-(ADR-0016). Don't make the user install them by hand. Run the setup script (builtin-only — runs
-straight from the plugin dir, no deps needed), which installs **only what's missing** and prints
-every command before it runs (transparency — nothing installed silently):
+The editor needs two sibling tools — `wicked-garden` and `wicked-brain` (ADR-0016; prezzie was
+absorbed into wicked-interactive itself, ADR-0020). Don't make the user install them by hand. Run
+the setup script (builtin-only — runs straight from the plugin dir, no deps needed), which
+installs **only what's missing** and prints every command before it runs (transparency — nothing
+installed silently):
 
 ```bash
 node "$WI_HOME/bin/ensure-siblings.mjs"
 ```
 
-Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the three
-helper tools wicked-interactive needs (wicked-prezzie, wicked-garden, wicked-brain). You'll see
-each install command as it runs."* If everything is already present the script is a no-op (exit 0).
+Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the two
+helper tools wicked-interactive needs (wicked-garden, wicked-brain). You'll see each install
+command as it runs."* If everything is already present the script is a no-op (exit 0).
 
 If it exits non-zero, it couldn't finish (usually `claude` isn't on PATH because you're not inside
 Claude Code). It prints the exact remaining commands — relay those and stop. The in-app

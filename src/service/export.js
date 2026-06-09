@@ -2,8 +2,8 @@
 //
 // HTML: inline local stylesheets, scripts, images (data-URI), and url() refs inside inlined
 //       CSS, so the file renders + stays interactive opened straight from disk (no server).
-// PDF:  render the self-contained HTML via headless Chrome (the primitive wicked-prezzie
-//       wraps; wicked-prezzie itself is a plugin/skill, not an importable library).
+// PDF:  render the self-contained HTML via headless Chrome (the same primitive the absorbed
+//       prezzie export pipeline used — ADR-0020).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";

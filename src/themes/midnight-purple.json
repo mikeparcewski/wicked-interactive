@@ -1,0 +1,53 @@
+{
+  "name": "midnight-purple",
+  "display_name": "Midnight Purple",
+  "description": "Dark theme with purple accents \u2014 matches wicked-pptx test slides",
+  "colors": {
+    "background": "#0A0A0F",
+    "surface": "#13091D",
+    "primary": "#A100FF",
+    "secondary": "#6B2FA0",
+    "accent": "#F59E0B",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A0A0B0",
+    "text_muted": "#6B6B80",
+    "border": "#2A2A3D",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "error": "#EF4444"
+  },
+  "fonts": {
+    "heading": "Calibri",
+    "body": "Calibri",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "title": "48px",
+    "subtitle": "28px",
+    "heading": "36px",
+    "subheading": "24px",
+    "body": "18px",
+    "caption": "13px",
+    "small": "11px"
+  },
+  "spacing": {
+    "margin": "48px",
+    "gap_large": "32px",
+    "gap_medium": "24px",
+    "gap_small": "16px",
+    "gap_xs": "8px"
+  },
+  "layout": {
+    "viewport_width": 1280,
+    "viewport_height": 720,
+    "content_width": 1184,
+    "content_start_x": 48,
+    "content_start_y": 48
+  },
+  "card": {
+    "background": "#1A1A2E",
+    "border_radius": "12px",
+    "padding": "24px",
+    "shadow": "0 2px 6px rgba(0,0,0,0.15)"
+  }
+}

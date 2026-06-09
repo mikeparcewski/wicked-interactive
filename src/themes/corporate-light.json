@@ -1,0 +1,53 @@
+{
+  "name": "corporate-light",
+  "display_name": "Corporate Light",
+  "description": "Light background with navy primary and teal accent",
+  "colors": {
+    "background": "#FFFFFF",
+    "surface": "#F8FAFC",
+    "primary": "#1E3A5F",
+    "secondary": "#2563EB",
+    "accent": "#0891B2",
+    "text_primary": "#1E293B",
+    "text_secondary": "#64748B",
+    "text_muted": "#94A3B8",
+    "border": "#E2E8F0",
+    "success": "#059669",
+    "warning": "#D97706",
+    "error": "#DC2626"
+  },
+  "fonts": {
+    "heading": "Calibri",
+    "body": "Calibri",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "title": "44px",
+    "subtitle": "26px",
+    "heading": "34px",
+    "subheading": "22px",
+    "body": "18px",
+    "caption": "13px",
+    "small": "11px"
+  },
+  "spacing": {
+    "margin": "48px",
+    "gap_large": "32px",
+    "gap_medium": "24px",
+    "gap_small": "16px",
+    "gap_xs": "8px"
+  },
+  "layout": {
+    "viewport_width": 1280,
+    "viewport_height": 720,
+    "content_width": 1184,
+    "content_start_x": 48,
+    "content_start_y": 48
+  },
+  "card": {
+    "background": "#FFFFFF",
+    "border_radius": "8px",
+    "padding": "24px",
+    "shadow": "0 1px 3px rgba(0,0,0,0.1)"
+  }
+}

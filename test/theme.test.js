@@ -66,6 +66,15 @@ test("resolveThemeTokens reads a theme JSON from an explicit themesDir", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("resolveThemeTokens reads the in-repo theme library by default (prezzie absorbed, ADR-0020)", () => {
+  // No themesDir override — must resolve from src/themes/ that shipped with the package.
+  const mp = resolveThemeTokens("midnight-purple");
+  assert.equal(mp.name, "midnight-purple");
+  assert.ok(mp.colors && mp.colors.primary, "in-repo theme has color tokens");
+  const cl = resolveThemeTokens("corporate-light");
+  assert.equal(cl.name, "corporate-light");
+});
+
 test("resolveThemeTokens falls back to DEFAULT_THEME when the file is missing", () => {
   const dir = mkdtempSync(join(tmpdir(), "wi-themes-"));
   try {

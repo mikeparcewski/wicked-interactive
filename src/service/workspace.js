@@ -41,7 +41,7 @@ function highestVersionOnDisk(dir) {
 export function initWorkspace(dir, html, opts = {}) {
   mkdirSync(dir, { recursive: true });
   const anchored = opts.instrument === false ? html : instrument(html).html;
-  // Apply the prezzie-derived base theme so every version (including v0) shares a consistent
+  // Apply the in-repo base theme so every version (including v0) shares a consistent
   // look (ADR-0016 Slice C). Idempotent + anchor-free, so INV-1/INV-2 are unaffected.
   const prepared = themed(anchored, opts);
   atomicWrite(join(dir, "_v0.html"), prepared);
