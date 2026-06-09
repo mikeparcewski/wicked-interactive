@@ -52,6 +52,13 @@ If it exits non-zero, it couldn't finish (usually `claude` isn't on PATH because
 Claude Code). It prints the exact remaining commands — relay those and stop. The in-app
 install-gate is the same safety net in the browser. Respect `WI_NO_AUTOINSTALL=1`.
 
+**Warm the brain now (ADR-0021).** wicked-brain is a REQUIRED component — it's how authored
+content stays grounded in the user's real numbers and prior decisions (assist Steps 6 + 9). The
+brain server auto-starts on first call, but a cold start mid-edit reads as a hang, so start it up
+front: invoke the **`wicked-brain-server`** skill (or any `wicked-brain` skill, which auto-starts
+it). A brain that's installed-but-down silently no-ops grounding — warming it here makes the
+"grounded, not plausibly-wrong" guarantee real instead of best-effort.
+
 ## Step 2 — Pick the documents root
 
 Ask the user where their documents live, or default to `~/wicked-interactive/docs`. This is
