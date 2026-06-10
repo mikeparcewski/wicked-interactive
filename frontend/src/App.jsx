@@ -423,6 +423,7 @@ export default function App() {
               </span>
               <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("html")}>HTML</button>
               <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>PDF</button>
+              <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pptx")} title="Export as native, editable PowerPoint">PPTX</button>
             </div>
           )}
         </div>

@@ -22,6 +22,7 @@ import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
+import { exportPptx } from "./pptx.js";
 import { preflight } from "./preflight.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -92,9 +93,11 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     const version = Number(req.body?.version);
     const format = String(req.body?.format || "html").toLowerCase();
     if (!Number.isInteger(version)) return res.status(400).json({ error: "version (number) required" });
-    if (format !== "html" && format !== "pdf") return res.status(400).json({ error: "format must be html or pdf" });
+    if (!["html", "pdf", "pptx"].includes(format)) return res.status(400).json({ error: "format must be html, pdf, or pptx" });
     try {
-      const result = format === "pdf" ? exportPdf(dir, version) : exportHtml(dir, version);
+      const result = format === "pdf" ? exportPdf(dir, version)
+        : format === "pptx" ? exportPptx(dir, version)
+        : exportHtml(dir, version);
       const file = basename(result.path);
       const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
       emit("wicked.export.requested", { version, format });
@@ -111,8 +114,11 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
     const filePath = join(dir, "exports", name);
     if (!existsSync(filePath)) return res.status(404).send("not found");
-    const isPdf = name.toLowerCase().endsWith(".pdf");
-    res.setHeader("Content-Type", isPdf ? "application/pdf" : "text/html; charset=utf-8");
+    const lower = name.toLowerCase();
+    const type = lower.endsWith(".pdf") ? "application/pdf"
+      : lower.endsWith(".pptx") ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      : "text/html; charset=utf-8";
+    res.setHeader("Content-Type", type);
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
     res.sendFile(filePath);
   });

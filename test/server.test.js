@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
+import { pptxReady } from "../src/service/pptx.js";
 
 async function boot() {
   const dir = mkdtempSync(join(tmpdir(), "wi-srv-"));
@@ -97,6 +98,38 @@ test("GET /api/export/file rejects path-traversal attempts", async () => {
   const { base, cleanup } = await boot();
   try {
     assert.equal((await fetch(`${base}/api/export/file/${encodeURIComponent("../_v0.html")}`)).status, 400);
+  } finally { await cleanup(); }
+});
+
+test("POST /api/export pptx — builds a deck where python-pptx exists, else a clean 400 (ADR-0020)", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/export`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 0, format: "pptx" }),
+    });
+    if (pptxReady().ok) {
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.match(body.file, /\.pptx$/);
+      const dl = await fetch(`${base}${body.download}`);
+      assert.equal(dl.status, 200);
+      assert.match(dl.headers.get("content-type") || "", /presentationml|octet-stream/);
+    } else {
+      assert.equal(res.status, 400);
+      assert.match((await res.json()).error, /python-pptx/);
+    }
+  } finally { await cleanup(); }
+});
+
+test("POST /api/export rejects an unknown format", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    const res = await fetch(`${base}/api/export`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 0, format: "keynote" }),
+    });
+    assert.equal(res.status, 400);
   } finally { await cleanup(); }
 });
 
