@@ -32,18 +32,27 @@ test("exportPptx on a missing version throws", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test(READY.ok ? "exportPptx builds a valid .pptx (PK zip) from a version" : "exportPptx throws PPTX_DEP_MISSING when python-pptx is absent", () => {
+// Deterministic in every environment: force the not-ready state so the lazy-dependency
+// contract is exercised on CI (no python-pptx) AND locally (has it).
+test("exportPptx throws PPTX_DEP_MISSING when python-pptx is unavailable", () => {
   const dir = ws();
   try {
-    if (READY.ok) {
-      const { path, bytes } = exportPptx(dir, 0, { ready: READY });
-      assert.ok(bytes > 1000, "a real deck is more than a kilobyte");
-      const head = readFileSync(path);
-      assert.equal(head[0], 0x50); assert.equal(head[1], 0x4b); // "PK" — .pptx is a zip
-    } else {
-      const e = assert.throws(() => exportPptx(dir, 0, { ready: READY }));
-      assert.equal(e.code, "PPTX_DEP_MISSING");
-      assert.match(e.message, /python-pptx/);
-    }
+    let caught;
+    try { exportPptx(dir, 0, { ready: { ok: false, python: null, hint: "pip install python-pptx" } }); }
+    catch (e) { caught = e; }
+    assert.ok(caught, "must throw when the dependency is missing");
+    assert.equal(caught.code, "PPTX_DEP_MISSING");
+    assert.match(caught.message, /python-pptx/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Only where python-pptx is actually installed — a proper skip on CI, not a failure.
+test("exportPptx builds a valid .pptx (PK zip) from a version", { skip: READY.ok ? false : "python-pptx not installed" }, () => {
+  const dir = ws();
+  try {
+    const { path, bytes } = exportPptx(dir, 0, { ready: READY });
+    assert.ok(bytes > 1000, "a real deck is more than a kilobyte");
+    const head = readFileSync(path);
+    assert.equal(head[0], 0x50); assert.equal(head[1], 0x4b); // "PK" — .pptx is a zip
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
