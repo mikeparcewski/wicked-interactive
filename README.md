@@ -73,4 +73,4 @@ That's genuinely it. The first time, it sets up a few helper tools behind the sc
 
 ---
 
-MIT licensed — see [LICENSE](LICENSE). Built on [wicked-bus](https://github.com/mikeparcewski/wicked-bus) (the event spine the UI, service, and agent all speak), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain). Presentation craft from [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie) is now built in.
+MIT licensed — see [LICENSE](LICENSE). Built on [wicked-bus](https://github.com/mikeparcewski/wicked-bus) (the event spine the UI, service, and agent all speak), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain). Presentation craft is built in.
