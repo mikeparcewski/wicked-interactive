@@ -4,6 +4,14 @@
   "description": "Interactive HTML & Presentation Builder with an in-browser feedback loop for business users.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikeparcewski/wicked-interactive.git"
+  },
+  "homepage": "https://github.com/mikeparcewski/wicked-interactive#readme",
+  "bugs": {
+    "url": "https://github.com/mikeparcewski/wicked-interactive/issues"
+  },
   "exports": {
     ".": "./src/index.js"
   },
