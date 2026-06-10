@@ -1,6 +1,6 @@
 {
   "name": "wicked-interactive",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Interactive HTML & presentation builder with an in-browser feedback loop for non-technical business users. Build a draft, review it in the browser, highlight any block, attach plain-language feedback, and watch it regenerate live — with the supervising Claude session as the intelligence in the loop. Versioned, forkable, and exportable to self-contained HTML or PDF.",
   "author": {
     "name": "Mike Parcewski",
@@ -20,7 +20,7 @@
     "self-contained-export",
     "html-to-pdf",
     "business-users",
-    "wicked-prezzie",
-    "wicked-bus"
+    "wicked-bus",
+    "event-driven"
   ]
 }

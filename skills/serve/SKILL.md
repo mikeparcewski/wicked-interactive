@@ -34,22 +34,30 @@ WI_VER="$(node -p "require('$WI_HOME/package.json').version")"
 
 ## Step 1 — Set up the helper tools (auto-install)
 
-The editor needs three sibling tools — `wicked-prezzie`, `wicked-garden`, and `wicked-brain`
-(ADR-0016). Don't make the user install them by hand. Run the setup script (builtin-only — runs
-straight from the plugin dir, no deps needed), which installs **only what's missing** and prints
-every command before it runs (transparency — nothing installed silently):
+The editor needs two sibling tools — `wicked-garden` and `wicked-brain` (ADR-0016; prezzie was
+absorbed into wicked-interactive itself, ADR-0020). Don't make the user install them by hand. Run
+the setup script (builtin-only — runs straight from the plugin dir, no deps needed), which
+installs **only what's missing** and prints every command before it runs (transparency — nothing
+installed silently):
 
 ```bash
 node "$WI_HOME/bin/ensure-siblings.mjs"
 ```
 
-Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the three
-helper tools wicked-interactive needs (wicked-prezzie, wicked-garden, wicked-brain). You'll see
-each install command as it runs."* If everything is already present the script is a no-op (exit 0).
+Tell the user, in plain language, what's happening — e.g. *"First run: I'm setting up the two
+helper tools wicked-interactive needs (wicked-garden, wicked-brain). You'll see each install
+command as it runs."* If everything is already present the script is a no-op (exit 0).
 
 If it exits non-zero, it couldn't finish (usually `claude` isn't on PATH because you're not inside
 Claude Code). It prints the exact remaining commands — relay those and stop. The in-app
 install-gate is the same safety net in the browser. Respect `WI_NO_AUTOINSTALL=1`.
+
+**Warm the brain now (ADR-0021).** wicked-brain is a REQUIRED component — it's how authored
+content stays grounded in the user's real numbers and prior decisions (assist Steps 6 + 9). The
+brain server auto-starts on first call, but a cold start mid-edit reads as a hang, so start it up
+front: invoke the **`wicked-brain-server`** skill (or any `wicked-brain` skill, which auto-starts
+it). A brain that's installed-but-down silently no-ops grounding — warming it here makes the
+"grounded, not plausibly-wrong" guarantee real instead of best-effort.
 
 ## Step 2 — Pick the documents root
 
@@ -65,18 +73,27 @@ DOCS="${WI_DOCS:-$HOME/wicked-interactive/docs}"; mkdir -p "$DOCS"; echo "$DOCS"
 The service (express + the built UI + its npm deps) runs from the **published package via
 `npx`** — so it works on any machine without the cloned plugin needing `node_modules` or a
 frontend build. `npx` fetches + caches the matching version, and `frontend/dist` ships inside the
-package. Pin to the plugin's own version so the runtime matches the installed plugin. Run it
-with `--watch` as a background Bash invocation — do NOT block on it:
+package. Pin to the plugin's own version so the runtime matches the installed plugin.
+
+First, warm the bus — it is the REQUIRED control plane (ADR-0019/0021), and this also seeds its
+data dir + warms the `npx` cache so the agent's later `wicked-bus subscribe`/`emit` calls are
+instant:
 
 ```bash
-npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS" --watch
+npx -y wicked-bus init >/dev/null 2>&1 || true
+```
+
+Then start the service as a background Bash invocation — do NOT block on it:
+
+```bash
+npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS"
 ```
 
 Developing locally from the repo, where `$WI_VER` may not be published yet? Run the local binary
 instead (it resolves its deps from the repo's `node_modules`):
 
 ```bash
-node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS" --watch
+node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS"
 ```
 
 Read the first lines of output to learn the actual port:
@@ -114,7 +131,8 @@ forever. `assist` is what makes the agent-in-the-loop guarantee real.
 ## Step 6 — Stop it when the user is done
 
 You started the service, so you own stopping it. When the user is finished (they say so, or
-the session is wrapping up), **kill the `serve` process** (and the `wi-watch` tail if you
-started one) so nothing is left bound to the port. Documents persist on disk under `--root`,
-so stopping is non-destructive — restarting `serve` later picks up right where they left off.
-Leave any sibling servers (wicked-brain, etc.) alone.
+the session is wrapping up), **kill the `serve` process** (and stop the `wicked-bus subscribe`
+tail you started in `assist`) so nothing is left bound to the port. Documents persist on disk
+under `--root` and the bus is just transport, so stopping is non-destructive — restarting
+`serve` later picks up right where they left off. Leave any sibling servers (wicked-brain, the
+shared wicked-bus, etc.) alone.

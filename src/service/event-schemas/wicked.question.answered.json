@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Question answered",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "request_id",
+    "answer"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

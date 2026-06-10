@@ -1,0 +1,53 @@
+{
+  "name": "warm-dark",
+  "display_name": "Warm Dark",
+  "description": "Dark charcoal with coral primary and gold accent",
+  "colors": {
+    "background": "#1A1A2E",
+    "surface": "#16213E",
+    "primary": "#FF6B6B",
+    "secondary": "#C44569",
+    "accent": "#FFD93D",
+    "text_primary": "#F8F8F2",
+    "text_secondary": "#B0B0C0",
+    "text_muted": "#6B6B80",
+    "border": "#2D2D44",
+    "success": "#6BCB77",
+    "warning": "#FFD93D",
+    "error": "#FF6B6B"
+  },
+  "fonts": {
+    "heading": "Calibri",
+    "body": "Calibri",
+    "mono": "Consolas"
+  },
+  "sizes": {
+    "title": "48px",
+    "subtitle": "28px",
+    "heading": "36px",
+    "subheading": "24px",
+    "body": "18px",
+    "caption": "13px",
+    "small": "11px"
+  },
+  "spacing": {
+    "margin": "48px",
+    "gap_large": "32px",
+    "gap_medium": "24px",
+    "gap_small": "16px",
+    "gap_xs": "8px"
+  },
+  "layout": {
+    "viewport_width": 1280,
+    "viewport_height": 720,
+    "content_width": 1184,
+    "content_start_x": 48,
+    "content_start_y": 48
+  },
+  "card": {
+    "background": "#16213E",
+    "border_radius": "12px",
+    "padding": "24px",
+    "shadow": "0 2px 6px rgba(0,0,0,0.2)"
+  }
+}

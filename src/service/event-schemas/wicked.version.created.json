@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "New version landed",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "version",
+    "kind"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "parent": {
+      "type": "integer"
+    },
+    "kind": {
+      "enum": [
+        "deterministic",
+        "structural",
+        "generated",
+        "fork",
+        "demo"
+      ]
+    },
+    "html_file": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,12 +1,12 @@
-// structural.js — delegate structural-change edits to the supervising agent (ADR-0010).
+// structural.js — apply the agent's structural-change edits as a follow-on version (ADR-0019).
 //
-// The service writes requests/_v{n}.request.json; the agent edits each fragment
-// (preserving data-wid) and writes requests/_v{n}.response.json; the service applies the
-// response through the INV-2 gate, producing a follow-on version (write-once, INV-4).
+// The agent receives the structural items inline on `wicked.feedback.processed` and emits its
+// edited fragments back on `wicked.edit.completed`; the service applies them through the INV-2
+// gate, producing a follow-on version (write-once, INV-4). `extractFragment` + `splitItems`
+// are the shared helpers the feedback path uses to pull current markup for the agent.
 
-import { readFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 import * as cheerio from "cheerio";
+import { join } from "node:path";
 import { regenerate } from "../core/regenerate.js";
 import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
@@ -36,38 +36,17 @@ const rootWid = (fragmentHtml) => {
 };
 
 /**
- * Write the structural work request for version `version` (the partial). Each item gets
- * its current fragment extracted from the partial HTML so the agent edits the real markup.
- * @returns {{ requestFile: string, count: number }}
- */
-export function writeStructuralRequest(dir, { version, baseHtmlFile, structural, documentId = dir }) {
-  mkdirSync(join(dir, REQUESTS_DIR), { recursive: true });
-  const html = readFileSync(join(dir, baseHtmlFile), "utf-8");
-  const items = structural.map((it) => ({
-    selector: it.selector,
-    instruction: it.instruction,
-    fragment: extractFragment(html, it.selector),
-  }));
-  const requestFile = `_v${version}.request.json`;
-  const body = { document_id: documentId, version, base_html: baseHtmlFile, items };
-  atomicWrite(join(dir, REQUESTS_DIR, requestFile), JSON.stringify(body, null, 2));
-  return { requestFile, count: items.length };
-}
-
-/**
- * Apply an agent response: finalize the structural edits as a follow-on version.
- * Response shape: { version, results: [{ selector, fragment }] }.
- * The INV-2 gate (in regenerate) rejects any fragment that dropped a data-wid.
+ * Apply the agent's structural results (from a `wicked.edit.completed` event) as a follow-on
+ * version. The INV-2 gate (in regenerate) rejects any fragment that dropped a data-wid.
+ * Result shape: { version (the parent), results: [{selector, fragment} | {selector, remove:true}] }.
  * @returns {Promise<{version:number, parent:number, applied:string[], rejected:object[]}>}
  */
-export async function applyStructuralResponse(dir, responseFile, opts = {}) {
-  const resp = JSON.parse(readFileSync(join(dir, REQUESTS_DIR, responseFile), "utf-8"));
-  const parent = resp.version;
-  const bySelector = new Map(resp.results.map((r) => [r.selector, r.fragment]));
-
+export async function applyStructuralResults(dir, { version, results }, opts = {}) {
+  const parent = version;
+  const bySelector = new Map(results.map((r) => [r.selector, r.fragment]));
   const baseHtml = readVersionHtml(dir, parent);
   const feedback = {
-    items: resp.results.map((r) => (r.remove
+    items: results.map((r) => (r.remove
       ? { selector: r.selector, type: "remove" }
       : { selector: r.selector, type: "structural-change", instruction: "(delegated)" })),
   };
@@ -88,16 +67,9 @@ export async function applyStructuralResponse(dir, responseFile, opts = {}) {
   const html = themed(instrument(regenerated).html, opts);
 
   let manifest = loadManifest(dir);
-  const version = nextVersionNumber(manifest);
-  atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: responseFile }));
+  const newVersion = nextVersionNumber(manifest);
+  atomicWrite(join(dir, `_v${newVersion}.html`), html);
+  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? null }));
   saveManifest(dir, manifest);
-
-  if (typeof opts.emit === "function") {
-    opts.emit("HTML_UPDATED", {
-      document_id: opts.documentId ?? dir,
-      version, html_file: `_v${version}.html`, prev_version: parent, ts: new Date().toISOString(),
-    });
-  }
-  return { version, parent, applied, rejected };
+  return { version: newVersion, parent, applied, rejected };
 }

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Error raised",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "source",
+    "error"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "error": {
+      "type": "string"
+    },
+    "context": {}
+  },
+  "additionalProperties": true
+}

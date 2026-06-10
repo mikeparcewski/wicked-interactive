@@ -10,7 +10,7 @@ import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFeedback, postFork, postExport, postAnswer, postMessage, getConversation, listDocs, createDoc, postDemoRecord, postDemoGif, getPreflight, getSources, addSources } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -39,7 +39,6 @@ export default function App() {
 
   const iframeRef = useRef(null);
   const pendingScroll = useRef(null);
-  const submittedVersion = useRef(null);
   const viewingRef = useRef(null);
   const headRef = useRef(null);
   const isDemoRef = useRef(false);                       // demos aren't HTML-editable (ADR-0018)
@@ -73,8 +72,8 @@ export default function App() {
   async function attachSources(paths, note) {
     setShowPicker(false);
     try {
-      const r = await addSources(paths, note);   // broadcast echoes "sources" back to all clients
-      setSources(r.sources || []);
+      // Emit the attach intent; the source.attached frame echoes back and updates the panel.
+      await emitSourceAttached(paths.map((p) => ({ path: p, note })));
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
     }
@@ -166,52 +165,65 @@ export default function App() {
     doc.addEventListener("scroll", recompute, { passive: true, capture: true });
   }, [recompute]);
 
-  // ---- SSE: hot-reload + lock + chat transcript ----
+  // ---- Bus SSE bridge: hot-reload + lock + chat transcript (ADR-0019) ----
+  // Handlers are keyed by event_type; useSse filters every frame to this doc.
   useSse(eventsUrl(), {
-    "html-updated": async () => {
+    "wicked.version.created": async (payload) => {
       const wasFollowing = viewingRef.current == null || viewingRef.current === headRef.current;
       const m = await refreshVersions();
       if (wasFollowing) {
         pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
         setViewing(m.head);
       }
+      // Agent-produced versions (structural edit, generated draft, demo re-record) clear the
+      // working lock — the deterministic case clears on feedback.processed instead.
+      if (["structural", "generated", "demo"].includes(payload.kind)) { setProcessing(false); setQuestion(null); }
     },
-    processed: (data) => {
-      setStatus(summarize(data));
-      appendChat({ role: "event", text: summarize(data).text });
-      if (data.structural) { setProcessing(false); submittedVersion.current = null; return; }
-      if (submittedVersion.current != null && data.version === submittedVersion.current) {
-        if (data.awaiting_structural > 0) {
-          setProcMsg(`Working on it… (${data.awaiting_structural} block${data.awaiting_structural > 1 ? "s" : ""})`);
-        } else {
-          setProcessing(false);
-          submittedVersion.current = null;
-        }
+    "wicked.feedback.processed": (payload) => {
+      setStatus(summarize(payload));
+      appendChat({ role: "event", text: summarize(payload).text });
+      if (payload.awaiting_structural > 0) {
+        setProcMsg(`Working on it… (${payload.awaiting_structural} block${payload.awaiting_structural > 1 ? "s" : ""})`);
+      } else {
+        setProcessing(false);
       }
     },
-    status: (data) => {
-      if (data.message || data.question) appendChat({ role: "agent", text: data.question || data.message });
-      if (data.state === "asking") {
-        setQuestion({ text: data.question, options: data.options || [], requestId: data.requestId });
-        setProcMsg(data.message || "A quick question");
+    "wicked.status.posted": (payload) => {
+      if (payload.message || payload.question) appendChat({ role: "agent", text: payload.question || payload.message });
+      if (payload.state === "asking") {
+        setQuestion({ text: payload.question, options: payload.options || [], requestId: payload.request_id });
+        setProcMsg(payload.message || "A quick question");
         setProcessing(true);
-      } else if (data.state === "processing" || data.state === "awaiting-agent") {
+      } else if (payload.state === "processing") {
         // Agent-driven redraw (e.g. from chat) — show the loading overlay on the document.
         setProcessing(true);
-        if (data.message) setProcMsg(data.message);
+        if (payload.message) setProcMsg(payload.message);
       } else {
-        if (data.message) setProcMsg(data.message);
-        if (data.state === "complete") { setProcessing(false); setQuestion(null); submittedVersion.current = null; }
-        if (data.state === "error") { setProcessing(false); setStatus({ kind: "error", text: data.message || "error" }); }
+        // "working" is a non-lock progress state (demo recording, source indexing).
+        if (payload.message) setProcMsg(payload.message);
+        if (payload.state === "complete") { setProcessing(false); setQuestion(null); }
+        if (payload.state === "error") { setProcessing(false); setStatus({ kind: "error", text: payload.message || "error" }); }
       }
     },
-    message: (data) => appendChat({ role: data.role || "user", text: data.text }),
-    sources: (data) => { if (Array.isArray(data.sources)) setSources(data.sources); },
-    error: (data) => {
-      setProcessing(false);
-      setStatus({ kind: "error", text: data.error || "regeneration failed" });
+    "wicked.chat.posted": (payload) => appendChat({ role: payload.role || "user", text: payload.text }),
+    "wicked.source.attached": (payload) => {
+      setSources((prev) => {
+        const known = new Set(prev.map((s) => s.path));
+        const merged = [...prev];
+        for (const a of (payload.added || [])) {
+          if (a.path && !known.has(a.path)) { known.add(a.path); merged.push({ path: a.path, note: a.note || "", status: "pending" }); }
+        }
+        return merged;
+      });
     },
-  });
+    "wicked.source.updated": (payload) => {
+      setSources((prev) => prev.map((s) => (s.path === payload.path ? { ...s, status: payload.status } : s)));
+    },
+    "wicked.error.raised": (payload) => {
+      setProcessing(false);
+      setStatus({ kind: "error", text: payload.error || "something went wrong" });
+    },
+  }, { docId: currentDoc });
 
   // ---- actions ----
   async function submitComment({ mode, text }) {
@@ -230,8 +242,7 @@ export default function App() {
     setStatus(null);
     setQuestion(null);
     try {
-      const { version } = await postFeedback([item]);
-      submittedVersion.current = version;
+      await emitFeedback([item]);   // the lock clears on feedback.processed / version.created
       if (mode !== "change-text") setProcMsg("Working on it…");
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
@@ -245,8 +256,7 @@ export default function App() {
     setProcMsg("Removing…");
     setStatus(null);
     try {
-      const { version } = await postFeedback([buildItem({ selector, type: "remove" })]);
-      submittedVersion.current = version;   // deterministic — unlocks on `processed`
+      await emitFeedback([buildItem({ selector, type: "remove" })]);
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
       setProcessing(false);
@@ -254,7 +264,7 @@ export default function App() {
   }
 
   async function sendChat(text) {
-    try { await postMessage(text); } // the broadcast echoes it into the transcript
+    try { await emitChat(text); } // the bridge echoes it into the transcript
     catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
   }
 
@@ -262,7 +272,7 @@ export default function App() {
     const q = question;
     setQuestion(null);
     setProcMsg("Thanks — continuing…");
-    try { await postAnswer(q.requestId, answer); }
+    try { await emitAnswer(q.requestId, answer); }
     catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
@@ -326,7 +336,7 @@ export default function App() {
 
   async function recordDemoNow() {
     setStatus({ kind: "ok", text: "Recording…" });
-    try { await postDemoRecord(); }   // status + html-updated arrive over SSE
+    try { await emitDemoRecord(); }   // status + version.created arrive over the bus bridge
     catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
@@ -413,6 +423,7 @@ export default function App() {
               </span>
               <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("html")}>HTML</button>
               <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pdf")}>PDF</button>
+              <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pptx")} title="Export as native, editable PowerPoint">PPTX</button>
             </div>
           )}
         </div>

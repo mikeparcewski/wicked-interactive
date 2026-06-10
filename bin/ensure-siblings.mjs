@@ -25,14 +25,12 @@ const PLAYWRIGHT_STEPS = [
   "playwright-cli install --skills",
 ];
 
-// Each sibling installs differently — an ordered list of shell commands per plugin.
-//   prezzie / garden → Claude Code plugins (marketplace add, then install)
-//   brain            → npm package, run via npx
+// Each sibling installs differently — an ordered list of shell commands per tool.
+//   garden → Claude Code plugin (marketplace add, then install)
+//   brain  → npm package, run via npx
+// (wicked-prezzie was absorbed into wicked-interactive — ADR-0020 — so it's no longer a
+//  sibling. wicked-bus is a hard npm dependency of this package; the serve skill seeds it.)
 const INSTALL_STEPS = {
-  "wicked-prezzie": [
-    "claude plugin marketplace add mikeparcewski/wicked-prezzie",
-    "claude plugin install wicked-prezzie",
-  ],
   "wicked-garden": [
     "claude plugin marketplace add mikeparcewski/wicked-garden",
     "claude plugin install wicked-garden",

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chat message posted",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "role",
+    "text"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "user",
+        "agent",
+        "assistant"
+      ]
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Reference source attached",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "added"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "added": {
+      "type": "array",
+      "items": {}
+    }
+  },
+  "additionalProperties": true
+}

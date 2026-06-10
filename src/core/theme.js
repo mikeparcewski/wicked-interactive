@@ -1,7 +1,7 @@
-// theme.js — turn wicked-prezzie theme tokens into a per-version base <style> block
-// (ADR-0011 theme step, ADR-0016 Slice C). PURE: no filesystem, no plugin discovery — token
-// resolution from the prezzie plugin cache lives in service/theme-source.js. This keeps the
-// core layer side-effect-free and unit-testable.
+// theme.js — turn theme tokens into a per-version base <style> block (ADR-0011 theme step,
+// ADR-0016 Slice C). PURE: no filesystem, no discovery — token resolution from the in-repo
+// theme library (src/themes/, absorbed from prezzie in ADR-0020) lives in
+// service/theme-source.js. This keeps the core layer side-effect-free and unit-testable.
 //
 // The block uses element-level selectors so it is a genuine BASE layer: a document's own
 // classed/inline styles win over it. It is injected FIRST (lowest precedence among equal
@@ -13,9 +13,9 @@ import * as cheerio from "cheerio";
 
 const THEME_MARKER = "data-wi-theme";
 
-// Bundled fallback — a copy of prezzie's `corporate-light` tokens. Resilience against
-// prezzie's on-disk layout changing, NOT plugin-optional behavior: the preflight still
-// requires prezzie (ADR-0016). Guarantees the product themes consistently regardless.
+// Bundled fallback — a copy of the `corporate-light` tokens that also ship as
+// src/themes/corporate-light.json. The ultimate default if a named theme file is missing or
+// corrupt, so a version is always themed (ADR-0020).
 export const DEFAULT_THEME = {
   name: "corporate-light",
   colors: {

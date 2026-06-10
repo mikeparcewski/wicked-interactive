@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { preflight } from "../src/service/preflight.js";
 import { createMultiServer } from "../src/service/server.js";
 
-process.env.WICKED_NO_BUS = "1";
+process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-pf-"));
 
 function withFakePluginRoot(installed) {
   const root = mkdtempSync(join(tmpdir(), "wi-plugin-"));
@@ -38,8 +38,7 @@ test("preflight reports all-missing when no sibling plugin directories exist", (
   try {
     const out = preflight();
     assert.equal(out.ok, false);
-    assert.deepEqual(out.missing.sort(), ["wicked-brain", "wicked-garden", "wicked-prezzie"]);
-    assert.match(out.install_hint, /\/plugin install wicked-prezzie/);
+    assert.deepEqual(out.missing.sort(), ["wicked-brain", "wicked-garden"]);
     assert.match(out.install_hint, /\/plugin install wicked-garden/);
     assert.match(out.install_hint, /npx wicked-brain/);
   } finally {
@@ -50,7 +49,7 @@ test("preflight reports all-missing when no sibling plugin directories exist", (
 });
 
 test("preflight detects plugin presence via WI_PLUGIN_PATHS", () => {
-  const restore = withFakePluginRoot(["wicked-prezzie", "wicked-garden", "wicked-brain"]);
+  const restore = withFakePluginRoot(["wicked-garden", "wicked-brain"]);
   try {
     const out = preflight();
     assert.equal(out.ok, true);
@@ -60,19 +59,18 @@ test("preflight detects plugin presence via WI_PLUGIN_PATHS", () => {
 });
 
 test("preflight reports the gap when only some plugins are installed", () => {
-  const restore = withFakePluginRoot(["wicked-prezzie"]);
+  const restore = withFakePluginRoot(["wicked-garden"]);
   try {
     const out = preflight();
     assert.equal(out.ok, false);
-    assert.deepEqual(out.missing.sort(), ["wicked-brain", "wicked-garden"]);
-    assert.equal(out.required["wicked-prezzie"].detected, true);
+    assert.deepEqual(out.missing.sort(), ["wicked-brain"]);
+    assert.equal(out.required["wicked-garden"].detected, true);
   } finally { restore(); }
 });
 
 test("wicked-brain is detected via ~/.wicked-brain even without a plugin-cache entry", () => {
-  // Plugin cache has prezzie + garden but NOT brain; ~/.wicked-brain exists in the fake home.
+  // Plugin cache has garden but NOT brain; ~/.wicked-brain exists in the fake home.
   const home = mkdtempSync(join(tmpdir(), "wi-home-"));
-  mkdirSync(join(home, ".claude/plugins/cache/wicked-prezzie"), { recursive: true });
   mkdirSync(join(home, ".claude/plugins/cache/wicked-garden"), { recursive: true });
   mkdirSync(join(home, ".wicked-brain"), { recursive: true });
   const prevHome = process.env.HOME;
@@ -91,7 +89,7 @@ test("wicked-brain is detected via ~/.wicked-brain even without a plugin-cache e
 });
 
 test("multi-server exposes GET /api/preflight", async () => {
-  const restore = withFakePluginRoot(["wicked-prezzie", "wicked-garden", "wicked-brain"]);
+  const restore = withFakePluginRoot(["wicked-garden", "wicked-brain"]);
   const root = mkdtempSync(join(tmpdir(), "wi-pf-srv-"));
   const svc = createMultiServer({ root });
   const port = await svc.start(0);
@@ -100,7 +98,7 @@ test("multi-server exposes GET /api/preflight", async () => {
     assert.equal(r.status, 200);
     const body = await r.json();
     assert.equal(body.ok, true);
-    assert.ok(body.required["wicked-prezzie"].detected);
+    assert.ok(body.required["wicked-garden"].detected);
   } finally {
     await svc.stop();
     rmSync(root, { recursive: true, force: true });

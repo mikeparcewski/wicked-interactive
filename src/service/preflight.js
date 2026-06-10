@@ -1,9 +1,11 @@
-// preflight.js — detect required sibling plugins (ADR-0016).
+// preflight.js — detect required sibling tools (ADR-0016; prezzie absorbed in ADR-0020).
 //
-// Each plugin has its own detection rule because they install differently:
-//   wicked-prezzie / wicked-garden  → Claude Code plugin caches (a directory per plugin)
-//   wicked-brain                    → npm package; the on-disk signal is the brain dir
-//                                      under ~/.wicked-brain (or its Windows equivalent).
+// Each tool has its own detection rule because they install differently:
+//   wicked-garden  → Claude Code plugin cache (a directory per plugin)
+//   wicked-brain   → npm package; the on-disk signal is the brain dir under ~/.wicked-brain
+//                    (or its Windows equivalent).
+// (wicked-bus is a hard npm dependency opened fail-fast at serve time — ADR-0021 — so it isn't
+//  a preflight gate here; if it can't open, the service refuses to start.)
 //
 // The plugin-cache list is overrideable via env (`WI_PLUGIN_PATHS`, colon-separated) so
 // non-default installations and tests can be picked up.
@@ -42,16 +44,14 @@ function brainInstalled() {
 }
 
 const DETECTORS = {
-  "wicked-prezzie": () => inPluginCache("wicked-prezzie"),
   "wicked-garden":  () => inPluginCache("wicked-garden"),
   "wicked-brain":   brainInstalled,
 };
 
 // Each sibling installs differently, so a single command can't cover them. The hint shown
-// in the install gate maps each MISSING plugin to its real install step (prezzie/garden are
-// Claude Code plugins; brain is an npm package run via npx).
+// in the install gate maps each MISSING tool to its real install step (garden is a Claude
+// Code plugin; brain is an npm package run via npx).
 const INSTALL_CMD = {
-  "wicked-prezzie": "/plugin marketplace add mikeparcewski/wicked-prezzie\n/plugin install wicked-prezzie",
   "wicked-garden":  "/plugin marketplace add mikeparcewski/wicked-garden\n/plugin install wicked-garden",
   "wicked-brain":   "npx wicked-brain",
 };

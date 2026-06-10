@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "First draft completed",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "html": {
+      "type": "string"
+    },
+    "html_path": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "anyOf": [
+    {
+      "required": [
+        "html"
+      ]
+    },
+    {
+      "required": [
+        "html_path"
+      ]
+    }
+  ]
+}

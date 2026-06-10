@@ -13,7 +13,7 @@ Good news: you don't have to. Just tell it what you need — out loud, like you'
 No code. No design tickets. No "let me loop in the team." Just you, describing what's in your head, watching it appear.
 
 ```
-Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · video)
+Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · PowerPoint · video)
 ```
 
 If you can say it, you can make it.
@@ -43,7 +43,7 @@ Talk to it like this:
 > *"Make this headline punchier — and that number's $4.2M, not $4M."*
 > *"Honestly? Make the whole thing feel more expensive."*
 
-It hands you a first draft. You click a thing, say what's wrong, and watch it fix itself — live, while you're looking at it. Every version quietly saves, so you can rewind to that one you liked three changes ago — or **fork** it and chase two ideas at once without losing either. When it looks right, export clean HTML or PDF, or grab the video. Done. Go to bed.
+It hands you a first draft. You click a thing, say what's wrong, and watch it fix itself — live, while you're looking at it. Every version quietly saves, so you can rewind to that one you liked three changes ago — or **fork** it and chase two ideas at once without losing either. When it looks right, export clean HTML or PDF, a native editable PowerPoint, or grab the video. Done. Go to bed.
 
 ## Why people get hooked
 
@@ -53,7 +53,7 @@ It hands you a first draft. You click a thing, say what's wrong, and watch it fi
 - 🎬 **Your app becomes a video.** Narrated walkthrough with YouTube-style chapters. Want a different take? Just ask again.
 - ⏪ **You literally cannot lose work.** Every change is a saved version. Rewind to any of them, anytime.
 - 🍴 **Can't decide? Don't.** Fork any version and keep both, side by side.
-- 📤 **Send it to anyone.** One self-contained file — HTML, PDF, or video. Nothing for them to download or figure out.
+- 📤 **Send it to anyone.** One self-contained file — HTML, PDF, native PowerPoint, or video. Nothing for them to download or figure out.
 - 🙅 **No scary black terminal.** Once it's going, it all happens in your browser.
 
 ## Get it running
@@ -73,4 +73,4 @@ That's genuinely it. The first time, it sets up a few helper tools behind the sc
 
 ---
 
-MIT licensed — see [LICENSE](LICENSE). Built on [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain).
+MIT licensed — see [LICENSE](LICENSE). Built on [wicked-bus](https://github.com/mikeparcewski/wicked-bus) (the event spine the UI, service, and agent all speak), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain). Presentation craft from [wicked-prezzie](https://github.com/mikeparcewski/wicked-prezzie) is now built in.
