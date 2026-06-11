@@ -24,7 +24,7 @@
       --accent: #F59E0B;
       --text: #FFFFFF;
       --text-secondary: #A0A0B0;
-      --text-muted: #6B6B80;
+      --text-muted: #8E8EA8;
       --border: #2A2A3D;
       --success: #10B981;
       --grad: linear-gradient(135deg, #A100FF 0%, #6B2FA0 100%);
@@ -54,7 +54,7 @@
       overflow-x: hidden;
     }
 
-    a { color: var(--primary); text-decoration: none; }
+    a { color: #D280FF; text-decoration: none; }
     a:hover { text-decoration: underline; }
 
     :focus-visible {
@@ -690,13 +690,13 @@
           </div>
         </div>
         <div class="live-card" role="img" aria-label="A glass card reshaping mid-edit: a Q3 revenue metric updating from 4.0 million to 4.2 million dollars while the touched block glows amber.">
-          <p class="card-eyebrow">Q3 Board Update</p>
-          <p class="card-h">Revenue, ahead of plan</p>
-          <div class="touched">
+          <p class="card-eyebrow" aria-hidden="true">Q3 Board Update</p>
+          <p class="card-h" aria-hidden="true">Revenue, ahead of plan</p>
+          <div class="touched" aria-hidden="true">
             <p class="card-metric">$<span class="swap"><span class="from">4.0M</span><span class="to" aria-hidden="true">4.2M</span></span></p>
           </div>
-          <div class="card-line"></div>
-          <div class="card-line short"></div>
+          <div class="card-line" aria-hidden="true"></div>
+          <div class="card-line short" aria-hidden="true"></div>
         </div>
       </div>
     </section>
@@ -746,7 +746,7 @@
             <span class="dot" style="background:#A100FF"></span>
             <span class="url">localhost — your draft, live</span>
           </div>
-          <div class="demo-canvas">
+          <div class="demo-canvas" aria-hidden="true">
             <div class="demo-block targeted">
               <h3>Revenue jumped to $4.2M last quarter</h3>
             </div>
@@ -758,7 +758,7 @@
               "make this punchier — and that's $4.2M, not $4M"
             </span>
           </div>
-          <p class="demo-caption">No menus. No re-export. You point, you say it, it changes in place.</p>
+          <p class="demo-caption" aria-hidden="true">No menus. No re-export. You point, you say it, it changes in place.</p>
         </div>
       </div>
     </section>
@@ -846,19 +846,19 @@
         <h2 class="section-title">A glowing timeline you can rewind and branch</h2>
         <p class="section-lead">Every edit quietly saves a version. Don't like where it went three changes ago? Jump back. Can't choose between two directions? Fork and keep both.</p>
         <div class="timeline" role="img" aria-label="A timeline of saved versions: v1 first draft, v2 punchier headline, v3 saved as approved, then a fork branching to chase a second idea.">
-          <div class="vnode">
+          <div class="vnode" aria-hidden="true">
             <div class="bead"></div>
             <div class="vbody"><div class="vlabel">v1 — First draft</div><div class="vmeta">Auto-saved</div></div>
           </div>
-          <div class="vnode">
+          <div class="vnode" aria-hidden="true">
             <div class="bead"></div>
             <div class="vbody"><div class="vlabel">v2 — Punchier headline</div><div class="vmeta">Auto-saved</div></div>
           </div>
-          <div class="vnode saved">
+          <div class="vnode saved" aria-hidden="true">
             <div class="bead"></div>
             <div class="vbody"><div class="vlabel">v3 — Real Q3 numbers</div><div class="vmeta">Approved &check;</div></div>
           </div>
-          <div class="vnode fork">
+          <div class="vnode fork" aria-hidden="true">
             <div class="bead"></div>
             <div class="vbody"><div class="vlabel">v3-b — Forked</div><div class="vmeta">"more premium" take</div></div>
           </div>

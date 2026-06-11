@@ -55,7 +55,7 @@ test("exportHtml produces a self-contained file from a version", () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("exportPdf builds the self-contained HTML and delegates to the renderer", () => {
+test("exportPdf builds the self-contained HTML and delegates to the renderer", async () => {
   const dir = assetDir();
   try {
     initWorkspace(dir, `<h1>Title</h1>`);
@@ -65,7 +65,7 @@ test("exportPdf builds the self-contained HTML and delegates to the renderer", (
       assert.ok(existsSync(htmlPath), "renderer receives a real self-contained HTML file");
       writeFileSync(pdfPath, "%PDF-1.4 fake");
     };
-    const { path } = exportPdf(dir, 0, undefined, { renderer: fakeRenderer });
+    const { path } = await exportPdf(dir, 0, undefined, { renderer: fakeRenderer });
     assert.ok(existsSync(path));
     assert.match(readFileSync(path, "utf-8"), /^%PDF/);
     assert.ok(renderedHtmlPath && existsSync(renderedHtmlPath));

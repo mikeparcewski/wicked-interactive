@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import * as cheerio from "cheerio";
 import { readVersionHtml } from "./fsstore.js";
 
@@ -294,7 +294,9 @@ export function findChrome(override) {
 }
 
 /**
- * Default PDF renderer: headless Chrome --print-to-pdf over the self-contained HTML.
+ * Default PDF renderer: ASYNC headless Chrome --print-to-pdf over the self-contained HTML.
+ * Uses `spawn` (not spawnSync) so a multi-second render never blocks the Node event loop /
+ * SSE heartbeats (issue #18) — mirrors theme-grab.js's chromeUrlRenderer.
  *
  * Page sizing is driven by the `@page` CSS injected into the HTML (issue #12) —
  * new headless honors CSS `@page size` for `--print-to-pdf` automatically — so the
@@ -306,6 +308,7 @@ export function findChrome(override) {
  *  - `noHeaderFooter` (default true): suppress Chrome's date/url header & footer.
  *  - extra `args`: appended verbatim for forward compatibility (e.g. custom flags).
  * Existing callers pass only `{ chromePath }`; the signature/defaults are unchanged.
+ * @returns {Promise<void>}
  */
 export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
   const { chromePath, noHeaderFooter = true, args = [] } = opts;
@@ -314,20 +317,30 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
   const flags = ["--headless=new", "--disable-gpu", "--no-sandbox"];
   if (noHeaderFooter) flags.push("--no-pdf-header-footer");
   flags.push(...args, `--print-to-pdf=${pdfPath}`, `file://${htmlPath}`);
-  const r = spawnSync(chrome, flags, { timeout: 60000 });
-  if (r.status !== 0 || !existsSync(pdfPath)) {
-    throw new Error(`chrome PDF render failed (status ${r.status}): ${r.stderr?.toString().slice(0, 300)}`);
-  }
+  return new Promise((resolveP, reject) => {
+    const child = spawn(chrome, flags, { timeout: 60000 });
+    let stderr = "";
+    child.stderr?.on("data", (d) => { stderr += d; });
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (code !== 0 || !existsSync(pdfPath)) {
+        reject(new Error(`chrome PDF render failed (${signal ? `signal ${signal}` : `status ${code}`}): ${stderr.slice(0, 300)}`));
+      } else {
+        resolveP();
+      }
+    });
+  });
 }
 
 /**
  * Export version → PDF. First builds the self-contained HTML, then renders it.
- * `renderer(htmlPath, pdfPath, opts)` is injectable (tests pass a fake).
- * @returns {{ path: string }}
+ * `renderer(htmlPath, pdfPath, opts)` is injectable (tests pass a fake). Async — awaits
+ * the render so it never blocks the loop (issue #18); `await` tolerates a sync fake's return.
+ * @returns {Promise<{ path: string }>}
  */
-export function exportPdf(dir, version, outPath, { renderer = chromeRenderer, chromePath, renderOpts = {} } = {}) {
+export async function exportPdf(dir, version, outPath, { renderer = chromeRenderer, chromePath, renderOpts = {} } = {}) {
   const { path: htmlPath } = exportHtml(dir, version, join(exportsDir(dir), `export_v${version}.pdf.html`));
   const path = outPath || join(exportsDir(dir), `export_v${version}.pdf`);
-  renderer(htmlPath, path, { chromePath, ...renderOpts });
+  await renderer(htmlPath, path, { chromePath, ...renderOpts });
   return { path };
 }

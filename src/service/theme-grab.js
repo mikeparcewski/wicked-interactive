@@ -13,11 +13,22 @@
 // EVERY address for the host and reject if any is loopback, link-local (incl. the cloud metadata
 // endpoint 169.254.169.254), private, ULA, CGNAT, or unspecified; (4) PIN the validated IP into
 // Chrome via --host-resolver-rules so DNS can't be rebound between validation and fetch. This
-// closes the direct (paste-the-metadata-URL) and DNS-rebinding vectors. RESIDUAL: an HTTP redirect
-// from a public host to a private one is followed by Chrome and is NOT closed by the host pin — the
-// complete mitigation is network-egress restriction (a namespace/firewall limiting Chrome to public
-// CIDRs); tracked as a follow-up. The renderer + validator are injectable so CI needs no
-// browser/network and the guard is unit-testable deterministically.
+// closes the direct (paste-the-metadata-URL) and DNS-rebinding vectors.
+//
+// REDIRECT-CHAIN PREFLIGHT (issue #21). Validating only the INITIAL host left a residual: headless
+// Chrome `--print-to-pdf` FOLLOWS HTTP redirects, so a 302 from a validated public host to
+// `http://169.254.169.254/` (or any private host) was followed and the internal response rendered.
+// To close the main-document redirect vector portably (no OS-specific egress sandbox), we walk the
+// redirect chain Node-side with `redirect: 'manual'` BEFORE handing anything to Chrome
+// (resolveRedirectChain): every hop's URL — initial AND each `Location` — is re-validated through
+// assertPublicUrl, and Chrome is pointed at (and IP-pinned to) the FINAL non-redirect URL. A
+// redirect to a private/metadata host throws at the offending hop; loops/over-long chains throw on
+// maxHops. RESIDUAL (still open): page SUBRESOURCES — img/css/script the FINAL page itself loads
+// from a private host — are still fetched by Chrome and are NOT closed by this preflight (the
+// preflight only follows the MAIN-document redirect chain, not the resources the rendered page
+// pulls). Fully closing that requires network-egress restriction (a namespace/firewall limiting
+// Chrome to public CIDRs); tracked as a follow-up. The renderer + validator + fetchImpl are
+// injectable so CI needs no browser/network/DNS and the guard is unit-testable deterministically.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -115,6 +126,43 @@ export async function assertPublicUrl(url, { resolve = lookup } = {}) {
 }
 
 /**
+ * Walk the MAIN-document redirect chain Node-side BEFORE any render, re-validating each hop through
+ * assertPublicUrl so a 302 from a public host to a private/metadata host can't smuggle Chrome onto
+ * an internal target (issue #21). Starting from `url`, issue `fetchImpl(current, { method: 'GET',
+ * redirect: 'manual' })`; while the response is a 3xx with a `Location` header, resolve `Location`
+ * against the current URL (`new URL(loc, current)`), validate that absolute URL (which also yields
+ * the pinned IP for THAT hop), and continue — up to `maxHops`. Returns `{ finalUrl, pinnedIp }` for
+ * the first non-redirect response, where `pinnedIp` is the validated IP of `finalUrl`'s host.
+ *
+ * Throws if a hop fails assertPublicUrl (private/metadata redirect target), if a 3xx has no/invalid
+ * `Location`, or if the chain exceeds `maxHops` (loop / over-long). `fetchImpl` and `validate` are
+ * injectable so tests are deterministic with NO real network/DNS.
+ * @returns {Promise<{finalUrl:string, pinnedIp:string}>}
+ */
+export async function resolveRedirectChain(url, { fetchImpl = fetch, maxHops = 5, validate = assertPublicUrl } = {}) {
+  let current = String(url);
+  let pinnedIp = await validate(current);          // validate + pin the INITIAL host
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const res = await fetchImpl(current, { method: "GET", redirect: "manual" });
+    const status = res?.status;
+    const isRedirect = typeof status === "number" && status >= 300 && status < 400;
+    if (!isRedirect) {
+      // First non-redirect response (2xx / other) — render THIS url, pinned to its validated IP.
+      return { finalUrl: current, pinnedIp };
+    }
+    const loc = res.headers?.get ? res.headers.get("location") : undefined;
+    if (!loc) throw new Error(`redirect (${status}) with no Location header from ${current} (SSRF guard)`);
+    let next;
+    try { next = new URL(loc, current).toString(); }
+    catch { throw new Error(`redirect (${status}) with invalid Location "${loc}" from ${current} (SSRF guard)`); }
+    // Re-validate EVERY redirect target — a private/metadata host throws here — and re-pin to it.
+    pinnedIp = await validate(next);
+    current = next;
+  }
+  throw new Error(`theme URL exceeded ${maxHops} redirects (possible loop) starting from ${url} (SSRF guard)`);
+}
+
+/**
  * Default URL renderer: ASYNC headless Chrome `--print-to-pdf` over a live https URL. Uses `spawn`
  * (not spawnSync) so a multi-second render never blocks the Node event loop / SSE heartbeats.
  * When `pinnedIp` is given, the host is pinned to it via --host-resolver-rules so the address
@@ -149,13 +197,16 @@ export function chromeUrlRenderer(url, pdfPath, opts = {}) {
 }
 
 /**
- * Grab a live URL to a PDF at `outPath`. SSRF-guards the URL (assertPublicUrl) BEFORE spawning
- * anything, pins Chrome to the validated IP, then delegates to the injectable `renderer`. Async —
- * awaits the render so it never blocks the loop. `validate` + `renderer` are injectable for tests.
+ * Grab a live URL to a PDF at `outPath`. SSRF-guards the URL BEFORE spawning anything: instead of
+ * validating only the initial URL, it walks the MAIN-document redirect chain Node-side
+ * (resolveRedirectChain), re-validating EVERY hop, so a 302 to a private/metadata host can't smuggle
+ * Chrome onto an internal target (issue #21). It then renders the FINAL url, pinned to the FINAL
+ * host's validated IP. Async — awaits the render so it never blocks the loop. `renderer`, `validate`,
+ * and `fetchImpl` are injectable for tests.
  * @returns {Promise<{path:string}>}
  */
-export async function grabUrlToPdf(url, outPath, { renderer = chromeUrlRenderer, chromePath, renderOpts = {}, validate = assertPublicUrl } = {}) {
-  const pinnedIp = await validate(url);
-  await renderer(url, outPath, { chromePath, pinnedIp, ...renderOpts });
+export async function grabUrlToPdf(url, outPath, { renderer = chromeUrlRenderer, chromePath, renderOpts = {}, validate = assertPublicUrl, fetchImpl = fetch } = {}) {
+  const { finalUrl, pinnedIp } = await resolveRedirectChain(url, { fetchImpl, validate });
+  await renderer(finalUrl, outPath, { chromePath, pinnedIp, ...renderOpts });
   return { path: outPath };
 }
