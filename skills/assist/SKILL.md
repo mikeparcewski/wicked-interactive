@@ -262,7 +262,7 @@ On a `wicked.chat.posted` event with `role: "user"`:
 - **A whole-document change** ("add a pricing slide", "make the whole thing premium", or the
   first real draft of a blank doc) — build the complete new markup, leaning on the craft
   references (design-principles for "make it premium", outline/story-arc for structure) and
-  self-checking against `references/quality-checklist.md` before you emit. Then emit
+  self-checking against `skills/assist/references/quality-checklist.md` before you emit. Then emit
   `wicked.draft.completed` with `{ "document_id", "html" }` (or `html_path` for a large draft,
   ADR-0019 D5). The service instruments fresh anchors, themes it, and lands a new version.
 - Always post a `processing` status when you start and `complete` when the version lands, so
@@ -286,8 +286,9 @@ wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","
   → export-safe HTML (html-craft). For a multi-discipline brief, route through a **wicked-garden
   crew** (Step 7) so design + copy + structure are reasoned about together.
 - Honor the `brief` (length, audience, tone, what to lead with).
-- **Self-check before you emit** — run the draft past `references/quality-checklist.md` (narrative,
-  content, visual, export-safety). Fix structure and content before surface; keep it proportional.
+- **Self-check before you emit** — run the draft past `skills/assist/references/quality-checklist.md`
+  (narrative, content, visual, export-safety). Fix structure and content before surface; keep it
+  proportional.
 
 Then emit the whole draft (fresh document — no pre-existing anchors to preserve):
 
