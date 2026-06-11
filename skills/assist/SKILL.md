@@ -96,7 +96,8 @@ live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and ac
 | `wicked.feedback.processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfil them (Step 3) |
 | `wicked.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
 | `wicked.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
-| `wicked.theme.learned`               | the service grabbed a URL to a PDF   | read its design, synthesize + apply a theme (Step 8.5) |
+| `wicked.theme.learned`               | the service grabbed a URL to a PDF, OR the user pointed at a local PDF/image | read its design, synthesize + apply a theme (Step 8.5) |
+| `wicked.review.requested`            | user pressed "Review" with reviewers selected | run the named review passes, post verdicts (Step 8.6) |
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
 
 After you've handled the drained batch, **re-run the drain** (Step 11). The durable cursor has
@@ -387,6 +388,37 @@ workspace). **The judgment — reading the design — is yours.** Do **not** re-
 The deterministic grab (service) → vision read (you) → token apply (theming seam) all ride the one
 bus, reusing every existing seam. **There is nothing model-driven in the service half and nothing
 deterministic in the read half** — keep that line clean (ADR-0010).
+
+**Learn from a local PDF or image** (the + menu's "From a PDF or image"). The user pointed at a
+file on their own machine; the service does **not** grab anything — it emits `wicked.theme.learned`
+with `render_path` = that file and `format: "pdf"|"image"`. Read it exactly as above (vision works
+on both PDFs and images), synthesize + quality-gate + apply the same way. Nothing uploads; you read
+it in place.
+
+## Step 8.6 — Run a review pass (ADR-0023)
+
+A `wicked.review.requested` event carries `reviewers: string[]` (any of `match`, `a11y`, `copy`,
+`qe`) and `document_id`. The user wants the **current head version** reviewed — you run the passes
+and post each verdict back so it lands in the conversation thread. **Review only; do not edit** —
+the user decides what to act on (offer to apply fixes, don't apply unasked).
+
+For each selected reviewer, evaluate the head version's HTML and post a concise verdict as a chat
+message with `role: "review"` (the UI renders these as review lines):
+
+```bash
+wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"review","text":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
+```
+
+| reviewer | what to check | how |
+|----------|---------------|-----|
+| `match`  | does the output do what was asked? | re-read the brief / recent chat vs the head HTML; flag drift, missing asks |
+| `a11y`   | accessibility + contrast | run text/background pairs through WCAG-AA (`skills/assist/references/quality-checklist.md`); flag < 4.5:1, missing alt/landmarks, focus order |
+| `copy`   | copy & clarity | tighten wording, reading level, consistency; flag jargon, hedging, inconsistent terms |
+| `qe`     | full QE crew | for a heavier multi-perspective pass, assemble a wicked-garden crew (Step 7) — semantic + a11y + content reviewers — and synthesize their findings |
+
+Lead each verdict with `✓` (pass) or `⚠` (issue + the specific fix). Keep each to a sentence or
+two. Narrate start/finish with `wicked.status.posted` (`state:"working"` → `complete`); a review
+pass creates **no new version** unless the user then asks you to apply a fix.
 
 ## Step 9 — Index attached reference sources (ADR-0017)
 

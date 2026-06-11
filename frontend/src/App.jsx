@@ -2,16 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Overlay from "./components/Overlay.jsx";
 import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
-import ProcessingLock from "./components/ProcessingLock.jsx";
-import ChatPanel from "./components/ChatPanel.jsx";
-import SourcesPanel from "./components/SourcesPanel.jsx";
+import AgentConsole from "./components/AgentConsole.jsx";
+import Composer from "./components/Composer.jsx";
+import Thread from "./components/Thread.jsx";
 import FsPicker from "./components/FsPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -27,7 +27,10 @@ export default function App() {
   const [procMsg, setProcMsg] = useState("");
   const [question, setQuestion] = useState(null);
   const [chat, setChat] = useState([]);                  // conversation transcript
-  const [chatOpen, setChatOpen] = useState(true);        // chat panel expand/collapse
+  const [sideOpen, setSideOpen] = useState(() => {       // sidebar: open on first session, then collapsed (hover-expands)
+    try { return !localStorage.getItem("wi-side-seen"); } catch { return true; }
+  });
+  const [threadOpen, setThreadOpen] = useState(true);    // conversation panel (floats above the composer)
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
@@ -39,6 +42,11 @@ export default function App() {
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
+  const [pickMode, setPickMode] = useState("sources");   // FsPicker routes results: "sources" | "theme"
+  const [reviewers, setReviewers] = useState({ match: false, a11y: false, copy: false, qe: false }); // review passes (ADR-0023)
+  const [agentBusy, setAgentBusy] = useState(false);     // agent console: the agent is actively working (ADR-0024)
+  const [renderReady, setRenderReady] = useState(false); // a new version landed — console may close
+  const [consoleEscape, setConsoleEscape] = useState(false); // safety: allow closing a hung console
   // Theme: class-driven on <html> (the pre-paint script in index.html sets the initial
   // class from localStorage || prefers-color-scheme before first paint). This state just
   // mirrors it so the toggle button shows the right glyph and persists the user's choice.
@@ -70,8 +78,35 @@ export default function App() {
   const [hintY, setHintY] = useState({ doc: 40, demo: 160 });
   useEffect(() => { viewingRef.current = viewing; }, [viewing]);
   useEffect(() => { headRef.current = manifest?.head ?? null; }, [manifest]);
+  // Mark the sidebar "seen" so it only auto-opens on the very first session; later loads
+  // start collapsed and expand on hover (ADR: ChatGPT-style rail).
+  useEffect(() => { try { localStorage.setItem("wi-side-seen", "1"); } catch { /* private mode */ } }, []);
 
   const appendChat = (entry) => setChat((prev) => [...prev, entry]);
+
+  // ---- Agent console (ADR-0024): a user action that kicks off agent work opens a live modal
+  // that streams progress, surfaces questions, and stays up until a new render is ready. ----
+  const kickoff = () => { setAgentBusy(true); setRenderReady(false); setConsoleEscape(false); };
+  const closeConsole = () => { setAgentBusy(false); setRenderReady(false); setConsoleEscape(false); setQuestion(null); setProcessing(false); };
+  async function sendToAgent(text, isAnswer) {
+    try {
+      if (isAnswer && question) { const q = question; setQuestion(null); await emitAnswer(q.requestId, text); }
+      else await emitChat(text);
+    } catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
+  }
+  // Refs so the SSE handlers (stable closures) read the live console state.
+  const busyRef = useRef(false);
+  const renderReadyRef = useRef(false);
+  useEffect(() => { busyRef.current = agentBusy; }, [agentBusy]);
+  useEffect(() => { renderReadyRef.current = renderReady; }, [renderReady]);
+  const consoleActive = agentBusy || renderReady || !!question;
+  const consoleCanClose = renderReady || consoleEscape || (status?.kind === "error" && !agentBusy);
+  // Safety valve: if the agent goes quiet, let the user close after 75s (no permanent lock).
+  useEffect(() => {
+    if (!consoleActive || renderReady) return;
+    const id = setTimeout(() => setConsoleEscape(true), 75000);
+    return () => clearTimeout(id);
+  }, [consoleActive, renderReady]);
 
   const refreshVersions = useCallback(async () => {
     const m = await getVersions();
@@ -104,11 +139,11 @@ export default function App() {
   async function onCreateDoc(name, html, meta) {
     setNewDocError(null);
     try {
-      await createDoc(name, html, meta);
-      // Empty / brainstorm docs land on the placeholder shell with the chat panel open
-      // (chatOpen defaults to true on mount). The user drives content via chat from there.
-      // "From my content" docs land on a placeholder too; the agent hot-swaps in the draft.
-      navigateToDoc(name);   // hard-reloads to ?doc=<name>
+      // Navigate to the SERVER-assigned slug, not the raw input — the service slugifies
+      // (e.g. "My Doc" → "my-doc"), and ?doc= must be the slug or getCurrentDoc rejects it
+      // and we'd land back on the launch screen.
+      const created = await createDoc(name, html, meta);
+      navigateToDoc(created?.name || name);   // hard-reloads straight to the new doc
     } catch (e) {
       setNewDocError(e.message);
     }
@@ -117,8 +152,8 @@ export default function App() {
   async function onCreateDemo(name, _html, meta) {
     setNewDemoError(null);
     try {
-      await createDoc(name, "", meta);   // kind:"demo" — service seeds the storyboard placeholder
-      navigateToDoc(name);               // the agent learns the app + records the first version
+      const created = await createDoc(name, "", meta);   // kind:"demo" — service seeds the storyboard placeholder
+      navigateToDoc(created?.name || name);              // straight to the new demo; the agent records v1
     } catch (e) {
       setNewDemoError(e.message);
     }
@@ -197,15 +232,17 @@ export default function App() {
         pendingScroll.current = iframeRef.current?.contentWindow?.scrollY ?? 0;
         setViewing(m.head);
       }
-      // Agent-produced versions (structural edit, generated draft, demo re-record) clear the
-      // working lock — the deterministic case clears on feedback.processed instead.
+      // A new render landed. If the agent console is open for this work, flip it to "ready"
+      // (the user closes it to view); otherwise it's a background change — leave the console shut.
       if (["structural", "generated", "demo"].includes(payload.kind)) { setProcessing(false); setQuestion(null); }
+      if (busyRef.current) { setRenderReady(true); setAgentBusy(false); }
     },
     "wicked.feedback.processed": (payload) => {
       setStatus(summarize(payload));
       appendChat({ role: "event", text: summarize(payload).text });
       if (payload.awaiting_structural > 0) {
         setProcMsg(`Working on it… (${payload.awaiting_structural} block${payload.awaiting_structural > 1 ? "s" : ""})`);
+        setAgentBusy(true);
       } else {
         setProcessing(false);
       }
@@ -215,16 +252,18 @@ export default function App() {
       if (payload.state === "asking") {
         setQuestion({ text: payload.question, options: payload.options || [], requestId: payload.request_id });
         setProcMsg(payload.message || "A quick question");
-        setProcessing(true);
+        setProcessing(true); setAgentBusy(true);
       } else if (payload.state === "processing") {
         // Agent-driven redraw (e.g. from chat) — show the loading overlay on the document.
-        setProcessing(true);
+        setProcessing(true); setAgentBusy(true);
         if (payload.message) setProcMsg(payload.message);
       } else {
-        // "working" is a non-lock progress state (demo recording, source indexing).
+        // "working" is a non-lock progress state (demo recording, source indexing) — still
+        // narrate it live in the console.
         if (payload.message) setProcMsg(payload.message);
-        if (payload.state === "complete") { setProcessing(false); setQuestion(null); }
-        if (payload.state === "error") { setProcessing(false); setStatus({ kind: "error", text: payload.message || "error" }); }
+        if (payload.state === "working") setAgentBusy(true);
+        if (payload.state === "complete") { setProcessing(false); setQuestion(null); if (!renderReadyRef.current) setAgentBusy(false); }
+        if (payload.state === "error") { setProcessing(false); setAgentBusy(false); setStatus({ kind: "error", text: payload.message || "error" }); }
       }
     },
     "wicked.chat.posted": (payload) => appendChat({ role: payload.role || "user", text: payload.text }),
@@ -245,9 +284,11 @@ export default function App() {
     // as wicked.status.posted + wicked.version.created (the re-theme lands a new version).
     "wicked.theme.learned": () => {
       setStatus({ kind: "ok", text: "Reading the design…" });
+      setAgentBusy(true);
     },
     "wicked.error.raised": (payload) => {
       setProcessing(false);
+      setAgentBusy(false);
       setStatus({ kind: "error", text: payload.error || "something went wrong" });
     },
   }, { docId: currentDoc });
@@ -265,6 +306,7 @@ export default function App() {
     }
     setSelected(null);
     setProcessing(true);
+    kickoff();
     setProcMsg(mode === "change-text" ? "Applying…" : "Sending your comment…");
     setStatus(null);
     setQuestion(null);
@@ -280,6 +322,7 @@ export default function App() {
   async function removeBlock(selector) {
     setSelected(null);
     setProcessing(true);
+    kickoff();
     setProcMsg("Removing…");
     setStatus(null);
     try {
@@ -299,6 +342,7 @@ export default function App() {
       setShowNewDoc(true);
       return;
     }
+    kickoff();   // open the live console so the user sees the agent working + can nudge it
     try { await emitChat(text); } // the bridge echoes it into the transcript
     catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
   }
@@ -348,11 +392,41 @@ export default function App() {
   async function learnThemeFromUrl(url) {
     setThemeUrlError(null);
     try {
+      kickoff();
       await emitThemeFromUrl(url);   // service grabs → agent reads → re-themes (status + version.created)
       setShowThemeUrl(false);
       setStatus({ kind: "ok", text: "Learning that theme…" });
     } catch (e) {
       setThemeUrlError(e.message);
+    }
+  }
+
+  // + menu → "From a PDF or image": pick a LOCAL file; the agent reads it in place (nothing
+  // uploads) and re-themes. Routed through the same FsPicker, in "theme" mode.
+  const openLearnFile = () => { setPickMode("theme"); setShowPicker(true); };
+  const openAttach = () => { setPickMode("sources"); setShowPicker(true); };
+  async function learnThemeFromFile(paths) {
+    const file = (paths || [])[0];
+    if (!file) return;
+    try {
+      kickoff();
+      await emitThemeFromFile(file);
+      setStatus({ kind: "ok", text: "Learning that style…" });
+    } catch (e) {
+      appendChat({ role: "event", text: `(couldn't learn that style: ${e.message})` });
+    }
+  }
+
+  const toggleReviewer = (key) => setReviewers((r) => ({ ...r, [key]: !r[key] }));
+  async function runReview() {
+    const selected = Object.entries(reviewers).filter(([, v]) => v).map(([k]) => k);
+    if (!selected.length) { setStatus({ kind: "error", text: "Pick at least one reviewer in the + menu first." }); return; }
+    try {
+      kickoff();
+      await emitReviewRequested(selected);
+      appendChat({ role: "event", text: `Review requested — ${selected.join(", ")}` });
+    } catch (e) {
+      appendChat({ role: "event", text: `(couldn't request review: ${e.message})` });
     }
   }
 
@@ -405,23 +479,33 @@ export default function App() {
   }
 
   return (
-    <div className={`wi-shell ${!chatOpen ? "wi-shell--chat-collapsed" : ""}`}>
-      <header className="wi-toolbar">
-        <div className="wi-toolbar__group">
-          <span className="wi-logo">
+    <div className={`wi-app${sideOpen ? " wi-app--side-open" : ""}`}>
+      <aside className="wi-sidebar">
+        <div className="wi-sidebar__inner">
+          <div className="wi-sidebar__brand">
             <span className="wi-logo__mark" aria-hidden="true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#232324" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 5l3.5 14L12 8l5.5 11L21 5" />
               </svg>
             </span>
-            <span className="wi-logo__word"><b>Wicked</b> <i>Interactive</i></span>
-          </span>
-          {currentDoc && (
-            <span className="wi-toolbar__crumb">
-              <span className="wi-toolbar__docname">{currentDoc}</span>
-            </span>
-          )}
+            <span className="wi-sidebar__word"><b>wicked</b><i>agile</i><small>wicked-interactive</small></span>
+            <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => !o)}>{sideOpen ? "⇤" : "⇥"}</button>
+          </div>
+          <RailSection title="Documents" newLabel="New document" onNew={openNewDoc} items={documents} currentDoc={currentDoc} glyph="doc" newRef={newDocRef} />
+          <div className="wi-rail__sep" />
+          <RailSection title="Demos" newLabel="New demo" onNew={openNewDemo} items={demos} currentDoc={currentDoc} glyph="demo" newRef={newDemoRef} />
+          <div className="wi-sidebar__spacer" />
+          <div className="wi-sidebar__foot">local-first · model-free · nothing uploads</div>
         </div>
+      </aside>
+
+      <div className="wi-main">
+        <header className="wi-toolbar wi-toolbar--top">
+          <div className="wi-toolbar__group">
+            {currentDoc
+              ? <span className="wi-crumb"><b>{currentDoc}</b></span>
+              : <span className="wi-crumb wi-crumb--empty">No document open</span>}
+          </div>
         <div className="wi-toolbar__group wi-toolbar__group--center">
           <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
           {manifest && !viewingIsHead && (
@@ -461,16 +545,6 @@ export default function App() {
               {gifBusy ? "Building GIF…" : "GIF"}
             </button>
           )}
-          {!currentIsDemo && currentDoc && (
-            <button
-              className="wi-btn wi-btn--ghost"
-              disabled={processing}
-              onClick={openThemeUrl}
-              title="Match this document's look to a page you like"
-            >
-              Theme from URL
-            </button>
-          )}
           {!currentIsDemo && (
             <div className="wi-export" role="group" aria-label="Export">
               <span className="wi-export__icon" aria-hidden="true">
@@ -487,70 +561,67 @@ export default function App() {
         </div>
       </header>
 
-      <nav className="wi-rail">
-        <div className="wi-rail__inner">
-          <RailSection
-            title="Documents"
-            newLabel="New document"
-            onNew={openNewDoc}
-            items={documents}
-            currentDoc={currentDoc}
-            glyph="doc"
-            newRef={newDocRef}
-          />
-          <div className="wi-rail__sep" />
-          <RailSection
-            title="Demos"
-            newLabel="New demo"
-            onNew={openNewDemo}
-            items={demos}
-            currentDoc={currentDoc}
-            glyph="demo"
-            newRef={newDemoRef}
-          />
-        </div>
-      </nav>
-
-      <main className="wi-canvas" ref={canvasRef}>
+        <main className="wi-canvas" ref={canvasRef}>
         {!currentDoc && (
-          <>
-            <div className="wi-empty-hint" style={{ top: Math.max(2, hintY.doc - 6) }} aria-hidden="true">
-              <svg className="wi-empty-hint__arrow" width="78" height="40" viewBox="0 0 78 40" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M72 32C50 32 24 28 8 9" />
-                <path d="M8 9C13 11 18 13 23 16" />
-                <path d="M8 9C9 14 10 20 11 26" />
-              </svg>
-              <span className="wi-empty-hint__text">start a new document</span>
-            </div>
-            <div className="wi-empty-hint" style={{ top: Math.max(2, hintY.demo - 6) }} aria-hidden="true">
-              <svg className="wi-empty-hint__arrow" width="78" height="40" viewBox="0 0 78 40" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M72 32C50 32 24 28 8 9" />
-                <path d="M8 9C13 11 18 13 23 16" />
-                <path d="M8 9C9 14 10 20 11 26" />
-              </svg>
-              <span className="wi-empty-hint__text">…or record a demo of your app</span>
-            </div>
-          </>
+          <div className="wi-blank">
+            <span className="wi-blank__icon" aria-hidden="true">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v5h5M7 3h8l5 5v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /></svg>
+            </span>
+            <span className="wi-kicker">Live edit</span>
+            <h2 className="wi-blank__title">Start something</h2>
+            <p className="wi-blank__hint">Describe what you want in the box below and I'll build it — or open a document from the sidebar. Use <b>+</b> to learn a style or attach your content.</p>
+          </div>
         )}
-        <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
-          <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
-          {!currentIsDemo && (
-            <>
-              <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
-              <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
-            </>
-          )}
-          <ProcessingLock active={processing} message={procMsg} question={question?.text} options={question?.options}
-            onAnswer={answerQuestion} onDismiss={() => { setProcessing(false); setQuestion(null); }} />
-        </div>
+        {currentDoc && (
+          <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
+            <div className="wi-doc__chrome" aria-hidden="true">
+              <span className="wi-doc__lights"><i /><i /><i /></span>
+              <span className="wi-doc__url">localhost · {currentDoc}{currentIsDemo ? "" : ".html"}{viewing != null ? ` · v${viewing}` : ""}</span>
+              <span className="wi-doc__live"><i /> live</span>
+            </div>
+            <div className="wi-doc__stage">
+              <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
+              {!currentIsDemo && (
+                <>
+                  <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
+                  <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
-      <div className="wi-side">
-        <SourcesPanel sources={sources} onAdd={() => setShowPicker(true)} narrow={!chatOpen} onExpand={() => setChatOpen(true)} />
-        <ChatPanel log={chat} onSend={sendChat} busy={processing} agentThinking={agentThinking} collapsed={!chatOpen} onToggle={() => setChatOpen((o) => !o)} />
+        <Thread log={chat} agentThinking={agentThinking} open={threadOpen} onToggle={() => setThreadOpen((o) => !o)} />
+
+        <Composer
+          onSend={sendChat}
+          busy={processing}
+          logLen={chat.length}
+          sources={sources}
+          onLearnWebsite={!currentIsDemo && currentDoc ? openThemeUrl : undefined}
+          onLearnFile={!currentIsDemo && currentDoc ? openLearnFile : undefined}
+          onAttach={openAttach}
+          onRecordDemo={openNewDemo}
+          reviewers={!currentIsDemo && currentDoc ? reviewers : undefined}
+          onToggleReviewer={toggleReviewer}
+          onReviewNow={runReview}
+        />
+
+        <AgentConsole
+          active={consoleActive}
+          feed={chat}
+          question={question}
+          onAnswer={answerQuestion}
+          onSend={sendToAgent}
+          renderReady={renderReady}
+          errored={status?.kind === "error" && !agentBusy}
+          canClose={consoleCanClose}
+          onClose={closeConsole}
+        />
       </div>
 
-      <FsPicker open={showPicker} onAdd={attachSources} onCancel={() => setShowPicker(false)} />
+      <FsPicker open={showPicker} onAdd={pickMode === "theme" ? learnThemeFromFile : attachSources} onCancel={() => setShowPicker(false)} />
 
       <NewDocModal
         open={showNewDoc}

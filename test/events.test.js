@@ -43,10 +43,11 @@ test("ownership table gates emits by producer", () => {
 
 test("UI may only originate the conversational/intent events", () => {
   const uiYes = ["wicked.feedback.submitted", "wicked.chat.posted", "wicked.question.answered",
-    "wicked.source.attached", "wicked.demo.requested", "wicked.theme.requested"];
+    "wicked.source.attached", "wicked.demo.requested", "wicked.theme.requested", "wicked.review.requested"];
   const uiNo = ["wicked.edit.completed", "wicked.draft.completed", "wicked.version.created",
     "wicked.feedback.processed", "wicked.status.posted", "wicked.doc.created",
-    "wicked.source.updated", "wicked.export.requested", "wicked.error.raised", "wicked.theme.learned"];
+    "wicked.source.updated", "wicked.export.requested", "wicked.error.raised", "wicked.theme.learned",
+    "wicked.review.completed"];
   for (const t of uiYes) assert.ok(uiEmittable(t), `${t} should be UI-emittable`);
   for (const t of uiNo) assert.ok(!uiEmittable(t), `${t} should NOT be UI-emittable`);
 });

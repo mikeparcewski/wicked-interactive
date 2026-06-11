@@ -40,6 +40,11 @@ export const emitDemoRecord = () => postEvent("wicked.demo.requested", {});
 // Learn a theme from a live URL: the service grabs it to a PDF, the agent reads the design and
 // re-themes the current doc. document_id is stamped by postEvent.
 export const emitThemeFromUrl = (url) => postEvent("wicked.theme.requested", { url });
+// Learn a theme from a LOCAL file (PDF/image) the agent reads in place — nothing uploads.
+export const emitThemeFromFile = (path) => postEvent("wicked.theme.requested", { path });
+// Run a review pass on the current version with the selected reviewers; the agent posts
+// verdicts back as wicked.chat.posted (role: "review").
+export const emitReviewRequested = (reviewers) => postEvent("wicked.review.requested", { reviewers });
 
 // --- State-plane reads (doc-prefixed) ---
 export async function getVersions() {
