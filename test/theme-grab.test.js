@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { grabUrlToPdf, chromeUrlRenderer, assertPublicUrl, isBlockedIp } from "../src/service/theme-grab.js";
+import { grabUrlToPdf, chromeUrlRenderer, assertPublicUrl, isBlockedIp, resolveRedirectChain } from "../src/service/theme-grab.js";
 
 process.env.WICKED_NO_BUS = "1";
 
@@ -16,6 +16,13 @@ function tmp() { return mkdtempSync(join(tmpdir(), "wi-theme-")); }
 // Validator stub: approves any URL and pins a public IP — keeps the grab tests off DNS/network.
 // The guard itself is covered by the assertPublicUrl / isBlockedIp tests below.
 const approve = async () => "93.184.216.34";
+
+// Minimal Response-shape stub for the injected fetchImpl — status + a get('location') header.
+function fakeResponse(status, location) {
+  return { status, headers: { get: (k) => (k.toLowerCase() === "location" ? (location ?? null) : null) } };
+}
+// fetchImpl that always returns a final (non-redirect) 200 — keeps the grab tests off the network.
+const fetch200 = async () => fakeResponse(200);
 
 test("grabUrlToPdf delegates to the renderer with the LIVE url + pinned IP and writes a PDF", async () => {
   const dir = tmp();
@@ -28,7 +35,7 @@ test("grabUrlToPdf delegates to the renderer with the LIVE url + pinned IP and w
       writeFileSync(pdfPath, "%PDF-1.4 fake");
       return { path: pdfPath };
     };
-    const { path } = await grabUrlToPdf("https://example.com/pricing", out, { renderer: fakeRenderer, validate: approve });
+    const { path } = await grabUrlToPdf("https://example.com/pricing", out, { renderer: fakeRenderer, validate: approve, fetchImpl: fetch200 });
     assert.equal(path, out, "returns the requested out path");
     assert.ok(existsSync(path), "a PDF file was written");
     assert.match(readFileSync(path, "utf-8"), /^%PDF/);
@@ -40,12 +47,14 @@ test("grabUrlToPdf delegates to the renderer with the LIVE url + pinned IP and w
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("grabUrlToPdf rejects a non-http(s) url before spawning (no DNS)", async () => {
-  let calls = 0;
+test("grabUrlToPdf rejects a non-http(s) url before spawning (no DNS, no fetch)", async () => {
+  let calls = 0, fetches = 0;
   const fakeRenderer = () => { calls++; };
-  await assert.rejects(grabUrlToPdf("ftp://internal/secret", "/tmp/x.pdf", { renderer: fakeRenderer }), /http or https/);
-  await assert.rejects(grabUrlToPdf("not a url at all", "/tmp/x.pdf", { renderer: fakeRenderer }), /valid http\(s\) URL/);
+  const noFetch = async () => { fetches++; return fakeResponse(200); };
+  await assert.rejects(grabUrlToPdf("ftp://internal/secret", "/tmp/x.pdf", { renderer: fakeRenderer, fetchImpl: noFetch }), /http or https/);
+  await assert.rejects(grabUrlToPdf("not a url at all", "/tmp/x.pdf", { renderer: fakeRenderer, fetchImpl: noFetch }), /valid http\(s\) URL/);
   assert.equal(calls, 0, "the renderer is never invoked for an invalid url");
+  assert.equal(fetches, 0, "fetch is never invoked — initial-host validation fails first");
 });
 
 test("chromeUrlRenderer throws a clear 'set WI_CHROME' error when no Chrome is found", () => {
@@ -104,4 +113,111 @@ test("assertPublicUrl rejects a host that RESOLVES to a private address (DNS-reb
   // all public -> returns the first (the IP to pin).
   const resolvePublic = async () => [{ address: "93.184.216.34" }];
   assert.equal(await assertPublicUrl("https://good.example.com/", { resolve: resolvePublic }), "93.184.216.34");
+});
+
+// --- redirect-chain preflight (issue #21): Chrome follows main-document redirects, so a 302 from a
+// validated public host to a private one was rendered. We walk + re-validate the chain Node-side. ---
+
+test("resolveRedirectChain REJECTS a 302 whose Location is a private/metadata host (the #21 vector)", async () => {
+  // Use the REAL validator (assertPublicUrl) with literal-IP / blocked-host targets so no DNS runs.
+  for (const evil of ["http://169.254.169.254/", "http://10.0.0.5/internal", "http://localhost:8080/admin"]) {
+    let hops = 0;
+    const fetchImpl = async (current) => {
+      hops++;
+      // Initial public host 302s to the attacker-chosen internal Location.
+      if (current === "https://public.example.com/") return fakeResponse(302, evil);
+      throw new Error(`fetchImpl should never reach the internal target ${current}`);
+    };
+    // public.example.com is a name → would need DNS; inject a validate that pins it but defers to
+    // the REAL guard for the redirect target so the private/metadata hop is what actually throws.
+    const validate = async (u) => {
+      if (u === "https://public.example.com/") return "93.184.216.34";
+      return assertPublicUrl(u); // the evil hop is a literal IP / blocked host → throws (no DNS)
+    };
+    await assert.rejects(
+      resolveRedirectChain("https://public.example.com/", { fetchImpl, validate }),
+      /SSRF guard/,
+      `redirect to ${evil} must be rejected`,
+    );
+    assert.equal(hops, 1, "we fetch the initial host once, then reject the redirect BEFORE fetching it");
+  }
+});
+
+test("resolveRedirectChain resolves a public 302→302→200 chain to the FINAL url + its pinned IP", async () => {
+  const pins = { "https://a.example.com/": "1.1.1.1", "https://b.example.com/next": "2.2.2.2", "https://c.example.com/final": "3.3.3.3" };
+  const validate = async (u) => pins[u] ?? (() => { throw new Error(`unexpected hop ${u}`); })();
+  const fetchImpl = async (current) => {
+    if (current === "https://a.example.com/") return fakeResponse(302, "https://b.example.com/next");
+    if (current === "https://b.example.com/next") return fakeResponse(301, "https://c.example.com/final");
+    if (current === "https://c.example.com/final") return fakeResponse(200);
+    throw new Error(`unexpected fetch ${current}`);
+  };
+  const { finalUrl, pinnedIp } = await resolveRedirectChain("https://a.example.com/", { fetchImpl, validate });
+  assert.equal(finalUrl, "https://c.example.com/final", "renders the final public URL");
+  assert.equal(pinnedIp, "3.3.3.3", "pins the FINAL host's validated IP, not the initial one");
+});
+
+test("resolveRedirectChain throws on a redirect loop / exceeding maxHops", async () => {
+  // A→B→A→B… infinite loop. All hops are 'public' per the stub validator, so only the hop cap stops it.
+  const validate = async () => "93.184.216.34";
+  const fetchImpl = async (current) =>
+    current === "https://a.example.com/" ? fakeResponse(302, "https://b.example.com/") : fakeResponse(302, "https://a.example.com/");
+  await assert.rejects(
+    resolveRedirectChain("https://a.example.com/", { fetchImpl, validate, maxHops: 5 }),
+    /exceeded 5 redirects/,
+  );
+});
+
+test("resolveRedirectChain resolves a RELATIVE Location against the current URL and validates it", async () => {
+  const seen = [];
+  const validate = async (u) => { seen.push(u); return "93.184.216.34"; };
+  const fetchImpl = async (current) => {
+    if (current === "https://shop.example.com/old/page") return fakeResponse(302, "../new/landing"); // relative
+    return fakeResponse(200);
+  };
+  const { finalUrl } = await resolveRedirectChain("https://shop.example.com/old/page", { fetchImpl, validate });
+  assert.equal(finalUrl, "https://shop.example.com/new/landing", "relative Location resolved against the current URL");
+  assert.deepEqual(seen, ["https://shop.example.com/old/page", "https://shop.example.com/new/landing"],
+    "BOTH the initial URL and the resolved relative target were validated");
+});
+
+test("resolveRedirectChain throws on a 3xx with no Location header", async () => {
+  const validate = async () => "93.184.216.34";
+  const fetchImpl = async () => fakeResponse(302, null); // 302 but no Location
+  await assert.rejects(
+    resolveRedirectChain("https://a.example.com/", { fetchImpl, validate }),
+    /no Location header/,
+  );
+});
+
+test("grabUrlToPdf follows a public redirect and renders the FINAL url pinned to its IP (full wire-through)", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    let seenUrl = null, seenOpts = null;
+    const fakeRenderer = (url, pdfPath, opts) => {
+      seenUrl = url; seenOpts = opts;
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(pdfPath, "%PDF-1.4 fake");
+      return { path: pdfPath };
+    };
+    const validate = async (u) => (u === "https://start.example.com/" ? "1.1.1.1" : "9.9.9.9");
+    const fetchImpl = async (current) =>
+      current === "https://start.example.com/" ? fakeResponse(302, "https://final.example.com/page") : fakeResponse(200);
+    await grabUrlToPdf("https://start.example.com/", out, { renderer: fakeRenderer, validate, fetchImpl });
+    assert.equal(seenUrl, "https://final.example.com/page", "Chrome is pointed at the FINAL url, not the initial one");
+    assert.equal(seenOpts.pinnedIp, "9.9.9.9", "Chrome is pinned to the FINAL host's validated IP");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("grabUrlToPdf REJECTS a redirect to the metadata IP before rendering (issue #21 end-to-end)", async () => {
+  let rendered = 0;
+  const fakeRenderer = () => { rendered++; };
+  const validate = async (u) => (u === "https://public.example.com/" ? "93.184.216.34" : assertPublicUrl(u));
+  const fetchImpl = async () => fakeResponse(302, "http://169.254.169.254/latest/meta-data/");
+  await assert.rejects(
+    grabUrlToPdf("https://public.example.com/", "/tmp/should-not-write.pdf", { renderer: fakeRenderer, validate, fetchImpl }),
+    /SSRF guard/,
+  );
+  assert.equal(rendered, 0, "the renderer is never invoked when a redirect hop fails the guard");
 });
