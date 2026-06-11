@@ -60,11 +60,16 @@ test("chromeUrlRenderer throws a clear 'set WI_CHROME' error when no Chrome is f
 
 test("isBlockedIp blocks loopback / link-local / private / ULA / CGNAT / unspecified; allows public", () => {
   for (const bad of ["127.0.0.1", "10.0.0.1", "172.16.5.9", "172.31.255.255", "192.168.1.1",
-    "169.254.169.254", "0.0.0.0", "100.64.0.1", "::1", "::", "fe80::1", "fc00::1", "fd12:3456::1",
-    "::ffff:127.0.0.1", "::ffff:169.254.169.254"]) {
+    "169.254.169.254", "0.0.0.0", "100.64.0.1", "::1", "::", "fe80::1", "feb0::1", "fc00::1",
+    "fd12:3456::1", "::ffff:127.0.0.1", "::ffff:169.254.169.254",
+    // IPv4-mapped in HEX spelling — the form the WHATWG URL parser actually produces (the bypass
+    // an earlier cut missed): ::ffff:a9fe:a9fe == 169.254.169.254, ::ffff:7f00:1 == 127.0.0.1, etc.
+    "::ffff:a9fe:a9fe", "::ffff:7f00:1", "::ffff:0a00:0001", "::ffff:c0a8:0101",
+    "::a9fe:a9fe"]) {  // IPv4-compatible ::/96 (deprecated) embedding link-local
     assert.equal(isBlockedIp(bad), true, `${bad} must be blocked`);
   }
-  for (const ok of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.32.0.1", "2606:4700:4700::1111"]) {
+  for (const ok of ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.32.0.1", "2606:4700:4700::1111",
+    "2001:db8:ffff::1", "::ffff:808:808" /* mapped public 8.8.8.8 */]) {
     assert.equal(isBlockedIp(ok), false, `${ok} must be allowed`);
   }
   assert.equal(isBlockedIp("not-an-ip"), true, "a non-IP literal fails closed");
@@ -82,6 +87,10 @@ test("assertPublicUrl range-checks a literal-IP host without DNS and pins a publ
   await assert.rejects(assertPublicUrl("http://127.0.0.1:9000/"), /SSRF guard/);
   await assert.rejects(assertPublicUrl("http://169.254.169.254/latest/meta-data/"), /SSRF guard/);
   await assert.rejects(assertPublicUrl("http://10.0.0.5/"), /SSRF guard/);
+  // The IPv4-mapped IPv6 bypass: the URL parser normalizes this to hex (::ffff:a9fe:a9fe), which
+  // must still be decoded and blocked — otherwise it's a direct path to the cloud metadata IP.
+  await assert.rejects(assertPublicUrl("http://[::ffff:169.254.169.254]/latest/meta-data/"), /SSRF guard/);
+  await assert.rejects(assertPublicUrl("http://[::1]/"), /SSRF guard/);
   assert.equal(await assertPublicUrl("http://8.8.8.8/"), "8.8.8.8", "a literal public IP is allowed + pinned");
 });
 

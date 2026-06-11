@@ -28,6 +28,22 @@ import { findChrome as defaultFindChrome } from "./export.js";
 // Hostnames that must never be fetched server-side regardless of how they resolve.
 const BLOCKED_HOSTS = new Set(["localhost", "metadata", "metadata.google.internal", "instance-data"]);
 
+// Decode the IPv4 embedded in the tail of an IPv4-mapped/compatible IPv6, in EITHER dotted
+// (`1.2.3.4`) or hex-pair (`0102:0304`) spelling. The WHATWG URL parser normalizes
+// `::ffff:169.254.169.254` to the hex form `::ffff:a9fe:a9fe`, so the hex case is the one that
+// actually reaches us from a parsed URL. Returns a dotted-quad string, or null if `tail` isn't a
+// recognizable embedded IPv4.
+function embeddedV4(tail) {
+  const dotted = tail.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (dotted) return dotted[1];
+  const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const hi = parseInt(hex[1], 16), lo = parseInt(hex[2], 16);
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  return null;
+}
+
 /**
  * Is `ip` a NON-public address — loopback / link-local / private / ULA / CGNAT / unspecified —
  * i.e. an SSRF target the service must refuse? Covers IPv4, IPv6, and IPv4-mapped IPv6. Anything
@@ -50,10 +66,16 @@ export function isBlockedIp(ip) {
   if (v === 6) {
     const a = String(ip).toLowerCase().replace(/^\[|\]$/g, "");
     if (a === "::" || a === "::1") return true;       // unspecified / loopback
-    if (a.startsWith("fe80") || a.startsWith("fe9") || a.startsWith("fea") || a.startsWith("feb")) return true; // fe80::/10 link-local
+    if (/^fe[89ab]/.test(a)) return true;             // fe80::/10 link-local (fe80–febf)
     if (a.startsWith("fc") || a.startsWith("fd")) return true; // fc00::/7 ULA
-    const mapped = a.match(/(?:^|:)ffff:(\d+\.\d+\.\d+\.\d+)$/); // ::ffff:a.b.c.d IPv4-mapped
-    if (mapped) return isBlockedIp(mapped[1]);
+    // IPv4-mapped ::ffff:0:0/96 — decode the embedded v4 in dotted OR hex spelling and range-check
+    // it. Anchored to `^::ffff:` so a legit global address that merely contains an "ffff" group
+    // isn't over-blocked. Mapped-but-undecodable fails closed.
+    const mapped = a.match(/^::ffff:(.+)$/);
+    if (mapped) { const v4 = embeddedV4(mapped[1]); return v4 ? isBlockedIp(v4) : true; }
+    // IPv4-compatible ::/96 (deprecated): ::a.b.c.d or ::x:y — decode + range-check the embedded v4.
+    const compat = a.match(/^::(.+)$/);
+    if (compat) { const v4 = embeddedV4(compat[1]); if (v4) return isBlockedIp(v4); }
     return false;
   }
   return true; // not an IP literal → fail closed
