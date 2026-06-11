@@ -896,3 +896,16 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-console__compose textarea:focus { border-color: var(--wi-accent); box-shadow: 0 0 0 3px var(--wi-ring); outline: none; }
 .wi-console__compose .wi-send { width: 36px; height: 36px; }
 .wi-console__foot { flex: 0 0 auto; padding: 0 14px 14px; display: flex; justify-content: flex-end; }
+
+/* ---- Thread as the live agent surface (ADR-0024): blur the canvas, lock open, show Q ---- */
+.wi-veil { position: absolute; inset: 0; z-index: 30; background: color-mix(in oklab, var(--wi-canvas-bg) 38%, transparent);
+  backdrop-filter: blur(3px); animation: wi-frame-in .25s var(--wi-ease) both; }
+.wi-thread--working { border-color: color-mix(in oklab, var(--wi-accent) 32%, var(--wi-line)); }
+.wi-thread--ready { border-color: color-mix(in oklab, var(--wi-accent) 50%, var(--wi-line)); }
+.wi-thread__spin { width: 15px; height: 15px; margin: 0; flex: 0 0 auto; }
+.wi-thread__tick { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 999px; background: var(--wi-accent); color: var(--wi-on-accent); display: grid; place-items: center; font-size: 11px; font-weight: 800; }
+.wi-thread__close:disabled { opacity: .35; cursor: default; }
+.wi-thread__q { flex: 0 0 auto; padding: 12px 16px 14px; border-top: 1px solid var(--wi-line); background: var(--wi-accent-soft); }
+.wi-thread__qtext { margin: 0 0 9px; font-weight: 600; color: var(--wi-ink); font-size: var(--wi-text-base); }
+.wi-thread__opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.wi-thread__qhint { margin: 9px 0 0; font-size: var(--wi-text-sm); color: var(--wi-ink-faint); font-style: italic; }

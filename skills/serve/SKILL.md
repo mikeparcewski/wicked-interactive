@@ -83,17 +83,19 @@ instant:
 npx -y wicked-bus init >/dev/null 2>&1 || true
 ```
 
-Then start the service as a background Bash invocation — do NOT block on it:
+Start the service with **`--daemon`** — it self-detaches (survives this call without
+`nohup`/`disown`), waits until the bridge answers, prints the URL, and exits. Do **not** background
+it yourself; `--daemon` is the durable, cross-platform way:
 
 ```bash
-npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS"
+npx -y "wicked-interactive@$WI_VER" serve --root "$DOCS" --daemon
 ```
 
 Developing locally from the repo, where `$WI_VER` may not be published yet? Run the local binary
 instead (it resolves its deps from the repo's `node_modules`):
 
 ```bash
-node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS"
+node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS" --daemon
 ```
 
 Read the first lines of output to learn the actual base URL — **the port is dynamic** (ADR-0022):
@@ -107,18 +109,19 @@ that falls forward to a free port if N is taken (you'll see `note: port N was ta
 instead`). **Always parse the printed URL — never assume 4400.** Because each `--root` gets its own
 port, several sessions can serve at once without colliding.
 
-### Reuse the bridge if one is already up
+### Reuse is identity-aware — just run it again
 
-`serve` is idempotent per root. The running bridge records itself in `<DOCS>/.wi-serve.json`
-(`{ port, pid, host, ... }`). If you run `serve --root "$DOCS"` and a **healthy** bridge already
-exists for that root, the command prints `reusing live bridge for <DOCS> on http://localhost:<PORT>`
-and exits 0 — do **not** start a second process; just open that URL. If the lockfile points at a
-dead process it's treated as stale and a fresh bridge starts automatically.
+`serve` is idempotent per root and the reuse check is **identity-based** (ADR-0022): the running
+bridge records itself in `<DOCS>/.wi-serve.json`, and `serve` hits the recorded port's
+**`/api/health`** (which reports the docs root it serves). If health reports **this** root, it
+reuses it (`reusing live bridge for <DOCS> on http://localhost:<PORT>`, exit 0). If something else
+is on that port — a different instance, or nothing — it does **not** reuse and starts fresh on a
+new free port. So you never get pointed at the wrong instance and roots never collide.
 
-So the rule is simply: **if there's a bridge, use it; if there isn't, start one** — running
-`serve --root "$DOCS"` does the right thing either way, so you never have to remember the port.
-To discover a root's bridge *without* starting anything, read `<DOCS>/.wi-serve.json` and confirm
-`http://localhost:<port>/api/docs` returns 200.
+The rule is simply: **run `serve --root "$DOCS" --daemon` whenever you need the bridge** — it
+reuses the live one or starts a durable new one, every time, and prints the URL. To discover a
+root's bridge *without* starting anything, read `<DOCS>/.wi-serve.json` and confirm
+`http://localhost:<port>/api/health` reports `root` == your `$DOCS`.
 
 ## Step 4 — Open the browser
 

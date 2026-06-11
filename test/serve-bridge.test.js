@@ -10,7 +10,7 @@ import { createServer as httpServer } from "node:http";
 
 import {
   LOCK_NAME, lockPath, readLock, writeLock, removeLock,
-  pidAlive, isPortFree, pickPort, bridgeHealthy,
+  pidAlive, isPortFree, pickPort, bridgeHealthy, bridgeIdentity,
 } from "../src/service/serve-bridge.mjs";
 
 function tmpRoot() {
@@ -104,4 +104,22 @@ test("bridgeHealthy: 200 on /api/docs → true; 500 → false; nothing → false
   // Nothing listening on a now-free port → false (connection refused, not a hang).
   const free = await pickPort(null);
   assert.equal(await bridgeHealthy("127.0.0.1", free, { timeoutMs: 1500 }), false);
+});
+
+test("bridgeIdentity returns the root /api/health reports (identity-aware reuse, ADR-0022)", async () => {
+  const ours = httpServer((req, res) => {
+    if (req.url === "/api/health") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, root: "/tmp/wi-A", pid: 1 })); }
+    else { res.writeHead(404); res.end(); }
+  });
+  const oursPort = await listen(ours);
+  const noHealth = httpServer((_req, res) => { res.writeHead(404); res.end(); });
+  const nhPort = await listen(noHealth);
+  try {
+    assert.equal(await bridgeIdentity("127.0.0.1", oursPort, { timeoutMs: 1500 }), "/tmp/wi-A");
+    assert.equal(await bridgeIdentity("127.0.0.1", nhPort, { timeoutMs: 1500 }), null, "no /api/health → null");
+    assert.equal(await bridgeIdentity("127.0.0.1", 0), null, "port 0 → null");
+  } finally { await close(ours); await close(noHealth); }
+
+  const free = await pickPort(null);
+  assert.equal(await bridgeIdentity("127.0.0.1", free, { timeoutMs: 1500 }), null, "nothing listening → null");
 });

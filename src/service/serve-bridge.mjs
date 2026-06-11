@@ -67,3 +67,19 @@ export async function bridgeHealthy(host, port, { timeoutMs = 800, path = HEALTH
   } catch { return false; }
   finally { clearTimeout(timer); }
 }
+
+// WHICH instance is on host:port? Hits /api/health and returns the docs root it serves (or null
+// if nothing answers / it isn't a wicked-interactive bridge). Identity-aware so a launcher can
+// tell "my bridge for this root" from "someone else's instance on the same port" (ADR-0022).
+export async function bridgeIdentity(host, port, { timeoutMs = 800 } = {}) {
+  if (!port) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`http://${host || "127.0.0.1"}:${port}/api/health`, { signal: ctrl.signal });
+    if (!r.ok) return null;
+    const body = await r.json();
+    return typeof body?.root === "string" ? body.root : null;
+  } catch { return null; }
+  finally { clearTimeout(timer); }
+}
