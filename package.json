@@ -41,7 +41,7 @@
     "wicked-bus": "^2.0.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.0.0"
   },
   "devDependencies": {
     "puppeteer-core": "^23.11.1"
