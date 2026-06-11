@@ -353,6 +353,9 @@ export function createMultiServer({ root, frontendDir } = {}) {
   }
 
   // ── Top-level endpoints ─────────────────────────────────────────────────────
+  // Identity probe (ADR-0022): says WHICH instance this is (the docs root it serves) so a
+  // launching agent can tell "my bridge is already up" from "someone else is on this port".
+  top.get("/api/health", (_req, res) => res.json({ ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null }));
   top.get("/api/preflight", (_req, res) => res.json(preflight()));
   top.get("/api/docs", (_req, res) => res.json(listDocs()));
 

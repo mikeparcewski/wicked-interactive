@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Overlay from "./components/Overlay.jsx";
 import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
-import AgentConsole from "./components/AgentConsole.jsx";
 import Composer from "./components/Composer.jsx";
 import Thread from "./components/Thread.jsx";
 import FsPicker from "./components/FsPicker.jsx";
@@ -84,23 +83,17 @@ export default function App() {
 
   const appendChat = (entry) => setChat((prev) => [...prev, entry]);
 
-  // ---- Agent console (ADR-0024): a user action that kicks off agent work opens a live modal
-  // that streams progress, surfaces questions, and stays up until a new render is ready. ----
+  // ---- Agent activity (ADR-0024): a user action that kicks off agent work expands the
+  // conversation thread (blur behind, no collapse) until a new render is ready. ----
   const kickoff = () => { setAgentBusy(true); setRenderReady(false); setConsoleEscape(false); };
   const closeConsole = () => { setAgentBusy(false); setRenderReady(false); setConsoleEscape(false); setQuestion(null); setProcessing(false); };
-  async function sendToAgent(text, isAnswer) {
-    try {
-      if (isAnswer && question) { const q = question; setQuestion(null); await emitAnswer(q.requestId, text); }
-      else await emitChat(text);
-    } catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
-  }
-  // Refs so the SSE handlers (stable closures) read the live console state.
+  // Refs so the SSE handlers (stable closures) read the live state.
   const busyRef = useRef(false);
   const renderReadyRef = useRef(false);
   useEffect(() => { busyRef.current = agentBusy; }, [agentBusy]);
   useEffect(() => { renderReadyRef.current = renderReady; }, [renderReady]);
-  const consoleActive = agentBusy || renderReady || !!question;
-  const consoleCanClose = renderReady || consoleEscape || (status?.kind === "error" && !agentBusy);
+  const consoleActive = agentBusy || renderReady || !!question;   // the thread takes over as the live surface
+  const working = (agentBusy || !!question) && !renderReady && !consoleEscape; // blur + lock-open while truly busy
   // Safety valve: if the agent goes quiet, let the user close after 75s (no permanent lock).
   useEffect(() => {
     if (!consoleActive || renderReady) return;
@@ -342,9 +335,12 @@ export default function App() {
       setShowNewDoc(true);
       return;
     }
-    kickoff();   // open the live console so the user sees the agent working + can nudge it
-    try { await emitChat(text); } // the bridge echoes it into the transcript
-    catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
+    kickoff();   // expand the thread so the user sees the agent working + can nudge it
+    try {
+      // If the agent is waiting on a question, the composer answers it; otherwise it's a chat.
+      if (question) { const q = question; setQuestion(null); await emitAnswer(q.requestId, text); }
+      else await emitChat(text); // the bridge echoes it into the transcript
+    } catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
   }
 
   async function answerQuestion(answer) {
@@ -590,9 +586,21 @@ export default function App() {
             </div>
           </div>
         )}
+        {working && <div className="wi-veil" aria-hidden="true" />}
       </main>
 
-        <Thread log={chat} agentThinking={agentThinking} open={threadOpen} onToggle={() => setThreadOpen((o) => !o)} />
+        <Thread
+          log={chat}
+          agentThinking={agentThinking}
+          open={threadOpen}
+          forceOpen={consoleActive}
+          lockOpen={working}
+          question={question}
+          onAnswer={answerQuestion}
+          renderReady={renderReady}
+          onClose={closeConsole}
+          onToggle={() => setThreadOpen((o) => !o)}
+        />
 
         <Composer
           onSend={sendChat}
@@ -606,18 +614,6 @@ export default function App() {
           reviewers={!currentIsDemo && currentDoc ? reviewers : undefined}
           onToggleReviewer={toggleReviewer}
           onReviewNow={runReview}
-        />
-
-        <AgentConsole
-          active={consoleActive}
-          feed={chat}
-          question={question}
-          onAnswer={answerQuestion}
-          onSend={sendToAgent}
-          renderReady={renderReady}
-          errored={status?.kind === "error" && !agentBusy}
-          canClose={consoleCanClose}
-          onClose={closeConsole}
         />
       </div>
 
