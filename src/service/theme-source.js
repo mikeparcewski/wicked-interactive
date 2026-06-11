@@ -32,12 +32,37 @@ export function resolveThemeTokens(name = "corporate-light", opts = {}) {
 }
 
 /**
+ * A LEARNED theme (from "learn a theme from a URL") lives in the doc workspace at
+ * `<docDir>/theme/learned.theme.json` — written by the agent after it reads the grabbed page's
+ * design. When present it is applied at EVERY version-creation for that doc, so the learned brand
+ * sticks without threading tokens through each event. Returns the token object, or null if absent
+ * or unreadable (degrade to the named/default theme — never throw).
+ */
+export function resolveLearnedTheme(docDir) {
+  try {
+    const file = join(docDir, "theme", "learned.theme.json");
+    if (existsSync(file)) {
+      const tokens = JSON.parse(readFileSync(file, "utf-8"));
+      if (tokens && typeof tokens === "object") return tokens;
+    }
+  } catch { /* degrade to the named/default theme */ }
+  return null;
+}
+
+/**
  * Resolve the theme and apply it to an HTML string in one step — the seam used at every
- * version-creation point. `opts.theme === false` skips theming; a string picks the theme by
- * name; otherwise the default (`corporate-light`) is used.
+ * version-creation point. `opts.theme === false` skips theming.
+ *
+ * Token resolution order (additive — default behavior unchanged):
+ *  1. `opts.tokens` (an object) — a LEARNED theme: apply it verbatim, no name needed. This is the
+ *     apply path for "learn a theme from a URL" — the agent synthesizes the token object and the
+ *     version-creation seam re-themes with it directly (ADR-0020).
+ *  2. `opts.theme` (a string) — pick the in-repo theme by name.
+ *  3. otherwise the default (`corporate-light`).
  */
 export function themed(html, opts = {}) {
   if (opts.theme === false) return html;
+  if (opts.tokens && typeof opts.tokens === "object") return applyTheme(html, { tokens: opts.tokens });
   const name = typeof opts.theme === "string" ? opts.theme : "corporate-light";
   const tokens = resolveThemeTokens(name, opts);
   return applyTheme(html, { tokens });

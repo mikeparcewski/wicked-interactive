@@ -147,6 +147,7 @@ live under `<BASE>/d/<doc>/…`. From those new lines, **skip the noise and act 
 | `wicked.feedback.processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfil them (Step 3) |
 | `wicked.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
 | `wicked.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
+| `wicked.theme.learned`               | the service grabbed a URL to a PDF   | read its design, synthesize + apply a theme (Step 8.5) |
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
 
 After you've handled the batch, arm a fresh watcher (Step 11, Step 1b) against the
@@ -404,6 +405,42 @@ A demo refines through the **same loop**. When the user highlights a step and as
 it arrives as a `wicked.feedback.processed` (Step 3) or `wicked.chat.posted` (Step 4). For a demo,
 "make the change" means **edit `demo.spec.mjs`** and emit `wicked.demo.requested` again — same spec
 ⇒ same click-path ⇒ a new version. Deterministic replay.
+
+## Step 8.5 — Learn a theme from a URL (ADR-0010/ADR-0020)
+
+The user pointed at a page whose look they like ("Theme from URL"). The split is the same as a
+demo: the **grab is deterministic service infra** (ADR-0010) — the service has already rendered
+the URL to a PDF and announced it as `wicked.theme.learned` with `render_path` (a PDF in the doc
+workspace). **The judgment — reading the design — is yours.** Do **not** re-grab the URL.
+
+1. **Read the rendered PDF with vision.** Use the SAME technique Step 9 uses to ingest binary
+   sources (wicked-brain reads pdf/images "via LLM vision") — except here you read the design
+   system directly off `render_path`: the **palette** (dominant background/surface, primary,
+   secondary/accent, text colors, borders), the **type** (heading vs body font family, the size
+   scale, weight), the **spacing** rhythm, **card/surface treatment** (radius, padding, shadow),
+   and the overall vibe (light/dark, dense/airy, formal/playful).
+2. **Synthesize a theme token object** in the `src/themes/*.json` shape —
+   `{name, colors, fonts, sizes, spacing, card}` (see `src/themes/corporate-light.json`). Assign
+   color roles **by meaning** (the page's dominant brand color → `primary`, the call-to-action /
+   link hue → `secondary`, etc.), not by raw position. Name it after the source (e.g.
+   `"stripe-learned"`).
+3. **Quality-gate it.** Run text/background pairs through **WCAG-AA contrast**
+   (`skills/assist/references/quality-checklist.md`) and nudge any failing color until it passes —
+   a learned palette that's pretty but unreadable is a regression.
+4. **Write it into the doc workspace** so the apply seam can re-theme with it:
+   `<DOCS>/<doc>/theme/learned.theme.json`. Narrate progress with `wicked.status.posted`
+   (`state:"working"` — a non-lock state) at each beat: reading → synthesizing → applying.
+5. **Apply it by re-landing head.** Once `<doc>/theme/learned.theme.json` exists, the service
+   applies it **automatically at every version-creation for this doc** — the theming seam reads
+   that file and re-themes with its tokens (so the learned brand sticks for all later edits too;
+   you never thread tokens through the event). Just trigger a re-land: read the head version's
+   HTML and emit `wicked.draft.completed` with it (or `wicked.edit.completed` for a targeted
+   re-theme). The service lands a new version themed with the learned tokens and the browser
+   hot-reloads. Close with a `complete` status.
+
+The deterministic grab (service) → vision read (you) → token apply (theming seam) all ride the one
+bus, reusing every existing seam. **There is nothing model-driven in the service half and nothing
+deterministic in the read half** — keep that line clean (ADR-0010).
 
 ## Step 9 — Index attached reference sources (ADR-0017)
 

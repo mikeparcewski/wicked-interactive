@@ -18,6 +18,8 @@ import { writeFeedback, applyFeedbackItems } from "./workspace.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
 import { recordDemo } from "./demo.js";
+import { grabUrlToPdf } from "./theme-grab.js";
+import { resolveLearnedTheme } from "./theme-source.js";
 
 /** Append a line to the doc's conversation transcript (ADR-0014). Best-effort. */
 export function appendConversation(dir, entry) {
@@ -27,7 +29,16 @@ export function appendConversation(dir, entry) {
   } catch { /* best-effort */ }
 }
 
-const themeOpts = (ctx) => ctx.themeOpts || {};
+// Theme opts for a version-creation. An explicit ctx.themeOpts wins (incl. theme:false). Otherwise,
+// if this doc has LEARNED a theme from a URL (<doc>/theme/learned.theme.json), re-theme with it so
+// the learned brand sticks across every draft/edit/feedback version (ADR-0020) — no need to thread
+// tokens through each event payload. Falls back to the named/default theme when no learned theme.
+function themeOpts(ctx, dir) {
+  const base = ctx.themeOpts || {};
+  if (base.tokens || base.theme === false) return base;
+  const learned = resolveLearnedTheme(dir);
+  return learned ? { ...base, tokens: learned } : base;
+}
 
 /**
  * UI feedback batch → apply deterministic edits now, hand the structural remainder to the
@@ -36,7 +47,7 @@ const themeOpts = (ctx) => ctx.themeOpts || {};
 export async function materializeFeedback(dir, payload, ctx) {
   const { items, author } = payload;
   const { version, parent } = writeFeedback(dir, { items, author });
-  const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx));
+  const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
   if (!result.idempotent) {
     ctx.emit("wicked.version.created", {
       version, parent, kind: "deterministic", html_file: result.html_file,
@@ -53,7 +64,7 @@ export async function materializeFeedback(dir, payload, ctx) {
 /** Agent structural results → follow-on version (INV-2 gate). */
 export async function materializeEdit(dir, payload, ctx) {
   const { version, results } = payload;
-  const out = await applyStructuralResults(dir, { version, results }, themeOpts(ctx));
+  const out = await applyStructuralResults(dir, { version, results }, themeOpts(ctx, dir));
   ctx.emit("wicked.version.created", {
     version: out.version, parent: out.parent, kind: "structural", html_file: `_v${out.version}.html`,
   });
@@ -66,7 +77,7 @@ export async function materializeDraft(dir, payload, ctx) {
   if ((html == null || html === "") && payload.html_path) {
     html = readFileSync(resolve(payload.html_path), "utf-8");
   }
-  const out = await applyGeneratedHtml(dir, html, themeOpts(ctx));
+  const out = await applyGeneratedHtml(dir, html, themeOpts(ctx, dir));
   ctx.emit("wicked.version.created", {
     version: out.version, parent: out.parent, kind: "generated", html_file: `_v${out.version}.html`,
   });
@@ -86,6 +97,45 @@ export async function materializeDemo(dir, payload, ctx) {
     version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
   });
   return result;
+}
+
+// --- Learn-a-theme-from-a-URL (ADR-0010/ADR-0020): the deterministic service half.
+// The grab is model-free — render the URL to a PDF in a per-doc runtime artifact dir (like
+// recordings/) and announce the path. The agent reads that PDF with vision, synthesizes a theme
+// JSON, and applies it via the theming seam (assist skill). The service never "reads the design".
+const THEME_DIR = "theme";
+
+/** Per-doc theme artifact path builder — exported so it's unit-testable without a real grab. */
+export function themeArtifactPath(dir, ts = Date.now()) {
+  return resolve(dir, THEME_DIR, `learned_${ts}.pdf`);
+}
+
+/**
+ * Theme-learn trigger → render the URL to a PDF in the doc workspace, then announce its path via
+ * `wicked.theme.learned`. Mirrors materializeDemo's shape. `grab` is injectable so tests don't
+ * need a real browser/network. On failure we surface a `wicked.status.posted` {state:"error"}
+ * rather than throwing into the command loop (which would retry/DLQ a non-retryable bad URL or a
+ * missing Chrome).
+ */
+export async function materializeThemeRequested(dir, payload, ctx, { grab = grabUrlToPdf } = {}) {
+  const url = String(payload.url || "").trim();
+  try {
+    if (!url) throw new Error("a theme URL is required");
+    // Validate http(s) up front (mirrors server.js's demo branch) so a bad-protocol URL fails
+    // fast WITHOUT touching the filesystem or invoking the grab — grabUrlToPdf re-checks too.
+    let u;
+    try { u = new URL(url); } catch { throw new Error(`theme URL must be a valid http(s) URL: ${url}`); }
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`theme URL must be http or https: ${url}`);
+    mkdirSync(resolve(dir, THEME_DIR), { recursive: true });
+    const renderPath = themeArtifactPath(dir);
+    ctx.emit("wicked.status.posted", { state: "working", message: "Grabbing the page to read its design…" });
+    const { path } = grab(url, renderPath);
+    ctx.emit("wicked.theme.learned", { url, render_path: path, format: "pdf" });
+    return { url, render_path: path };
+  } catch (e) {
+    ctx.emit("wicked.status.posted", { state: "error", message: `Couldn't grab that URL: ${e.message}` });
+    return { error: e.message };
+  }
 }
 
 // --- Sources (ADR-0017): the service persists sources.json so GET /api/sources is correct on

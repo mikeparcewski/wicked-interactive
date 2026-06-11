@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Learn-a-theme-from-a-URL requested",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri"
+    }
+  },
+  "additionalProperties": true
+}
