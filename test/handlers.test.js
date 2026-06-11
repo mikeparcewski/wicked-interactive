@@ -3,13 +3,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initWorkspace, loadManifest } from "../src/service/workspace.js";
 import {
   materializeFeedback, materializeEdit, materializeDraft,
   materializeSourceAttached, materializeSourceUpdated, appendConversation,
+  materializeThemeRequested, themeArtifactPath,
 } from "../src/service/handlers.js";
 
 function ws(html = "<h1>Q2 Results</h1><p>body</p>") {
@@ -107,6 +108,36 @@ test("materializeDraft reads html_path when html is absent (big-payload path, D5
   } finally { cleanup(dir); }
 });
 
+test("a learned theme in the workspace is auto-applied at version-creation (the apply leg)", async () => {
+  const learned = {
+    name: "test-learned",
+    colors: { background: "#101015", surface: "#181820", primary: "#abcdef", secondary: "#445566",
+      accent: "#ffaa00", text_primary: "#ffffff", text_secondary: "#cccccc", text_muted: "#888888", border: "#333333" },
+    fonts: { heading: "Georgia", body: "Georgia", mono: "Courier" },
+    sizes: { title: "48px", heading: "36px", body: "18px" },
+    spacing: {}, card: { background: "#181818", border_radius: "12px", padding: "24px", shadow: "none" },
+  };
+  // WITH a learned theme: the landed draft must carry the learned tokens (not the default).
+  const dir = ws("<section><h1>Building…</h1></section>");
+  try {
+    mkdirSync(join(dir, "theme"), { recursive: true });
+    writeFileSync(join(dir, "theme", "learned.theme.json"), JSON.stringify(learned));
+    await materializeDraft(dir, { html: "<section><h1>Investor Update</h1></section>" }, spyCtx());
+    const html = readFileSync(join(dir, "_v1.html"), "utf-8");
+    assert.match(html, /data-wi-theme="test-learned"/, "learned theme block injected");
+    assert.match(html, /--wi-primary:#abcdef/, "learned primary actually applied");
+  } finally { cleanup(dir); }
+
+  // CONTROL: no learned theme -> default theme, learned color absent (proves the learned file caused it).
+  const dir2 = ws("<section><h1>Building…</h1></section>");
+  try {
+    await materializeDraft(dir2, { html: "<section><h1>Investor Update</h1></section>" }, spyCtx());
+    const html2 = readFileSync(join(dir2, "_v1.html"), "utf-8");
+    assert.doesNotMatch(html2, /#abcdef/, "no learned color without a learned theme");
+    assert.match(html2, /data-wi-theme="corporate-light"/, "default theme when none learned");
+  } finally { cleanup(dir2); }
+});
+
 test("source attach + update round-trips through sources.json", () => {
   const dir = ws();
   try {
@@ -118,6 +149,59 @@ test("source attach + update round-trips through sources.json", () => {
     saved = JSON.parse(readFileSync(join(dir, "requests", "sources.json"), "utf-8"));
     assert.equal(saved.sources[0].status, "indexed");
     assert.ok(saved.sources[0].indexed_at);
+  } finally { cleanup(dir); }
+});
+
+test("materializeThemeRequested grabs the URL and emits theme.learned with render_path", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    // Inject a fake grab so no real Chrome/network is needed; assert it got the live url + a
+    // workspace path under theme/, and that it wrote a PDF there.
+    let grabbedUrl = null, grabbedOut = null;
+    const fakeGrab = (url, out) => {
+      grabbedUrl = url;
+      grabbedOut = out;
+      writeFileSync(out, "%PDF-1.4 fake");
+      return { path: out };
+    };
+    const out = await materializeThemeRequested(dir, { url: "https://stripe.com" }, ctx, { grab: fakeGrab });
+    assert.equal(grabbedUrl, "https://stripe.com");
+    assert.match(grabbedOut, /[\\/]theme[\\/]learned_\d+\.pdf$/, "renders into the per-doc theme/ dir");
+    assert.ok(existsSync(grabbedOut), "the PDF artifact exists");
+    assert.equal(out.render_path, grabbedOut);
+    const learned = ctx.events.find((e) => e.type === "wicked.theme.learned");
+    assert.ok(learned, "emitted wicked.theme.learned");
+    assert.equal(learned.payload.url, "https://stripe.com");
+    assert.equal(learned.payload.render_path, grabbedOut);
+    assert.equal(learned.payload.format, "pdf");
+    // A working status is posted before the grab (progress), and no error status.
+    assert.ok(ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "working"));
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
+  } finally { cleanup(dir); }
+});
+
+test("materializeThemeRequested surfaces an error status (not a throw) on a bad URL", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    // No grab should run for an invalid URL; a clean error status is posted instead of throwing.
+    let calls = 0;
+    const out = await materializeThemeRequested(dir, { url: "ftp://nope" }, ctx, { grab: () => { calls++; } });
+    assert.equal(calls, 0, "grab never invoked for a non-http(s) url");
+    assert.ok(out.error, "returns an error summary rather than throwing into the loop");
+    const err = ctx.events.find((e) => e.type === "wicked.status.posted" && e.payload.state === "error");
+    assert.ok(err, "emitted an error status the UI/agent can surface");
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.theme.learned"), "no theme.learned on failure");
+  } finally { cleanup(dir); }
+});
+
+test("themeArtifactPath builds a stable per-doc theme/ pdf path", () => {
+  const dir = ws();
+  try {
+    const p = themeArtifactPath(dir, 1234);
+    assert.match(p, /[\\/]theme[\\/]learned_1234\.pdf$/);
+    assert.ok(p.startsWith(dir), "stays inside the doc workspace");
   } finally { cleanup(dir); }
 });
 

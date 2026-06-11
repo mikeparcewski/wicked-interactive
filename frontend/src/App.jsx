@@ -8,9 +8,10 @@ import SourcesPanel from "./components/SourcesPanel.jsx";
 import FsPicker from "./components/FsPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
+import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -30,8 +31,10 @@ export default function App() {
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
+  const [showThemeUrl, setShowThemeUrl] = useState(false); // learn-a-theme-from-a-URL (ADR-0020)
   const [newDocError, setNewDocError] = useState(null);
   const [newDemoError, setNewDemoError] = useState(null);
+  const [themeUrlError, setThemeUrlError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
@@ -219,6 +222,11 @@ export default function App() {
     "wicked.source.updated": (payload) => {
       setSources((prev) => prev.map((s) => (s.path === payload.path ? { ...s, status: payload.status } : s)));
     },
+    // Service grabbed the URL → the agent is now reading the design. No lock: completion arrives
+    // as wicked.status.posted + wicked.version.created (the re-theme lands a new version).
+    "wicked.theme.learned": () => {
+      setStatus({ kind: "ok", text: "Reading the design…" });
+    },
     "wicked.error.raised": (payload) => {
       setProcessing(false);
       setStatus({ kind: "error", text: payload.error || "something went wrong" });
@@ -308,6 +316,18 @@ export default function App() {
 
   const openNewDoc = () => { setNewDocError(null); setShowNewDoc(true); };
   const openNewDemo = () => { setNewDemoError(null); setShowNewDemo(true); };
+  const openThemeUrl = () => { setThemeUrlError(null); setShowThemeUrl(true); };
+
+  async function learnThemeFromUrl(url) {
+    setThemeUrlError(null);
+    try {
+      await emitThemeFromUrl(url);   // service grabs → agent reads → re-themes (status + version.created)
+      setShowThemeUrl(false);
+      setStatus({ kind: "ok", text: "Learning that theme…" });
+    } catch (e) {
+      setThemeUrlError(e.message);
+    }
+  }
 
   // Partition the registry by kind (ADR-0018): demos render in their own nav section.
   const docKind = (d) => (typeof d === "string" ? "doc" : d.kind || "doc");
@@ -414,6 +434,16 @@ export default function App() {
               {gifBusy ? "Building GIF…" : "GIF"}
             </button>
           )}
+          {!currentIsDemo && currentDoc && (
+            <button
+              className="wi-btn wi-btn--ghost"
+              disabled={processing}
+              onClick={openThemeUrl}
+              title="Match this document's look to a page you like"
+            >
+              Theme from URL
+            </button>
+          )}
           {!currentIsDemo && (
             <div className="wi-export" role="group" aria-label="Export">
               <span className="wi-export__icon" aria-hidden="true">
@@ -506,6 +536,13 @@ export default function App() {
         error={newDemoError}
         onCreate={onCreateDemo}
         onCancel={() => setShowNewDemo(false)}
+      />
+
+      <ThemeFromUrlModal
+        open={showThemeUrl}
+        error={themeUrlError}
+        onSubmit={learnThemeFromUrl}
+        onCancel={() => setShowThemeUrl(false)}
       />
 
       <InstallGate preflight={preflight} onRetry={checkPreflight} />
