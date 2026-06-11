@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { inlineHtml, exportHtml, exportPdf, decorateForExport, isDeck } from "../src/service/export.js";
+import { inlineHtml, exportHtml, exportPdf, decorateForExport, isDeck, collectGradientClipSelectors } from "../src/service/export.js";
 import { initWorkspace } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 
@@ -126,6 +126,43 @@ test("deck-structured export gets the landscape @page; a tall doc does NOT", () 
   assert.doesNotMatch(doc, /break-after:\s*page/);
   // ...but it still gets the universally-safe baseline
   assert.match(doc, /box-shadow:\s*none\s*!important/);
+});
+
+test("class/<style>-defined gradient text is neutralized in the print override (gotcha #3)", () => {
+  const out = decorateForExport(
+    `<html><head><style>.grad{background:linear-gradient(90deg,#f0f,#0ff);` +
+    `-webkit-background-clip:text;-webkit-text-fill-color:transparent}</style></head>` +
+    `<body><h1 class="grad">Hi</h1></body></html>`
+  );
+  // The collected selector list includes the class and neutralizes the clip.
+  assert.match(out, /\.grad\s*\{/);
+  assert.match(out, /background:\s*none\s*!important/);
+  assert.match(out, /-webkit-text-fill-color:\s*currentColor\s*!important/);
+});
+
+test("collectGradientClipSelectors: grouped selectors, multiple rules, @media skipped", () => {
+  // background-clip:text + text-fill-color:transparent, grouped + standalone selectors
+  const css = `
+    .a, h1.grad { -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .plain { color: red; }
+    .b { background-clip: text; }
+    @media print { .nested { -webkit-background-clip: text; } }
+  `;
+  const sels = collectGradientClipSelectors(css);
+  assert.deepEqual(sels, [".a, h1.grad", ".b"]); // .plain excluded; @media body skipped
+});
+
+test("a doc with NO gradient-clip rules gets no spurious extra override", () => {
+  const out = decorateForExport(
+    `<html><head><style>.x{color:red;background:linear-gradient(#fff,#000)}</style></head>` +
+    `<body><h1 class="x">Hi</h1></body></html>`
+  );
+  // The only @media print blocks are the baseline (1) — no appended class override.
+  // The baseline injects exactly one currentColor fill (the inline-attribute selectors).
+  const fillCount = (out.match(/-webkit-text-fill-color:\s*currentColor/g) || []).length;
+  assert.equal(fillCount, 1);
+  // And the appended-override class selector must not appear.
+  assert.doesNotMatch(out, /\.x\s*\{[^}]*background:\s*none\s*!important/);
 });
 
 test("POST /api/export html returns a self-contained file path", async () => {

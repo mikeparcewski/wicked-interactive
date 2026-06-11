@@ -59,23 +59,84 @@ const PRINT_BASELINE_CSS = [
 // DECK-SPECIFIC — CONDITIONAL, only when the doc is detected as a deck. A tall
 // single-column article would be HARMED by a forced 16:9 landscape page, so we
 // must NEVER inject this blanket. 13.333in x 7.5in == 960x540pt == 16:9.
+// The slide-geometry declarations carry !important so an author class rule
+// (e.g. `.slide { min-height: 200vh }`) can't silently override one-slide-per-
+// page. The @page rule is left as-is (@page declarations don't take !important).
 const PRINT_DECK_CSS = [
   "@media print {",
   "  @page { size: 13.333in 7.5in; margin: 0; }",        // gotcha #1: portrait Letter default
   "  html, body { margin: 0; padding: 0; }",
   // gotcha #5: one slide per page, no continuous-scroll whitespace.
   "  section, [data-slide], .slide {",
-  "    min-height: 100vh; height: 100vh; box-sizing: border-box;",
-  "    break-after: page; page-break-after: always; overflow: hidden;",
-  "    display: flex; flex-direction: column; justify-content: center;",
+  "    min-height: 100vh !important; height: 100vh !important; box-sizing: border-box;",
+  "    break-after: page !important; page-break-after: always; overflow: hidden !important;",
+  "    display: flex !important; flex-direction: column; justify-content: center !important;",
   "  }",
   "  section:last-child, [data-slide]:last-child, .slide:last-child {",
-  "    break-after: auto; page-break-after: auto;",
+  "    break-after: auto !important; page-break-after: auto;",
   "  }",
   "}",
 ].join("\n");
 
 const SLIDE_SELECTOR = "section, [data-slide], .slide";
+
+// A declaration block clips a gradient to its glyphs when it sets
+// `-webkit-background-clip:text`, `background-clip:text`, or
+// `-webkit-text-fill-color:transparent`. In --print-to-pdf that paints the
+// whole element box instead of the text, so the run prints as a colored
+// rectangle (gotcha #3). Tolerate whitespace and casing.
+const GRADIENT_CLIP_DECL = /(?:-webkit-)?background-clip\s*:\s*text|(?:-webkit-)?text-fill-color\s*:\s*transparent/i;
+
+/**
+ * Collect the SELECTORS of CSS rules whose declaration block clips a gradient to
+ * its text (so we can neutralize class/<style>-defined gradient headings in print,
+ * not just inline-styled ones). Scans the combined CSS at the TOP LEVEL only via a
+ * brace-depth walk: a plain `selector { ... }` rule is inspected; an at-rule with a
+ * block (`@media`, `@keyframes`, `@supports`, ...) is skipped wholesale. This keeps
+ * the scan simple and well-bounded — gradient-clipped text nested inside a media
+ * query is an ACCEPTABLE MISS (the inline-attribute baseline still covers inline
+ * styles; class rules inside @media are rare for static headings).
+ *
+ * @param {string} cssText combined text of all <style> blocks
+ * @returns {string[]} selectors (raw, comma-grouped selectors kept verbatim), de-duped
+ */
+export function collectGradientClipSelectors(cssText) {
+  if (!cssText) return [];
+  const selectors = [];
+  let i = 0;
+  const n = cssText.length;
+  while (i < n) {
+    // Find the next rule boundary: either `{` (start of a block) or end of text.
+    const open = cssText.indexOf("{", i);
+    if (open === -1) break;
+    const prelude = cssText.slice(i, open).trim();
+
+    // Walk to the matching close brace, tracking nesting so at-rules with nested
+    // blocks (@media/@keyframes/@supports) consume their whole body.
+    let depth = 1;
+    let j = open + 1;
+    const bodyStart = j;
+    while (j < n && depth > 0) {
+      const ch = cssText[j];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      j++;
+    }
+    const body = cssText.slice(bodyStart, j - 1);
+
+    if (prelude.startsWith("@")) {
+      // At-rule: skip its block wholesale (nested gradient text not covered — by design).
+      i = j;
+      continue;
+    }
+    // Plain style rule: a declaration-only body (no nested braces) clipping a gradient.
+    if (prelude && !body.includes("{") && GRADIENT_CLIP_DECL.test(body)) {
+      selectors.push(prelude);
+    }
+    i = j;
+  }
+  return [...new Set(selectors)];
+}
 
 /**
  * Detect whether an export is a slide DECK (vs a continuous-scroll doc / article).
@@ -113,7 +174,29 @@ export function decorateForExport(html) {
   }
 
   // (B) Print stylesheet: baseline always; deck rules only when detected as a deck.
-  const css = isDeck(html) ? `${PRINT_BASELINE_CSS}\n${PRINT_DECK_CSS}` : PRINT_BASELINE_CSS;
+  let css = isDeck(html) ? `${PRINT_BASELINE_CSS}\n${PRINT_DECK_CSS}` : PRINT_BASELINE_CSS;
+
+  // (B.1) Class/<style>-aware gradient-text neutralization. The inline-attribute
+  // selectors in PRINT_BASELINE_CSS only catch gradient text styled via `style="..."`.
+  // A heading clipped via a CSS class or a <style> rule (e.g. `.grad{...; -webkit-
+  // background-clip:text; -webkit-text-fill-color:transparent}`) would still print as
+  // a colored box. By this point inlineHtml has already turned <link> stylesheets into
+  // <style> blocks, so all that CSS text lives in the document — scan it, collect the
+  // clipping rules' selectors, and append a print override targeting them (belt and
+  // suspenders alongside the inline-attribute selectors above).
+  const styleCss = $("style").map((_, el) => $(el).html() || "").get().join("\n");
+  const clipSelectors = collectGradientClipSelectors(styleCss);
+  if (clipSelectors.length) {
+    css += [
+      "\n@media print {",
+      `  ${clipSelectors.join(", ")} {`,
+      "    background: none !important; -webkit-text-fill-color: currentColor !important;",
+      "    color: inherit !important;",
+      "  }",
+      "}",
+    ].join("\n");
+  }
+
   $head.append(`<style media="print" data-wi-print>\n${css}\n</style>`);
 
   // cheerio strips/omits the doctype — prepend it so the export is a valid document.
