@@ -96,14 +96,29 @@ instead (it resolves its deps from the repo's `node_modules`):
 node "$WI_HOME/bin/wicked-interactive.js" serve --root "$DOCS"
 ```
 
-Read the first lines of output to learn the actual port:
+Read the first lines of output to learn the actual base URL — **the port is dynamic** (ADR-0022):
 
 ```
 wicked-interactive (multi-doc) serving <DOCS> on http://localhost:<PORT>
 ```
 
-The port defaults to 4400 but the OS may pick another if it's taken — always read the printed
-URL rather than assuming 4400.
+With no `--port` the service takes the first free port from 4400 up; `--port N` is a *preference*
+that falls forward to a free port if N is taken (you'll see `note: port N was taken — using <PORT>
+instead`). **Always parse the printed URL — never assume 4400.** Because each `--root` gets its own
+port, several sessions can serve at once without colliding.
+
+### Reuse the bridge if one is already up
+
+`serve` is idempotent per root. The running bridge records itself in `<DOCS>/.wi-serve.json`
+(`{ port, pid, host, ... }`). If you run `serve --root "$DOCS"` and a **healthy** bridge already
+exists for that root, the command prints `reusing live bridge for <DOCS> on http://localhost:<PORT>`
+and exits 0 — do **not** start a second process; just open that URL. If the lockfile points at a
+dead process it's treated as stale and a fresh bridge starts automatically.
+
+So the rule is simply: **if there's a bridge, use it; if there isn't, start one** — running
+`serve --root "$DOCS"` does the right thing either way, so you never have to remember the port.
+To discover a root's bridge *without* starting anything, read `<DOCS>/.wi-serve.json` and confirm
+`http://localhost:<port>/api/docs` returns 200.
 
 ## Step 4 — Open the browser
 
@@ -132,7 +147,9 @@ forever. `assist` is what makes the agent-in-the-loop guarantee real.
 
 You started the service, so you own stopping it. When the user is finished (they say so, or
 the session is wrapping up), **kill the `serve` process** (and stop the `wicked-bus subscribe`
-tail you started in `assist`) so nothing is left bound to the port. Documents persist on disk
-under `--root` and the bus is just transport, so stopping is non-destructive — restarting
+tail you started in `assist`) so nothing is left bound to the port. A clean shutdown (SIGINT/
+SIGTERM) removes that root's `.wi-serve.json` so the next `serve` knows the bridge is gone; the
+lockfile is per-root, so stopping one never disturbs another session's bridge. Documents persist
+on disk under `--root` and the bus is just transport, so stopping is non-destructive — restarting
 `serve` later picks up right where they left off. Leave any sibling servers (wicked-brain, the
 shared wicked-bus, etc.) alone.

@@ -20,3 +20,6 @@ frontend/.vite/
 
 # npm pack output (CI/local smoke)
 *.tgz
+
+# wicked-interactive serve lockfile (runtime, per docs-root) — ADR-0022
+.wi-serve.json

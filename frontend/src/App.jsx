@@ -33,6 +33,7 @@ export default function App() {
   const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
   const [showThemeUrl, setShowThemeUrl] = useState(false); // learn-a-theme-from-a-URL (ADR-0020)
   const [newDocError, setNewDocError] = useState(null);
+  const [newDocBrief, setNewDocBrief] = useState("");    // seeded when the launch-state chat starts a doc
   const [newDemoError, setNewDemoError] = useState(null);
   const [themeUrlError, setThemeUrlError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
@@ -290,6 +291,14 @@ export default function App() {
   }
 
   async function sendChat(text) {
+    // Launch state — no document to talk about yet. Rather than dead-end on "unknown doc",
+    // carry the first message into a new document as its brief; the agent builds from it.
+    if (!currentDoc) {
+      setNewDocError(null);
+      setNewDocBrief(text);
+      setShowNewDoc(true);
+      return;
+    }
     try { await emitChat(text); } // the bridge echoes it into the transcript
     catch (e) { appendChat({ role: "event", text: `(couldn't send: ${e.message})` }); }
   }
@@ -332,7 +341,7 @@ export default function App() {
   const lastEntry = chat[chat.length - 1];
   const agentThinking = !processing && lastEntry?.role === "user";
 
-  const openNewDoc = () => { setNewDocError(null); setShowNewDoc(true); };
+  const openNewDoc = () => { setNewDocError(null); setNewDocBrief(""); setShowNewDoc(true); };
   const openNewDemo = () => { setNewDemoError(null); setShowNewDemo(true); };
   const openThemeUrl = () => { setThemeUrlError(null); setShowThemeUrl(true); };
 
@@ -505,19 +514,19 @@ export default function App() {
       <main className="wi-canvas" ref={canvasRef}>
         {!currentDoc && (
           <>
-            <div className="wi-empty-hint" style={{ top: Math.max(4, hintY.doc - 22) }} aria-hidden="true">
-              <svg className="wi-empty-hint__arrow" width="86" height="44" viewBox="0 0 86 44" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M82 11C56 13 27 15 7 22" />
-                <path d="M7 22C13 19 18 16 22 12" />
-                <path d="M7 22C13 25 18 30 22 34" />
+            <div className="wi-empty-hint" style={{ top: Math.max(2, hintY.doc - 6) }} aria-hidden="true">
+              <svg className="wi-empty-hint__arrow" width="78" height="40" viewBox="0 0 78 40" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M72 32C50 32 24 28 8 9" />
+                <path d="M8 9C13 11 18 13 23 16" />
+                <path d="M8 9C9 14 10 20 11 26" />
               </svg>
               <span className="wi-empty-hint__text">start a new document</span>
             </div>
-            <div className="wi-empty-hint" style={{ top: Math.max(4, hintY.demo - 22) }} aria-hidden="true">
-              <svg className="wi-empty-hint__arrow" width="86" height="44" viewBox="0 0 86 44" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M82 11C56 13 27 15 7 22" />
-                <path d="M7 22C13 19 18 16 22 12" />
-                <path d="M7 22C13 25 18 30 22 34" />
+            <div className="wi-empty-hint" style={{ top: Math.max(2, hintY.demo - 6) }} aria-hidden="true">
+              <svg className="wi-empty-hint__arrow" width="78" height="40" viewBox="0 0 78 40" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M72 32C50 32 24 28 8 9" />
+                <path d="M8 9C13 11 18 13 23 16" />
+                <path d="M8 9C9 14 10 20 11 26" />
               </svg>
               <span className="wi-empty-hint__text">…or record a demo of your app</span>
             </div>
@@ -546,6 +555,7 @@ export default function App() {
       <NewDocModal
         open={showNewDoc}
         error={newDocError}
+        initialBrief={newDocBrief}
         onCreate={onCreateDoc}
         onCancel={() => setShowNewDoc(false)}
       />
