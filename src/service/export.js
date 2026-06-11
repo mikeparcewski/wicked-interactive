@@ -59,26 +59,34 @@ const PRINT_BASELINE_CSS = [
 // DECK-SPECIFIC — CONDITIONAL, only when the doc is detected as a deck. A tall
 // single-column article would be HARMED by a forced 16:9 landscape page, so we
 // must NEVER inject this blanket. 13.333in x 7.5in == 960x540pt == 16:9.
-// The slide-geometry declarations carry !important so an author class rule
-// (e.g. `.slide { min-height: 200vh }`) can't silently override one-slide-per-
-// page. The @page rule is left as-is (@page declarations don't take !important).
+// We target `.wi-slide-top`, a class decorateForExport stamps onto ONLY the
+// top-level slide containers — a NESTED <section>/.slide (a sub-layout, tabs, or
+// an inner card) must NOT be forced to 100vh/overflow:hidden or its content would
+// clip. The geometry declarations carry !important so an author class rule can't
+// silently override one-slide-per-page. (@page declarations don't take !important.)
 const PRINT_DECK_CSS = [
   "@media print {",
   "  @page { size: 13.333in 7.5in; margin: 0; }",        // gotcha #1: portrait Letter default
   "  html, body { margin: 0; padding: 0; }",
   // gotcha #5: one slide per page, no continuous-scroll whitespace.
-  "  section, [data-slide], .slide {",
+  "  .wi-slide-top {",
   "    min-height: 100vh !important; height: 100vh !important; box-sizing: border-box;",
   "    break-after: page !important; page-break-after: always; overflow: hidden !important;",
   "    display: flex !important; flex-direction: column; justify-content: center !important;",
   "  }",
-  "  section:last-child, [data-slide]:last-child, .slide:last-child {",
+  "  .wi-slide-top:last-child {",
   "    break-after: auto !important; page-break-after: auto;",
   "  }",
   "}",
 ].join("\n");
 
 const SLIDE_SELECTOR = "section, [data-slide], .slide";
+
+// The top-level (non-nested) slide containers — the unit of "one slide per page".
+// A <section> inside a slide is layout, not a slide, so it's excluded.
+function topLevelSlides($) {
+  return $(SLIDE_SELECTOR).filter((_, el) => $(el).parents(SLIDE_SELECTOR).length === 0);
+}
 
 // A declaration block clips a gradient to its glyphs when it sets
 // `-webkit-background-clip:text`, `background-clip:text`, or
@@ -151,10 +159,11 @@ export function collectGradientClipSelectors(cssText) {
  * We count only NON-NESTED containers so a stray inner `<section>` doesn't flip a
  * single-section one-pager into "deck".
  */
-export function isDeck(html) {
-  const $ = cheerio.load(html);
-  const tops = $(SLIDE_SELECTOR).filter((_, el) => $(el).parents(SLIDE_SELECTOR).length === 0);
-  return tops.length >= 2;
+// Accepts an HTML string OR an already-loaded cheerio instance, so decorateForExport
+// can reuse its `$` instead of parsing the document a second time.
+export function isDeck(htmlOrCheerio) {
+  const $ = typeof htmlOrCheerio === "string" ? cheerio.load(htmlOrCheerio) : htmlOrCheerio;
+  return topLevelSlides($).length >= 2;
 }
 
 /**
@@ -174,7 +183,11 @@ export function decorateForExport(html) {
   }
 
   // (B) Print stylesheet: baseline always; deck rules only when detected as a deck.
-  let css = isDeck(html) ? `${PRINT_BASELINE_CSS}\n${PRINT_DECK_CSS}` : PRINT_BASELINE_CSS;
+  // Reuse the loaded `$` (no second parse). For a deck, stamp `wi-slide-top` onto ONLY
+  // the top-level slides so PRINT_DECK_CSS's 100vh/overflow rules never hit nested ones.
+  const deck = isDeck($);
+  if (deck) topLevelSlides($).addClass("wi-slide-top");
+  let css = deck ? `${PRINT_BASELINE_CSS}\n${PRINT_DECK_CSS}` : PRINT_BASELINE_CSS;
 
   // (B.1) Class/<style>-aware gradient-text neutralization. The inline-attribute
   // selectors in PRINT_BASELINE_CSS only catch gradient text styled via `style="..."`.

@@ -128,6 +128,22 @@ test("deck-structured export gets the landscape @page; a tall doc does NOT", () 
   assert.match(doc, /box-shadow:\s*none\s*!important/);
 });
 
+test("deck geometry tags only TOP-LEVEL slides — nested sections aren't forced to 100vh", () => {
+  // two top-level slides; slide 2 wraps a nested <section> sub-layout
+  const out = decorateForExport(
+    `<html><head></head><body>` +
+    `<section><h1>Slide 1</h1></section>` +
+    `<section><h2>Slide 2</h2><section class="inner">nested layout</section></section>` +
+    `</body></html>`
+  );
+  // exactly the 2 top-level slides carry wi-slide-top; the nested <section> does NOT
+  assert.equal((out.match(/class="wi-slide-top"/g) || []).length, 2);
+  assert.match(out, /class="inner"/);                 // nested section keeps its own class, untouched
+  // the 100vh/overflow geometry targets the class, not the broad section selector
+  assert.match(out, /\.wi-slide-top\s*\{[^}]*height:\s*100vh/);
+  assert.doesNotMatch(out, /\bsection,\s*\[data-slide\],\s*\.slide\s*\{[^}]*100vh/);
+});
+
 test("class/<style>-defined gradient text is neutralized in the print override (gotcha #3)", () => {
   const out = decorateForExport(
     `<html><head><style>.grad{background:linear-gradient(90deg,#f0f,#0ff);` +
