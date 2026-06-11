@@ -260,7 +260,9 @@ On a `wicked.chat.posted` event with `role: "user"`:
   `wicked.edit.completed` with `version` set to the **current head** (Step 3c). The service lands
   a follow-on from head.
 - **A whole-document change** ("add a pricing slide", "make the whole thing premium", or the
-  first real draft of a blank doc) — build the complete new markup and emit
+  first real draft of a blank doc) — build the complete new markup, leaning on the craft
+  references (design-principles for "make it premium", outline/story-arc for structure) and
+  self-checking against `skills/assist/references/quality-checklist.md` before you emit. Then emit
   `wicked.draft.completed` with `{ "document_id", "html" }` (or `html_path` for a large draft,
   ADR-0019 D5). The service instruments fresh anchors, themes it, and lands a new version.
 - Always post a `processing` status when you start and `complete` when the version lands, so
@@ -279,10 +281,14 @@ wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","
 - Read every entry in `source_paths` (each a file or a folder).
 - **Ground it in knowledge** — consult/ingest **wicked-brain** so the draft uses the user's real
   numbers and prior decisions (Step 6). Don't invent figures the source doesn't support.
-- **Generate the document** — use the craft references under `skills/assist/references/`
-  (outline method, story arc, HTML/CSS constraints). For a multi-discipline brief, route through
-  a **wicked-garden crew** (Step 7) so design + copy + structure are reasoned about together.
+- **Generate the document** — work the craft references under `skills/assist/references/` as a
+  pipeline: structure (outline-method) → narrative (story-arc) → visual design (design-principles)
+  → export-safe HTML (html-craft). For a multi-discipline brief, route through a **wicked-garden
+  crew** (Step 7) so design + copy + structure are reasoned about together.
 - Honor the `brief` (length, audience, tone, what to lead with).
+- **Self-check before you emit** — run the draft past `skills/assist/references/quality-checklist.md`
+  (narrative, content, visual, export-safety). Fix structure and content before surface; keep it
+  proportional.
 
 Then emit the whole draft (fresh document — no pre-existing anchors to preserve):
 
