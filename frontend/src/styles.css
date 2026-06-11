@@ -68,20 +68,23 @@
 
   /* App-shell planes. The document is the brightest floating object on the paper. */
   --wi-canvas-bg: #efe9d6;                     /* Plane 0 — workspace the doc floats on */
-  --wi-chrome: #1e1e1f;                        /* Plane 1 — charcoal rail + toolbar (constant across themes) */
-  --wi-chrome-2: #2c2c2d;                      /* lifted controls on chrome */
-  --wi-chrome-3: #3a3a3b;                      /* hover */
-  --wi-chrome-line: rgba(234,229,182,.12);
-  --wi-chrome-line-2: rgba(234,229,182,.24);
-  --wi-chrome-ink: #eae5b6;                    /* butter */
-  --wi-chrome-ink-soft: #b7b3a4;
-  --wi-chrome-ink-faint: #87857a;
-  --wi-accent-bright: #ffe45c;                 /* accent text/icons on dark chrome */
+  --wi-chrome: #f8f3e4;                         /* Plane 1 — light warm-paper rail + toolbar */
+  --wi-chrome-2: #ece4cd;                       /* lifted controls on chrome */
+  --wi-chrome-3: #ddd3b6;                       /* hover */
+  --wi-chrome-line: rgba(34,34,36,.12);
+  --wi-chrome-line-2: rgba(34,34,36,.20);
+  --wi-chrome-ink: #232324;                     /* charcoal text on light chrome */
+  --wi-chrome-ink-soft: #5b5b52;
+  --wi-chrome-ink-faint: #807e72;
+  --wi-accent-bright: #8a6d05;                  /* AA mustard — accent AS TEXT on light chrome */
+  --wi-chrome-wash: rgba(34,34,36,.06);         /* hover/active wash on light chrome */
+  --wi-rail-cast: rgba(34,34,36,.16);           /* rail fly-out drop shadow */
+  --wi-logo-underline: #c6a413;                 /* mustard rule under the brand keyword */
   --wi-panel-bg: #fffdf5;                      /* Plane 2 — light side column */
   --wi-panel-2: #f3eedd;                       /* agent bubbles / inset on the panel */
 
   /* soft separators */
-  --wi-sep-down:  0 1px 0 rgba(234,229,182,.06), 0 8px 28px rgba(20,18,8,.30);
+  --wi-sep-down:  0 1px 0 rgba(255,255,255,.5), 0 6px 22px rgba(34,34,36,.12);
   --wi-sep-right: -1px 0 0 rgba(34,34,36,.05), -14px 0 32px rgba(34,34,36,.10);
   --wi-doc-shadow: 0 1px 3px rgba(34,34,36,.12), 0 8px 24px rgba(34,34,36,.14), 0 24px 56px rgba(34,34,36,.12);
 
@@ -132,6 +135,9 @@
   --wi-chrome-ink-soft: #b7b3a4;
   --wi-chrome-ink-faint: #87857a;
   --wi-accent-bright: #ffe45c;
+  --wi-chrome-wash: rgba(234,229,182,.08);
+  --wi-rail-cast: rgba(0,0,0,.4);
+  --wi-logo-underline: var(--wi-accent);
   --wi-panel-bg: #2a2a2b;
   --wi-panel-2: #313132;
 
@@ -225,7 +231,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-logo__word b { font-weight: 800; color: var(--wi-chrome-ink); }
 .wi-logo__word i { font-style: normal; font-weight: 700; color: var(--wi-accent-bright);
   /* the accent underline on the keyword */
-  background-image: linear-gradient(var(--wi-accent), var(--wi-accent));
+  background-image: linear-gradient(var(--wi-logo-underline), var(--wi-logo-underline));
   background-size: 100% 2px; background-position: 0 100%; background-repeat: no-repeat; }
 
 /* Breadcrumb */
@@ -257,7 +263,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 }
 .wi-rail:hover .wi-rail__inner {
   width: 232px;
-  box-shadow: inset -1px 0 0 var(--wi-chrome-line), 18px 0 44px rgba(0,0,0,.4);
+  box-shadow: inset -1px 0 0 var(--wi-chrome-line), 18px 0 44px var(--wi-rail-cast);
 }
 .wi-rail__row { display: flex; align-items: center; gap: 12px; width: 100%; }
 .wi-rail__label {
@@ -270,7 +276,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 /* "New" — the one accent action. Flat yellow fill, flush-left with the tiles. */
 .wi-rail__new-row { cursor: pointer; border: 0; background: transparent; padding: 0; margin: 0;
   border-radius: var(--wi-r-md); transition: background .14s var(--wi-ease); }
-.wi-rail__new-row:hover { background: rgba(234,229,182,.05); }
+.wi-rail__new-row:hover { background: var(--wi-chrome-wash); }
 .wi-rail__new { width: 34px; height: 34px; border-radius: 9px; flex: 0 0 auto;
   display: grid; place-items: center; line-height: 0; color: var(--wi-on-accent);
   background: var(--wi-accent); box-shadow: 0 2px 8px rgba(255,218,25,.35);
@@ -361,7 +367,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
   box-shadow: inset 0 1px 0 rgba(234,229,182,.08), 0 1px 2px rgba(0,0,0,.35); }
 .wi-toolbar .wi-btn:hover { background: var(--wi-chrome-3); box-shadow: inset 0 1px 0 rgba(234,229,182,.10), 0 2px 6px rgba(0,0,0,.4); }
 .wi-toolbar .wi-btn--ghost { background: transparent; border-color: transparent; color: var(--wi-chrome-ink-soft); box-shadow: none; }
-.wi-toolbar .wi-btn--ghost:hover { background: rgba(234,229,182,.08); color: var(--wi-chrome-ink); box-shadow: none; }
+.wi-toolbar .wi-btn--ghost:hover { background: var(--wi-chrome-wash); color: var(--wi-chrome-ink); box-shadow: none; }
 .wi-toolbar .wi-btn--primary { background: var(--wi-accent); color: var(--wi-on-accent); border-color: transparent;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 8px rgba(255,218,25,.4); }
 .wi-toolbar .wi-btn--primary:hover { background: var(--wi-accent-h); }
@@ -595,7 +601,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 
 /* Version picker — a tight inset pill on the chrome. */
 .wi-vsel { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; height: 30px;
-  border-radius: 999px; background: rgba(234,229,182,.05); box-shadow: inset 0 0 0 1px var(--wi-chrome-line); }
+  border-radius: 999px; background: var(--wi-chrome-wash); box-shadow: inset 0 0 0 1px var(--wi-chrome-line); }
 .wi-vsel__icon { color: var(--wi-chrome-ink-faint); display: grid; place-items: center; flex: 0 0 auto; }
 .wi-vsel select { font: inherit; font-family: var(--wi-font-sans); font-size: var(--wi-text-sm); font-weight: 600; letter-spacing: -.01em;
   padding: 0 26px 0 4px; height: 30px; border: 0; border-radius: 999px;
@@ -603,7 +609,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
   background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23b7b3a4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center; }
 .wi-vsel select option { background: var(--wi-chrome); color: var(--wi-chrome-ink); }
-.wi-vsel:hover { background: rgba(234,229,182,.09); }
+.wi-vsel:hover { background: var(--wi-chrome-wash); }
 
 /* Export — a tight segmented control on the chrome. */
 .wi-export { display: inline-flex; align-items: stretch; height: 30px; border-radius: var(--wi-r-sm); overflow: hidden;

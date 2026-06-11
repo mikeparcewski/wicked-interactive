@@ -444,7 +444,10 @@ export function createMultiServer({ root, frontendDir } = {}) {
     // the command loop (materialize, retry+DLQ). cursor_init "latest" — live events only.
     subs.push(startSubscription({ plugin: "wi-service-bridge", filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
     subs.push(startSubscription({ plugin: "wi-service-commands", filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
-    return new Promise((res) => { topServer = top.listen(port, () => res(topServer.address().port)); });
+    return new Promise((res, rej) => {
+      topServer = top.listen(port, () => res(topServer.address().port));
+      topServer.once("error", rej); // surface EADDRINUSE as a rejection so the CLI can fall forward (ADR-0022)
+    });
   }
   async function stop() {
     for (const s of subs) { try { await s.stop(); } catch { /* already stopped */ } }

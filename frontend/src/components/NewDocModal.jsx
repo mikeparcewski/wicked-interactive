@@ -8,7 +8,7 @@
 //                Most people arrive with material, not finished HTML.
 import { useEffect, useState } from "react";
 
-export default function NewDocModal({ open, onCreate, onCancel, error }) {
+export default function NewDocModal({ open, onCreate, onCancel, error, initialBrief }) {
   const [name, setName] = useState("");
   const [html, setHtml] = useState("");
   const [showHtml, setShowHtml] = useState(false);
@@ -16,9 +16,18 @@ export default function NewDocModal({ open, onCreate, onCancel, error }) {
   const [brief, setBrief] = useState("");
   const [showSource, setShowSource] = useState(false);
 
+  // Arriving from the launch-state chat carries the first message in as a brief: seed it,
+  // suggest a slug-safe name from its first few words, and open the content section so the
+  // brief is visible. Opened blank (the + button) resets everything.
   useEffect(() => {
-    if (open) { setName(""); setHtml(""); setShowHtml(false); setSourcePaths([""]); setBrief(""); setShowSource(false); }
-  }, [open]);
+    if (!open) return;
+    const seed = (initialBrief || "").trim();
+    const guess = seed
+      ? seed.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").trim().split(/\s+/).filter(Boolean).slice(0, 6).join("-").slice(0, 64)
+      : "";
+    setName(guess); setHtml(""); setShowHtml(false); setSourcePaths([""]);
+    setBrief(seed); setShowSource(!!seed);
+  }, [open, initialBrief]);
   if (!open) return null;
 
   const setPathAt = (i, v) => setSourcePaths((ps) => ps.map((p, j) => (j === i ? v : p)));
