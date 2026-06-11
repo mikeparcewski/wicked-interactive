@@ -38,6 +38,24 @@ export default function App() {
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
+  // Theme: class-driven on <html> (the pre-paint script in index.html sets the initial
+  // class from localStorage || prefers-color-scheme before first paint). This state just
+  // mirrors it so the toggle button shows the right glyph and persists the user's choice.
+  const [theme, setTheme] = useState(() => {
+    if (typeof document === "undefined") return "light";
+    return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  });
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      if (typeof document !== "undefined") {
+        document.documentElement.classList.toggle("dark", next === "dark");
+        document.documentElement.dataset.wiTheme = next;
+        try { localStorage.setItem("wi-theme", next); } catch { /* private mode — session-only */ }
+      }
+      return next;
+    });
+  }, []);
   const currentDoc = getCurrentDoc();
 
   const iframeRef = useRef(null);
@@ -456,6 +474,7 @@ export default function App() {
               <button className="wi-export__seg" disabled={viewing == null || processing} onClick={() => exportAs("pptx")} title="Export as native, editable PowerPoint">PPTX</button>
             </div>
           )}
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
       </header>
 
@@ -551,6 +570,30 @@ export default function App() {
 }
 
 const EMPTY = new Set();
+
+/** Light/dark toggle in the toolbar. Sun glyph in dark mode (tap → light), moon in light mode. */
+function ThemeToggle({ theme, onToggle }) {
+  const isDark = theme === "dark";
+  return (
+    <button
+      className="wi-theme-toggle"
+      onClick={onToggle}
+      title={isDark ? "Switch to light" : "Switch to dark"}
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+    >
+      {isDark ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2" />
+          <path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4l1.4-1.4M18 6l1.4-1.4" />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 const RAIL_GLYPHS = {
   doc: <path d="M12 5v14M5 12h14" />,                                   // plus
