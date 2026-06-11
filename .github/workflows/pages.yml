@@ -1,0 +1,49 @@
+name: Deploy landing site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+  workflow_dispatch:
+
+# Least-privilege token: read the repo, write the Pages deployment, and mint the
+# OIDC token actions/deploy-pages needs to claim the github-pages environment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; let an in-progress run finish so a live deploy
+# is never cancelled mid-flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        # enablement: true turns Pages on the first time this runs — Pages is not
+        # yet enabled on the repo, so the deploy job would otherwise 404.
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
