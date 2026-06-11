@@ -72,16 +72,25 @@ steal the durable cursor). It captures every event to a file so the watcher and 
 PORT="${WI_PORT:-4400}"                  # the port serve printed — namespaces the tail files
 TAIL="/tmp/wi-bus-tail.$PORT.ndjson"
 ERR="/tmp/wi-bus-tail.$PORT.err"
+PID="/tmp/wi-bus-sub.$PORT.pid"          # records the live subscriber so re-runs don't double it
+
+# Kill any stale subscriber from a previous run BEFORE arming a new one — two subscribers on the
+# same plugin/cursor would split or steal the durable cursor (ADR-0021) and interleave the tail.
+[ -f "$PID" ] && kill "$(cat "$PID")" 2>/dev/null && sleep 0.5
+
 : > "$TAIL"                               # truncate ONCE, only when first arming the subscriber
 wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
   --cursor-init latest --poll-interval-ms 1000 >> "$TAIL" 2>"$ERR" &
-SUB_PID=$!                                # remember the subscriber so Step 11 can check it's alive
+echo $! > "$PID"                          # the subscriber's pid — Step 11 reads this to check it's alive
 ```
 
-Truncate `$TAIL` **only here**, when first arming the subscriber — never re-truncate it while the
-loop is live. On a genuine restart the durable cursor replays past events into the fresh file
-(fine); re-truncating mid-loop would discard unread lines. Namespacing by `$PORT` keeps two
-assist loops on the same machine from interleaving into one tail file.
+**Single-subscriber discipline.** The kill-stale-then-arm above guarantees exactly one live
+subscriber per port even if the loop (or the whole session) is re-run — a re-entrant `assist`
+would otherwise leave the previous `wicked-bus subscribe` orphaned and double-writing the tail.
+Truncate `$TAIL` **only here**, when first arming — never re-truncate it while the loop is live
+(a genuine restart replays past events into the fresh file via the durable cursor; re-truncating
+mid-loop would discard unread lines). Namespacing `$TAIL`/`$ERR`/`$PID` by `$PORT` keeps two
+assist loops on the same machine from colliding.
 
 Each appended line is an event envelope:
 `{ "event_type", "payload": { "document_id", … }, "producer_id", … }`.
@@ -432,10 +441,12 @@ The durable subscriber from Step 1a stays running the whole time; each loop you 
    watcher woke on the **idle timeout** (exit 2), confirm liveness before re-arming:
 
    ```bash
-   if ! kill -0 "$SUB_PID" 2>/dev/null || grep -q 'WB-003\|WB-006' "$ERR"; then
+   if ! kill -0 "$(cat "$PID")" 2>/dev/null || grep -q 'WB-003\|WB-006' "$ERR"; then
      # subscriber died or fell behind the retention window → go to Step 10 (recover + restart 1a)
    fi
    ```
+   (Read the pid from `$PID` — the shell var from Step 1a doesn't survive across separate
+   command invocations; the file does.)
 
    On exit 0 (a real event), skip straight to handling.
 3. Re-arm the background watcher from Step 1b (it exits 0 on the next event, 2 on idle).
