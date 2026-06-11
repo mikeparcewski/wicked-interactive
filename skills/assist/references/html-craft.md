@@ -51,6 +51,42 @@ Exports inline everything for a single self-contained file (HTML/PDF). So:
 - **Never** hotlink something that needs auth or will rot; if it must persist, it must be
   inlinable.
 
+## PDF export contract — author print-safe decks by construction
+
+Export to PDF renders the self-contained HTML through **headless Chrome
+`--print-to-pdf`** (not a browser screenshot). The exporter auto-injects a print
+stylesheet (`src/service/export.js`): a universally-safe baseline for every doc,
+plus 16:9 landscape `@page` + one-slide-per-page rules **only when the doc is a
+deck** (detected as **2+ top-level slide containers** — `<section>`,
+`[data-slide]`, or `.slide`). A one-pager with a single `<section>` and a long
+article stay in their natural flow. Author so that injection is enough:
+
+- **A deck is multiple `<section>`s** — one per slide. That is what triggers the
+  landscape `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page
+  pagination. A single `<section>` reads as a one-pager and is left in portrait
+  flow, so don't wrap a real multi-slide deck in one giant `<section>`.
+- **Screen-scope responsive rules.** `--print-to-pdf` lays out at a narrow width,
+  so a bare `@media (max-width: N)` FIRES during the PDF render and collapses your
+  grids. Always scope phone/tablet rules `@media screen and (max-width: N) { … }`,
+  and pin multi-column grids inside `@media print` if they must stay columned.
+- **Don't rely on gradient-clipped text for meaning.** `background:linear-gradient`
+  + `-webkit-background-clip:text` + transparent fill paints a solid box in PDF;
+  the exporter neutralizes it to a solid color. If a heading/number must be a
+  specific color in print, set a solid `color` too, not only the gradient.
+- **Backgrounds and fills survive** via `print-color-adjust:exact` (injected on
+  `*`), so dark slide backgrounds and gradient FILLS on real elements render. But
+  `box-shadow`/`text-shadow` are stripped in print (they print as hard rectangles),
+  so don't depend on a glow to convey state.
+- **One idea per slide, fits one screen.** Deck slides are forced to `100vh` with
+  `overflow:hidden`; content that overflows a slide is clipped, not paginated —
+  split it into another `<section>`.
+
+**Verification note (load-bearing):** reproduce any PDF-export issue with the REAL
+`chromeRenderer` `--print-to-pdf` command (e.g. call `exportPdf`/`exportHtml`), NOT
+Playwright `page.pdf({ preferCSSPageSize, printBackground })` — Playwright produces
+different output (it honors flags `--print-to-pdf` ignores and vice-versa), so a fix
+that looks right under Playwright can still be broken in the real export.
+
 ## Common smells to avoid
 
 - A wall of text in one `<p>` — split into blocks so each is clickable.
