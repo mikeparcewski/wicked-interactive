@@ -129,7 +129,7 @@ export async function materializeThemeRequested(dir, payload, ctx, { grab = grab
     mkdirSync(resolve(dir, THEME_DIR), { recursive: true });
     const renderPath = themeArtifactPath(dir);
     ctx.emit("wicked.status.posted", { state: "working", message: "Grabbing the page to read its design…" });
-    const { path } = grab(url, renderPath);
+    const { path } = await grab(url, renderPath);
     ctx.emit("wicked.theme.learned", { url, render_path: path, format: "pdf" });
     return { url, render_path: path };
   } catch (e) {
