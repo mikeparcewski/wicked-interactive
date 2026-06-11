@@ -26,6 +26,13 @@ architecture assumes is present. There is no second embedded model; do not add o
 *emit* to make changes and narrate progress. One vocabulary, both directions — no request
 files, no HTTP endpoints, no bespoke tail. Run this as a continuous loop until the user stops.
 
+> **Do NOT rely on a passive background tail to wake you.** Most agent harnesses (Claude Code
+> included) only re-invoke the agent when a backgrounded process **completes** — a
+> `wicked-bus subscribe` tail that never exits will never wake you, so `wicked.doc.created`,
+> `wicked.chat.posted`, and `wicked.feedback.processed` pile up unread and the in-browser loop
+> silently hangs. The fix (Step 1) is a **self-exiting drain**: a tiny watcher that exits the
+> instant a new event lands, which is what re-invokes you. Re-arm it every loop (Step 11).
+
 ## Step 0 — Set your bus identity
 
 Every event you emit must be stamped as the agent so the service can tell your work apart from
@@ -46,21 +53,92 @@ wibus() {  # wibus <event_type> <subdomain> <json-payload>
 }
 ```
 
-## Step 1 — Subscribe to the loop
+## Step 1 — Subscribe to the loop (durable tail + self-exiting drain)
 
-Tail the bus with the Monitor tool — `wicked-bus subscribe` prints one JSON event per line, so
-it composes with Monitor's line-as-event model. The durable cursor means events that arrive
-while you're away replay when you reconnect (this is why there's no "reconcile on restart"
-dance anymore):
+`wicked-bus subscribe` prints one JSON event per line, and its cursor is **durable** — events
+that arrive while you're away replay when you reconnect (this is why there's no "reconcile on
+restart" dance anymore). But a `subscribe` tail **never exits**, and most agent harnesses only
+re-invoke the agent when a backgrounded process **completes**. A passive never-ending tail
+therefore never wakes you: new events pile up unread and the loop silently hangs. So split the
+job in two — **one** durable subscriber that only advances the cursor and captures events to a
+tail file, and a short **self-exiting watcher** whose *completion* is what wakes you.
+
+**1a. Start the durable subscriber once, in the background, writing to a tail file.** This is
+the single source of truth for the cursor — do **not** start a second `subscribe` on the same
+plugin/cursor (ADR-0021: the bus is transport, not storage; a second subscriber would split or
+steal the durable cursor). It captures every event to a file so the watcher and you can read it:
 
 ```bash
+PORT="${WI_PORT:-4400}"                  # the port serve printed — namespaces the tail files
+TAIL="/tmp/wi-bus-tail.$PORT.ndjson"
+ERR="/tmp/wi-bus-tail.$PORT.err"
+PID="/tmp/wi-bus-sub.$PORT.pid"          # records the live subscriber so re-runs don't double it
+
+# Kill any stale subscriber from a previous run BEFORE arming a new one — two subscribers on the
+# same plugin/cursor would split or steal the durable cursor (ADR-0021) and interleave the tail.
+[ -f "$PID" ] && kill "$(cat "$PID")" 2>/dev/null && sleep 0.5
+
+: > "$TAIL"                               # truncate ONCE, only when first arming the subscriber
 wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
-  --cursor-init latest --poll-interval-ms 1000
+  --cursor-init latest --poll-interval-ms 1000 >> "$TAIL" 2>"$ERR" &
+echo $! > "$PID"                          # the subscriber's pid — Step 11 reads this to check it's alive
 ```
 
-Each line is an event envelope: `{ "event_type", "payload": { "document_id", … }, "producer_id", … }`.
+**Single-subscriber discipline.** The kill-stale-then-arm above guarantees exactly one live
+subscriber per port even if the loop (or the whole session) is re-run — a re-entrant `assist`
+would otherwise leave the previous `wicked-bus subscribe` orphaned and double-writing the tail.
+Truncate `$TAIL` **only here**, when first arming — never re-truncate it while the loop is live
+(a genuine restart replays past events into the fresh file via the durable cursor; re-truncating
+mid-loop would discard unread lines). Namespacing `$TAIL`/`$ERR`/`$PID` by `$PORT` keeps two
+assist loops on the same machine from colliding.
+
+Each appended line is an event envelope:
+`{ "event_type", "payload": { "document_id", … }, "producer_id", … }`.
+
+**1b. Arm a self-exiting drain watcher in the background — it exits the moment a new event
+lands, and that completion re-invokes you.** Record the current tail size as a baseline, poll
+~every second, and exit `0` as soon as the file grows past the baseline; bail out on an idle
+timeout so the loop can re-arm even during a quiet stretch:
+
+```bash
+# baseline = where we've already read up to (byte offset into the tail file)
+BASELINE=$(wc -c < "$TAIL" | tr -d ' ')
+( IDLE=0
+  until [ "$(wc -c < "$TAIL" | tr -d ' ')" -gt "$BASELINE" ]; do
+    sleep 1; IDLE=$((IDLE + 1))
+    [ "$IDLE" -ge 300 ] && exit 2   # ~5 min idle → exit so the loop re-arms
+  done
+  exit 0 ) &                         # exits 0 the instant a new event arrives
+```
+
+The watcher is the backgrounded process the harness watches; when it **completes** (exit 0 = a
+new event, exit 2 = idle), you wake.
+
+**1c. On wake, freeze the read boundary, read up to it, and advance the baseline *before* you
+handle anything.** This ordering is the rule that prevents lost events: snapshot the current
+end-of-file as `READ_TO`, read exactly the bytes in `(BASELINE, READ_TO]`, then set
+`BASELINE=$READ_TO` **now**. Any event the durable subscriber appends while you're busy handling
+the batch lands past `READ_TO`, so the next watcher fires on it instead of skipping it:
+
+```bash
+READ_TO=$(wc -c < "$TAIL" | tr -d ' ')                 # freeze the boundary BEFORE handling
+NEW=$(tail -c +"$((BASELINE + 1))" "$TAIL" | head -c "$((READ_TO - BASELINE))")
+BASELINE=$READ_TO                                       # advance NOW, not after handling
+printf '%s\n' "$NEW"                                    # the new event lines, ready to act on
+```
+
+> **Never recompute the baseline from a fresh `wc -c` *after* handling the batch.** A draft or
+> crew run can take minutes; an event that arrives during that window would land between your read
+> and the post-handling `wc -c`, and a baseline jumped to the new EOF would skip it permanently —
+> and because the durable subscriber auto-acks as it writes, a restart won't replay it either.
+> Always advance the baseline to the boundary you actually read (`READ_TO`), at read time.
+
 `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`); per-doc state-plane reads
-live under `<BASE>/d/<doc>/…`. The events you act on:
+live under `<BASE>/d/<doc>/…`. From those new lines, **skip the noise and act on the rest**:
+
+- **Ignore your own emissions** (`producer_id: "wi-agent"`) and the service's facts
+  (`wicked.version.created`, `wicked.export.requested`) — the browser handles those.
+- **Act on** the actionable events:
 
 | event_type | when | your action |
 |------------|------|-------------|
@@ -71,8 +149,12 @@ live under `<BASE>/d/<doc>/…`. The events you act on:
 | `wicked.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
 
-Ignore your own emissions (`producer_id: "wi-agent"`) and the service's facts
-(`wicked.version.created`, `wicked.export.requested`) — the browser handles those.
+After you've handled the batch, arm a fresh watcher (Step 11, Step 1b) against the
+**already-advanced** `$BASELINE` — do **not** touch `BASELINE` again here. The durable subscriber
+keeps running across all of this; only the watcher is re-armed each loop.
+
+> **Reminder:** the watcher's *exit* is what wakes you — never substitute a passive
+> `wicked-bus subscribe` tail and assume it'll re-invoke you. It won't.
 
 ## Step 2 — The one rule that must never break: preserve every `data-wid`
 
@@ -346,8 +428,38 @@ reports `WB-003` (cursor behind the retention window). The bus is transport, not
 `GET <BASE>/d/<doc>/api/sources` for any `pending` sources, `GET …/api/versions` for where each
 doc actually is. Then resume the loop.
 
-## Step 11 — Loop
+## Step 11 — Loop (re-arm the drain)
 
-Return to watching. Keep going until the user says to stop. The session staying alive IS the
-product guarantee — `serve` + `assist` together are why a non-technical user can click a block and
-watch it change without ever touching a terminal.
+Return to watching by **re-arming the self-exiting watcher**, not by waiting on a passive tail.
+The durable subscriber from Step 1a stays running the whole time; each loop you only:
+
+1. **Do not recompute the baseline here.** It was already advanced to the exact boundary you read
+   in Step 1c (`READ_TO`); recomputing it from a fresh `wc -c` after handling would skip any event
+   that arrived while you were busy. Carry `$BASELINE` forward unchanged.
+2. **Check the subscriber is still alive** — it's the only thing that grows the tail file, so a
+   dead subscriber means a watcher that idles forever over a file nothing writes to. If your last
+   watcher woke on the **idle timeout** (exit 2), confirm liveness before re-arming:
+
+   ```bash
+   if ! kill -0 "$(cat "$PID")" 2>/dev/null || grep -q 'WB-003\|WB-006' "$ERR"; then
+     # subscriber died or fell behind the retention window → go to Step 10 (recover + restart 1a)
+   fi
+   ```
+   (Read the pid from `$PID` — the shell var from Step 1a doesn't survive across separate
+   command invocations; the file does.)
+
+   On exit 0 (a real event), skip straight to handling.
+3. Re-arm the background watcher from Step 1b (it exits 0 on the next event, 2 on idle).
+4. On an **exit-0** completion (a real event), run Step 1c (freeze boundary → read the delta →
+   advance `$BASELINE` → filter out `wi-agent` and service facts), act on the rest, then come back
+   here. An **exit-2** (idle) completion carries no new bytes — do the liveness check in step 2,
+   then just re-arm; don't run Step 1c on an empty delta.
+
+> **Do NOT rely on a passive background `wicked-bus subscribe` tail to wake you** — most agent
+> harnesses only signal on **process completion**, so a never-exiting tail never re-invokes you
+> and events pile up unread. The self-exiting drain + re-arm in Step 1 is what keeps the loop
+> live. Re-arm it every iteration.
+
+Keep going until the user says to stop. The session staying alive IS the product guarantee —
+`serve` + `assist` together are why a non-technical user can click a block and watch it change
+without ever touching a terminal.
