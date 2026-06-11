@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { inlineHtml, exportHtml, exportPdf } from "../src/service/export.js";
+import { inlineHtml, exportHtml, exportPdf, decorateForExport, isDeck } from "../src/service/export.js";
 import { initWorkspace } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 
@@ -70,6 +70,62 @@ test("exportPdf builds the self-contained HTML and delegates to the renderer", (
     assert.match(readFileSync(path, "utf-8"), /^%PDF/);
     assert.ok(renderedHtmlPath && existsSync(renderedHtmlPath));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// --- issue #12: print contract --------------------------------------------
+
+test("exported HTML carries a proper document head (doctype, charset, viewport)", () => {
+  const dir = assetDir();
+  try {
+    initWorkspace(dir, `<h1>Title</h1>`);
+    const { path } = exportHtml(dir, 0);
+    const out = readFileSync(path, "utf-8");
+    assert.match(out, /^<!DOCTYPE html>/);
+    assert.match(out, /<meta charset="utf-8">/);
+    assert.match(out, /<meta name="viewport"/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("exported HTML always injects the universally-safe print baseline", () => {
+  const dir = assetDir();
+  try {
+    initWorkspace(dir, `<h1>Title</h1>`);
+    const out = readFileSync(exportHtml(dir, 0).path, "utf-8");
+    // box-shadow / text-shadow killed (gotcha #4)
+    assert.match(out, /box-shadow:\s*none\s*!important/);
+    assert.match(out, /text-shadow:\s*none\s*!important/);
+    // color-adjust kept exact so dark bg + real gradient FILLS survive (the GOOD one)
+    assert.match(out, /print-color-adjust:\s*exact/);
+    assert.match(out, /-webkit-print-color-adjust:\s*exact/);
+    // gradient-clipped text neutralized to a solid (gotcha #3)
+    assert.match(out, /-webkit-text-fill-color:\s*currentColor/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("isDeck: 2+ slide containers is a deck; single/none is not", () => {
+  assert.equal(isDeck(`<section>a</section><section>b</section>`), true);
+  assert.equal(isDeck(`<div data-slide>a</div><div data-slide>b</div>`), true);
+  assert.equal(isDeck(`<section>only one</section>`), false);     // one-pager wrapper
+  assert.equal(isDeck(`<article><h1>Long article</h1><p>x</p></article>`), false);
+  // a nested inner <section> must not flip a single-section one-pager into a deck
+  assert.equal(isDeck(`<section><section>inner</section></section>`), false);
+});
+
+test("deck-structured export gets the landscape @page; a tall doc does NOT", () => {
+  const deck = decorateForExport(
+    `<html><head></head><body><section><h1>Slide 1</h1></section><section><h2>Slide 2</h2></section></body></html>`
+  );
+  const doc = decorateForExport(
+    `<html><head></head><body><article><h1>Article</h1>${"<p>para</p>".repeat(40)}</article></body></html>`
+  );
+  // Deck: forced 16:9 landscape + one-slide-per-page (gotchas #1, #5)
+  assert.match(deck, /@page\s*\{\s*size:\s*13\.333in 7\.5in/);
+  assert.match(deck, /break-after:\s*page/);
+  // Non-deck: baseline only, NEVER the landscape @page (would break a scrolling doc)
+  assert.doesNotMatch(doc, /@page\s*\{\s*size:\s*13\.333in 7\.5in/);
+  assert.doesNotMatch(doc, /break-after:\s*page/);
+  // ...but it still gets the universally-safe baseline
+  assert.match(doc, /box-shadow:\s*none\s*!important/);
 });
 
 test("POST /api/export html returns a self-contained file path", async () => {
