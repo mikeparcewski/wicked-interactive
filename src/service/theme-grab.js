@@ -143,9 +143,12 @@ export async function resolveRedirectChain(url, { fetchImpl = fetch, maxHops = 5
   let current = String(url);
   let pinnedIp = await validate(current);          // validate + pin the INITIAL host
   for (let hop = 0; hop <= maxHops; hop++) {
-    const res = await fetchImpl(current, { method: "GET", redirect: "manual" });
+    // 10s timeout so a slow/hanging redirect server can't hang the grab; cancel the body on every
+    // response (we never read it) to release the socket and avoid connection-pool exhaustion.
+    const res = await fetchImpl(current, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(10000) });
     const status = res?.status;
     const isRedirect = typeof status === "number" && status >= 300 && status < 400;
+    if (res?.body?.cancel) await res.body.cancel().catch(() => {});
     if (!isRedirect) {
       // First non-redirect response (2xx / other) — render THIS url, pinned to its validated IP.
       return { finalUrl: current, pinnedIp };
@@ -182,9 +185,11 @@ export function chromeUrlRenderer(url, pdfPath, opts = {}) {
   }
   flags.push(...args, `--print-to-pdf=${pdfPath}`, url);
   return new Promise((resolveP, reject) => {
-    const child = spawn(chrome, flags, { timeout: 60000 });
+    // ignore stdout (unread + full → deadlock); pipe stderr only; guard the stderr stream.
+    const child = spawn(chrome, flags, { timeout: 60000, stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr?.on("data", (d) => { stderr += d; });
+    child.stderr?.on("error", () => {});
     child.on("error", reject);
     child.on("close", (code, signal) => {
       if (code !== 0 || !existsSync(pdfPath)) {
