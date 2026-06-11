@@ -3,201 +3,337 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>wicked-interactive — Liveboard: if you can say it, you can make it</title>
-  <meta name="description" content="Liveboard is a living studio where the page is the canvas. Describe a deck, doc, landing page, or demo video in plain English, watch it build in your browser, then point at any block and watch it rewrite itself live. Export self-contained HTML, PDF, native PowerPoint, or video. Never touch a terminal.">
-  <meta name="theme-color" content="#0A0A0F">
+  <title>wicked-interactive — if you can say it, you can make it</title>
+  <meta name="description" content="wicked-interactive is a living studio where the page is the canvas. Describe a deck, doc, landing page, or demo video in plain English, watch it build in your browser, then highlight any block and attach plain-language feedback to watch it regenerate live. The supervising Claude session is the intelligence in the loop. Export self-contained HTML, PDF, native PowerPoint, or video — never touch a terminal.">
+  <meta name="theme-color" content="#232324" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#faf7ec" media="(prefers-color-scheme: light)">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="wicked-interactive — Liveboard">
-  <meta property="og:description" content="The page is the canvas. Say what you want, watch it build, point at what to change. Export HTML, PDF, PowerPoint, or video — never touch a terminal.">
+  <meta property="og:title" content="wicked-interactive">
+  <meta property="og:description" content="The page is the canvas. Say what you want, watch it build, highlight a block and watch it regenerate live. Export HTML, PDF, PowerPoint, or video — never touch a terminal.">
   <meta property="og:url" content="https://github.com/mikeparcewski/wicked-interactive">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="wicked-interactive — Liveboard">
-  <meta name="twitter:description" content="If you can say it, you can make it. Point at the page, watch it change — never touch a terminal.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230A0A0F'/%3E%3Crect%20x='5'%20y='8'%20width='22'%20height='14'%20rx='3'%20fill='none'%20stroke='%23A100FF'%20stroke-width='2'/%3E%3Cpath%20d='M18.5%2018.5l3.2%208.2%202-3.4%203.4-2z'%20fill='%23A100FF'/%3E%3Ccircle%20cx='24.5'%20cy='9.5'%20r='2.4'%20fill='%23F59E0B'/%3E%3C/svg%3E">
+  <meta name="twitter:title" content="wicked-interactive">
+  <meta name="twitter:description" content="If you can say it, you can make it. Highlight a block, say what to change, watch it regenerate live — never touch a terminal.">
+  <!-- Favicon: charcoal tile, signal-yellow live-edit cursor over a regenerating block. -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%23232324'/%3E%3Crect%20x='5'%20y='7'%20width='17'%20height='4'%20rx='1.5'%20fill='%23ffda19'/%3E%3Crect%20x='5'%20y='14'%20width='22'%20height='3'%20rx='1.5'%20fill='%23b7b3a4'/%3E%3Crect%20x='5'%20y='20'%20width='14'%20height='3'%20rx='1.5'%20fill='%23b7b3a4'/%3E%3Cpath%20d='M20.5%2019l8.5%204-3.6%201.4L26.6%2029l-2.6-1z'%20fill='%23ffda19'%20stroke='%23232324'%20stroke-width='1'/%3E%3C/svg%3E">
+
+  <!-- Fonts: Archivo (display, expanded/heavy), Hanken Grotesk (body), JetBrains Mono (kickers). -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <!-- Set theme BEFORE paint: localStorage('theme') wins, else prefers-color-scheme. -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('theme');
+        var dark = stored ? stored === 'dark'
+          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      } catch (e) { /* localStorage blocked — fall through to light default */ }
+    })();
+  </script>
+
   <style>
+    /* ----------------------------------------------------------------------------
+       Design tokens — wickedagile "Wicked Good" brand.
+       LIGHT (default) = warm paper ground, charcoal ink, signal-yellow stamp.
+       DARK (.dark)    = charcoal ground, butter ink, the same yellow spark.
+       Reproduces the wicked-garden look; the motif here is the LIVE EDIT.
+    ---------------------------------------------------------------------------- */
     :root {
-      --bg: #0A0A0F;
-      --surface: #13091D;
-      --card: #1A1A2E;
-      --primary: #A100FF;
-      --secondary: #6B2FA0;
-      --accent: #F59E0B;
-      --text: #FFFFFF;
-      --text-secondary: #A0A0B0;
-      --text-muted: #8E8EA8;
-      --border: #2A2A3D;
-      --success: #10B981;
-      --grad: linear-gradient(135deg, #A100FF 0%, #6B2FA0 100%);
-      --maxw: 1120px;
+      /* LIGHT — warm paper, contrast-safe (WCAG-AA verified) */
+      --canvas: #faf7ec;
+      --canvas-2: #f3eedc;
+      --surface: #ffffff;
+      --surface-2: #f6f2e6;
+      --ink: #232324;          /* charcoal — body/headings on paper */
+      --muted: #5b5b52;         /* AA on paper (>= 7:1) */
+      --hairline: rgba(34, 34, 36, 0.14);
+      --hairline-strong: rgba(34, 34, 36, 0.26);
+      --shadow-rgb: 60, 56, 40;
+
+      --accent: #ffda19;         /* signal yellow — the stamp */
+      --accent-bright: #ffe45c;
+      --on-accent: #1e1e1f;      /* charcoal text ON the yellow */
+
+      --link: #2a566e;           /* harbor blue — links/secondary on paper (AA) */
+      --link-hover: #1c4053;
+
+      --harbor: #356d8c;
+      --sky: #60acc6;
+      --mustard: #806a0f;        /* darkened mustard — AA for small text on paper + white surface */
+      --wine: #9d4f56;
+
+      --grain-opacity: 0.05;
+      --grain-blend: soft-light;
+      --grid-mask: radial-gradient(ellipse 78% 72% at 50% 0%, #000 28%, transparent 80%);
+
+      color-scheme: light;
+    }
+
+    html.dark {
+      /* DARK — charcoal ground (the garden .dark look) */
+      --canvas: #232324;
+      --canvas-2: #2a2a2b;
+      --surface: #313132;
+      --surface-2: #3a3a3b;
+      --ink: #eae5b6;            /* butter */
+      --muted: #b7b3a4;
+      --hairline: rgba(234, 229, 182, 0.12);
+      --hairline-strong: rgba(234, 229, 182, 0.24);
+      --shadow-rgb: 0, 0, 0;
+
+      --accent: #ffda19;
+      --accent-bright: #ffe45c;
+      --on-accent: #1e1e1f;
+
+      --link: #8fd0e6;           /* lifted sky for AA on charcoal */
+      --link-hover: #bfe4f4;
+
+      --harbor: #60acc6;
+      --sky: #60acc6;
+      --mustard: #d8b82e;
+      --wine: #c67079;
+
+      --grain-opacity: 0.07;
+      --grain-blend: overlay;
+
+      color-scheme: dark;
     }
 
     * { box-sizing: border-box; }
 
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after {
         animation-duration: 0.001ms !important;
         animation-iteration-count: 1 !important;
+        animation-delay: 0ms !important;
         transition-duration: 0.001ms !important;
       }
+      .rise { opacity: 1 !important; transform: none !important; }
     }
 
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-feature-settings: "ss01";
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
       overflow-x: hidden;
+      transition: background-color 0.4s cubic-bezier(0.16,1,0.3,1), color 0.4s cubic-bezier(0.16,1,0.3,1);
     }
 
-    a { color: #D280FF; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    /* Fixed film-grain overlay — the garden fractalNoise data-URI. */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      pointer-events: none;
+      opacity: var(--grain-opacity);
+      mix-blend-mode: var(--grain-blend);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    a { color: var(--link); text-decoration: none; }
+    a:hover { color: var(--link-hover); text-decoration: underline; }
+
+    ::selection { background: var(--accent-bright); color: var(--on-accent); }
 
     :focus-visible {
-      outline: 3px solid var(--primary);
+      outline: 2px solid var(--accent);
       outline-offset: 3px;
-      border-radius: 4px;
+      border-radius: 3px;
     }
 
     .skip-link {
       position: absolute;
       left: -999px;
       top: 0;
-      background: var(--primary);
-      color: #fff;
+      background: var(--accent);
+      color: var(--on-accent);
+      font-weight: 700;
       padding: 12px 18px;
       z-index: 100;
       border-radius: 0 0 8px 0;
     }
     .skip-link:focus { left: 0; }
 
-    .wrap {
-      max-width: var(--maxw);
-      margin: 0 auto;
-      padding: 0 24px;
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* Display headings — Archivo, heavy + expanded, tight. */
+    h1, h2, h3, h4 {
+      font-family: "Archivo", ui-sans-serif, system-ui, sans-serif;
+      font-weight: 800;
+      letter-spacing: -0.015em;
+      line-height: 1.02;
+      margin-top: 0;
+      font-stretch: 125%;
+      text-wrap: balance;
     }
 
-    /* live cursor spark crossing the midnight stage */
-    .stage-spark {
-      position: fixed;
-      top: 0; left: 0;
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      background: var(--primary);
-      box-shadow: 0 0 18px 6px rgba(161, 0, 255, 0.65), 0 0 4px 1px var(--accent);
-      pointer-events: none;
-      z-index: 0;
-      opacity: 0.85;
-      animation: drift 18s ease-in-out infinite;
+    /* Mono kicker / eyebrow */
+    .kicker {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 14px;
     }
-    @keyframes drift {
-      0%   { transform: translate(8vw, 22vh); }
-      25%  { transform: translate(78vw, 14vh); }
-      50%  { transform: translate(62vw, 70vh); }
-      75%  { transform: translate(20vw, 58vh); }
-      100% { transform: translate(8vw, 22vh); }
+
+    /* Accent stamp — a yellow underline behind a key word. */
+    .stamp {
+      background: linear-gradient(transparent 62%, var(--accent-bright) 62%, var(--accent-bright) 92%, transparent 92%);
+      padding: 0 0.06em;
     }
+
+    /* Card-surface — blurred, color-mixed panel. */
+    .card-surface {
+      background: color-mix(in oklab, var(--surface) 90%, transparent);
+      border: 1px solid var(--hairline);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+    }
+
+    /* Staggered rise-in entrance. */
+    @keyframes rise-in {
+      from { opacity: 0; transform: translateY(1.4rem); }
+      to { opacity: 1; transform: none; }
+    }
+    .rise { opacity: 0; animation: rise-in 0.85s cubic-bezier(0.16,1,0.3,1) both; }
+
+    section { position: relative; z-index: 1; }
+    .section-pad { padding: 88px 0; }
+    h2.section-title { font-size: clamp(1.9rem, 4.4vw, 2.8rem); margin-bottom: 14px; }
+    .section-lead { color: var(--muted); font-size: 1.1rem; max-width: 640px; }
 
     /* ---------- header ---------- */
     header.site {
       position: sticky;
       top: 0;
       z-index: 40;
-      background: rgba(10, 10, 15, 0.82);
+      background: color-mix(in oklab, var(--canvas) 82%, transparent);
       backdrop-filter: blur(10px);
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--hairline);
     }
     .nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 16px;
       height: 64px;
     }
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 11px;
+      font-family: "Archivo", ui-sans-serif, sans-serif;
       font-weight: 800;
-      font-size: 1.25rem;
+      font-size: 1.18rem;
+      font-stretch: 125%;
       letter-spacing: -0.01em;
+      color: var(--ink);
     }
-    .brand .mark { width: 28px; height: 28px; flex: 0 0 auto; }
-    .wordmark .live { color: #fff; }
-    .wordmark .board { color: var(--primary); }
-    .wordmark .spark { color: var(--accent); }
+    .brand:hover { text-decoration: none; color: var(--ink); }
+    .brand .mark { width: 30px; height: 30px; flex: 0 0 auto; }
+    .wordmark .wi { color: var(--ink); }
+    .wordmark .dash { color: var(--muted); }
+    .nav-actions { display: flex; gap: 8px; align-items: center; }
     .nav-links { display: flex; gap: 26px; align-items: center; }
     .nav-links a {
-      color: var(--text-secondary);
+      color: var(--muted);
       font-weight: 600;
       font-size: 0.95rem;
     }
-    .nav-links a:hover { color: var(--text); text-decoration: none; }
-    .nav-links .btn-nav {
-      background: var(--grad);
-      color: #fff;
-      padding: 9px 18px;
+    .nav-links a:hover { color: var(--ink); text-decoration: none; }
+
+    .btn-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: var(--on-accent);
+      font-weight: 700;
+      padding: 9px 16px;
       border-radius: 9px;
-      box-shadow: 0 0 0 1px rgba(161,0,255,0.4);
     }
-    .nav-links .btn-nav:hover { box-shadow: 0 0 18px 2px rgba(161,0,255,0.45); }
-    @media (max-width: 760px) {
+    .btn-nav:hover { background: var(--accent-bright); color: var(--on-accent); text-decoration: none; }
+
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px; height: 40px;
+      border-radius: 9px;
+      border: 1px solid var(--hairline-strong);
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+    }
+    .icon-btn:hover { border-color: var(--accent); color: var(--ink); text-decoration: none; }
+    .icon-btn svg { width: 20px; height: 20px; }
+
+    /* Theme toggle shows sun in dark mode, moon in light mode. */
+    .theme-toggle .sun { display: none; }
+    html.dark .theme-toggle .sun { display: block; }
+    html.dark .theme-toggle .moon { display: none; }
+
+    @media (max-width: 820px) {
       .nav-links a:not(.btn-nav) { display: none; }
     }
-
-    /* ---------- sections ---------- */
-    section { position: relative; z-index: 1; }
-    .section-pad { padding: 88px 0; }
-    .eyebrow {
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--accent);
-      margin: 0 0 14px;
-    }
-    h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin-top: 0; }
-    h2.section-title { font-size: clamp(1.8rem, 4vw, 2.6rem); margin-bottom: 14px; }
-    .section-lead { color: var(--text-secondary); font-size: 1.1rem; max-width: 640px; }
 
     /* ---------- hero ---------- */
     .hero {
       padding: 96px 0 84px;
-      background:
-        radial-gradient(1100px 540px at 78% -10%, rgba(161,0,255,0.20), transparent 60%),
-        radial-gradient(720px 420px at 8% 12%, rgba(107,47,160,0.22), transparent 60%),
-        var(--bg);
+      position: relative;
+      overflow: hidden;
+    }
+    /* Recessed grid-floor backdrop behind the hero. */
+    .hero .grid-floor {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, var(--hairline) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--hairline) 1px, transparent 1px);
+      background-size: 64px 64px;
+      -webkit-mask-image: var(--grid-mask);
+              mask-image: var(--grid-mask);
     }
     .hero-grid {
+      position: relative;
+      z-index: 1;
       display: grid;
       grid-template-columns: 1.05fr 0.95fr;
       gap: 56px;
       align-items: center;
     }
     .hero .late-night {
-      color: var(--text-secondary);
+      color: var(--muted);
       font-size: 1.05rem;
       font-weight: 600;
       margin: 0 0 18px;
     }
-    .hero .late-night b { color: var(--text); }
+    .hero .late-night b { color: var(--ink); }
     .hero h1 {
-      font-size: clamp(2.3rem, 5.4vw, 3.8rem);
-      font-weight: 800;
+      font-size: clamp(2.4rem, 5.6vw, 4rem);
+      font-weight: 900;
       margin: 0 0 18px;
-    }
-    .hero h1 .hl {
-      background: var(--grad);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
     }
     .hero p.promise {
       font-size: 1.18rem;
-      color: var(--text-secondary);
+      color: var(--muted);
       max-width: 540px;
       margin: 0 0 30px;
     }
@@ -206,6 +342,7 @@
       display: inline-flex;
       align-items: center;
       gap: 9px;
+      font-family: "Hanken Grotesk", ui-sans-serif, sans-serif;
       font-weight: 700;
       font-size: 1rem;
       padding: 14px 26px;
@@ -214,100 +351,93 @@
       cursor: pointer;
     }
     .btn-primary {
-      background: var(--grad);
-      color: #fff;
-      box-shadow: 0 0 0 1px rgba(161,0,255,0.5), 0 12px 30px -10px rgba(161,0,255,0.6);
+      background: var(--accent);
+      color: var(--on-accent);
+      box-shadow: 0 12px 30px -14px rgba(var(--shadow-rgb), 0.5);
     }
-    .btn-primary:hover { text-decoration: none; box-shadow: 0 0 22px 2px rgba(161,0,255,0.55), 0 12px 30px -8px rgba(161,0,255,0.7); }
+    .btn-primary:hover { text-decoration: none; background: var(--accent-bright); color: var(--on-accent); }
     .btn-ghost {
       background: transparent;
-      color: var(--text);
-      border-color: var(--border);
+      color: var(--ink);
+      border-color: var(--hairline-strong);
     }
-    .btn-ghost:hover { text-decoration: none; border-color: var(--primary); }
+    .btn-ghost:hover { text-decoration: none; border-color: var(--accent); color: var(--ink); }
 
-    /* live demo card in hero — reshapes mid-edit */
+    /* Live-edit card in hero — a touched block regenerating in place. */
     .live-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 22px;
-      box-shadow: 0 0 0 1px rgba(161,0,255,0.18), 0 30px 60px -30px rgba(0,0,0,0.8);
       position: relative;
       overflow: hidden;
+      padding: 22px;
+      box-shadow: 0 30px 60px -32px rgba(var(--shadow-rgb), 0.7);
     }
     .live-card::after {
       content: "regenerating…";
       position: absolute;
       top: 14px; right: 16px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      color: var(--accent);
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--mustard);
       opacity: 0;
       animation: regenLabel 7s ease-in-out infinite;
     }
     .live-card .card-eyebrow {
-      font-size: 0.72rem;
-      letter-spacing: 0.14em;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      color: var(--text-muted);
+      color: var(--muted);
       margin: 0 0 10px;
     }
     .live-card .card-h {
-      font-size: 1.45rem;
+      font-size: 1.4rem;
       font-weight: 800;
       margin: 0 0 8px;
-      position: relative;
     }
     .live-card .card-metric {
-      font-size: 2.4rem;
-      font-weight: 800;
-      background: var(--grad);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: var(--ink);
       margin: 4px 0 6px;
     }
     .live-card .card-line {
       height: 9px;
       border-radius: 5px;
-      background: linear-gradient(90deg, var(--secondary), transparent);
+      background: var(--hairline-strong);
       margin: 9px 0;
-      opacity: 0.6;
+      opacity: 0.7;
     }
     .live-card .card-line.short { width: 62%; }
-    /* the touched block — amber pulse */
+    /* The touched block — signal-yellow pulse. */
     .touched {
       position: relative;
       border-radius: 8px;
-      animation: amberPulse 7s ease-in-out infinite;
+      padding: 4px 6px;
+      margin: -4px -6px;
+      animation: yellowPulse 7s ease-in-out infinite;
     }
-    @keyframes amberPulse {
-      0%, 28%   { box-shadow: 0 0 0 0 rgba(245,158,11,0); background: transparent; }
-      38%, 62%  { box-shadow: 0 0 0 2px rgba(245,158,11,0.85), 0 0 22px 2px rgba(245,158,11,0.35); background: rgba(245,158,11,0.07); }
-      80%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); background: transparent; }
+    @keyframes yellowPulse {
+      0%, 28%   { box-shadow: 0 0 0 0 rgba(255,218,25,0); background: transparent; }
+      38%, 62%  { box-shadow: 0 0 0 2px rgba(255,218,25,0.95), 0 0 22px 2px rgba(255,218,25,0.4); background: rgba(255,218,25,0.10); }
+      80%, 100% { box-shadow: 0 0 0 0 rgba(255,218,25,0); background: transparent; }
     }
     @keyframes regenLabel {
       0%, 30% { opacity: 0; }
       40%, 60% { opacity: 1; }
       72%, 100% { opacity: 0; }
     }
-    /* the metric text that swaps mid-edit */
+    /* The metric text that swaps mid-edit. */
     .swap { position: relative; display: inline-block; min-width: 4ch; }
-    .swap .from, .swap .to {
-      display: inline-block;
-    }
-    /* .to is always absolutely positioned so it overlaps .from regardless of motion
-       preference — under reduced-motion .from fades to opacity:0 but keeps its box, so without
-       this the faded value would leave an empty ~4ch gap before the number. */
-    .swap .to { color: var(--accent); position: absolute; left: 0; top: 0; }
+    .swap .from, .swap .to { display: inline-block; }
+    .swap .to { position: absolute; left: 0; top: 0; color: var(--ink); }
     @media (prefers-reduced-motion: no-preference) {
       .swap .from { animation: swapOut 7s ease-in-out infinite; }
       .swap .to { animation: swapIn 7s ease-in-out infinite; }
     }
     @keyframes swapOut { 0%,40% {opacity:1;} 52%,100% {opacity:0;} }
-    @keyframes swapIn  { 0%,40% {opacity:0;} 52%,100% {opacity:1; color:#fff;} }
+    @keyframes swapIn  { 0%,40% {opacity:0;} 52%,100% {opacity:1;} }
 
     @media (max-width: 880px) {
       .hero-grid { grid-template-columns: 1fr; gap: 40px; }
@@ -321,42 +451,50 @@
       gap: 18px;
       margin-top: 40px;
       counter-reset: beat;
+      padding: 0;
+      list-style: none;
     }
     .tile {
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 14px;
       padding: 24px 22px;
       position: relative;
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
     }
     .tile .num {
       counter-increment: beat;
       width: 34px; height: 34px;
       display: grid; place-items: center;
       border-radius: 9px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--accent);
+      background: var(--accent);
+      color: var(--on-accent);
+      font-family: "Archivo", sans-serif;
       font-weight: 800;
       margin-bottom: 14px;
     }
     .tile .num::before { content: counter(beat); }
     .tile h3 { font-size: 1.12rem; margin: 0 0 6px; }
-    .tile p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; }
-    .tile .formats { color: var(--text-muted); font-size: 0.85rem; margin-top: 8px; }
-    .tile.active { box-shadow: 0 0 0 1px rgba(245,158,11,0.7), 0 0 26px -4px rgba(245,158,11,0.4); }
+    .tile p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .tile .formats {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 8px;
+    }
+    .tile.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 26px -6px rgba(255,218,25,0.5); }
     @media (max-width: 920px) { .loop-tiles { grid-template-columns: repeat(2,1fr); } }
     @media (max-width: 520px) { .loop-tiles { grid-template-columns: 1fr; } }
 
     /* ---------- point and fix demo ---------- */
-    .demo { background: var(--surface); }
+    .demo { background: var(--canvas-2); }
     .demo-stage {
       margin-top: 36px;
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 0 0 1px rgba(161,0,255,0.16), 0 40px 80px -40px rgba(0,0,0,0.85);
+      box-shadow: 0 40px 80px -44px rgba(var(--shadow-rgb), 0.7);
     }
     .browser-bar {
       display: flex; align-items: center; gap: 8px;
@@ -365,17 +503,17 @@
     .browser-bar .dot { width: 11px; height: 11px; border-radius: 50%; }
     .browser-bar .url {
       margin-left: 12px; flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
       border-radius: 7px;
       padding: 5px 12px;
-      color: var(--text-muted);
+      color: var(--muted);
       font-size: 0.82rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .demo-canvas {
-      background: var(--bg);
-      border: 1px solid var(--border);
+      background: var(--canvas);
+      border: 1px solid var(--hairline);
       border-radius: 12px;
       padding: 34px;
       position: relative;
@@ -384,7 +522,7 @@
     .demo-canvas h3 { font-size: 1.6rem; margin: 0 0 10px; }
     .demo-canvas .body-line {
       height: 11px; border-radius: 6px;
-      background: var(--border);
+      background: var(--hairline-strong);
       margin: 10px 0;
     }
     .demo-canvas .body-line.w1 { width: 88%; }
@@ -397,32 +535,31 @@
     }
     .demo-block.targeted {
       border-color: var(--accent);
-      background: rgba(245,158,11,0.06);
-      animation: amberPulse 8s ease-in-out infinite;
+      background: rgba(255,218,25,0.08);
+      animation: yellowPulse 8s ease-in-out infinite;
     }
     .cursor-chip {
       position: absolute;
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: var(--primary);
-      color: #fff;
+      background: var(--accent);
+      color: var(--on-accent);
       font-size: 0.82rem;
       font-weight: 700;
       padding: 7px 12px;
       border-radius: 20px 20px 20px 4px;
-      box-shadow: 0 0 18px 2px rgba(161,0,255,0.5);
+      box-shadow: 0 12px 26px -10px rgba(var(--shadow-rgb), 0.6);
       bottom: 22px; right: 26px;
-      max-width: 70%;
+      max-width: 78%;
     }
     .cursor-chip .pointer {
       width: 9px; height: 9px; border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 8px 1px var(--accent);
+      background: var(--on-accent);
     }
-    .demo-caption { color: var(--text-muted); font-size: 0.9rem; margin-top: 16px; text-align: center; }
+    .demo-caption { color: var(--muted); font-size: 0.9rem; margin-top: 16px; text-align: center; }
 
-    /* ---------- generic card grid ---------- */
+    /* ---------- card grid ---------- */
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
@@ -430,8 +567,8 @@
       margin-top: 40px;
     }
     .card {
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 14px;
       padding: 26px 24px;
     }
@@ -439,17 +576,17 @@
       width: 42px; height: 42px;
       display: grid; place-items: center;
       border-radius: 11px;
-      background: rgba(161,0,255,0.12);
-      border: 1px solid rgba(161,0,255,0.3);
+      background: rgba(255,218,25,0.16);
+      border: 1px solid rgba(255,218,25,0.5);
       margin-bottom: 16px;
     }
     .card .icon svg { width: 22px; height: 22px; }
     .card h3 { font-size: 1.14rem; margin: 0 0 7px; }
-    .card p { margin: 0; color: var(--text-secondary); font-size: 0.96rem; }
-    .card .dread { color: var(--text-muted); font-size: 0.88rem; margin-top: 6px; font-style: italic; }
+    .card p { margin: 0; color: var(--muted); font-size: 0.96rem; }
+    .card .dread { color: var(--muted); font-size: 0.88rem; margin-top: 6px; font-style: italic; opacity: 0.85; }
 
-    /* value props with amber-spark icons */
-    .value { background: var(--surface); }
+    /* value props */
+    .value { background: var(--canvas-2); }
     .value-list {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -462,12 +599,12 @@
       width: 38px; height: 38px;
       display: grid; place-items: center;
       border-radius: 10px;
-      background: rgba(245,158,11,0.12);
-      border: 1px solid rgba(245,158,11,0.35);
+      background: rgba(255,218,25,0.16);
+      border: 1px solid rgba(255,218,25,0.5);
     }
     .value-item .spark-icon svg { width: 20px; height: 20px; }
     .value-item h3 { font-size: 1.08rem; margin: 0 0 5px; }
-    .value-item p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; }
+    .value-item p { margin: 0; color: var(--muted); font-size: 0.95rem; }
     @media (max-width: 720px) { .value-list { grid-template-columns: 1fr; } }
 
     /* ---------- versions timeline ---------- */
@@ -488,33 +625,32 @@
     .vnode .bead {
       width: 18px; height: 18px;
       border-radius: 50%;
-      background: var(--card);
-      border: 2px solid var(--primary);
-      box-shadow: 0 0 14px 1px rgba(161,0,255,0.5);
+      background: var(--surface);
+      border: 2px solid var(--harbor);
       margin: 0 auto 14px;
       position: relative;
       z-index: 2;
     }
-    .vnode.saved .bead { border-color: var(--success); box-shadow: 0 0 14px 1px rgba(16,185,129,0.5); }
-    .vnode.fork .bead { border-color: var(--accent); box-shadow: 0 0 14px 1px rgba(245,158,11,0.55); }
+    .vnode.saved .bead { border-color: var(--accent); box-shadow: 0 0 14px 1px rgba(255,218,25,0.5); background: var(--accent); }
+    .vnode.fork .bead { border-color: var(--wine); }
     .vnode::before {
       content: "";
       position: absolute;
       top: 8px; left: -50%; right: 50%;
       height: 2px;
-      background: var(--border);
+      background: var(--hairline-strong);
       z-index: 1;
     }
     .vnode:first-child::before { display: none; }
     .vnode .vbody {
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 10px;
       padding: 12px 14px;
       text-align: center;
     }
     .vnode .vbody .vlabel { font-weight: 700; font-size: 0.92rem; }
-    .vnode .vbody .vmeta { color: var(--text-muted); font-size: 0.8rem; margin-top: 3px; }
+    .vnode .vbody .vmeta { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
 
     /* ---------- grounded note ---------- */
     .grounded-grid {
@@ -525,41 +661,42 @@
       margin-top: 24px;
     }
     .trust-note {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--success);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-left: 3px solid var(--accent);
       border-radius: 12px;
       padding: 22px 24px;
     }
     .trust-note .tag {
       display: inline-flex; align-items: center; gap: 7px;
-      color: var(--success);
-      font-weight: 700;
-      font-size: 0.85rem;
-      letter-spacing: 0.04em;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      color: var(--mustard);
+      font-weight: 600;
+      font-size: 0.74rem;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       margin-bottom: 8px;
     }
-    .trust-note p { margin: 0; color: var(--text-secondary); }
+    .trust-note p { margin: 0; color: var(--muted); }
     .file-chips { display: flex; flex-wrap: wrap; gap: 10px; }
     .file-chip {
       display: inline-flex; align-items: center; gap: 8px;
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: var(--surface-2);
+      border: 1px solid var(--hairline);
       border-radius: 9px;
       padding: 9px 13px;
-      color: var(--text-secondary);
+      color: var(--ink);
       font-size: 0.9rem;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     }
-    .file-chip .fdot { width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
+    .file-chip .fdot { width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
     @media (max-width: 760px) { .grounded-grid { grid-template-columns: 1fr; } }
 
     /* ---------- get started ---------- */
-    .start { background: var(--surface); }
+    .start { background: var(--canvas-2); }
     .start-card {
-      background: var(--card);
-      border: 1px solid var(--border);
+      background: var(--surface);
+      border: 1px solid var(--hairline);
       border-radius: 16px;
       padding: 34px;
       margin-top: 36px;
@@ -573,7 +710,7 @@
       gap: 16px;
       align-items: start;
       padding: 14px 0;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--hairline);
     }
     .steps li:last-child { border-bottom: 0; }
     .steps li::before {
@@ -581,41 +718,43 @@
       width: 34px; height: 34px;
       display: grid; place-items: center;
       border-radius: 9px;
-      background: var(--grad);
-      color: #fff;
+      background: var(--accent);
+      color: var(--on-accent);
+      font-family: "Archivo", sans-serif;
       font-weight: 800;
     }
     .steps .step-label { font-weight: 700; margin-bottom: 6px; }
-    .steps .step-note { color: var(--text-secondary); font-size: 0.94rem; }
+    .steps .step-note { color: var(--muted); font-size: 0.94rem; }
     .code {
       display: block;
-      background: var(--bg);
-      border: 1px solid var(--border);
+      background: var(--canvas);
+      border: 1px solid var(--hairline-strong);
       border-radius: 9px;
       padding: 12px 14px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 0.92rem;
-      color: var(--text);
+      color: var(--ink);
       overflow-x: auto;
       margin-top: 4px;
     }
-    .code .prompt { color: var(--primary); user-select: none; }
-    .say-it {
-      margin-top: 4px;
-      font-size: 1.05rem;
-    }
-    .say-it b { color: var(--accent); }
-    .one-time {
-      color: var(--text-muted);
-      font-size: 0.92rem;
-      margin-top: 20px;
+    .code .prompt { color: var(--mustard); user-select: none; }
+    .say-it { margin-top: 4px; font-size: 1.05rem; }
+    .say-it b { color: var(--ink); border-bottom: 3px solid var(--accent); padding-bottom: 1px; }
+    .one-time { color: var(--muted); font-size: 0.92rem; margin-top: 20px; }
+    .one-time code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      background: var(--surface-2);
+      border: 1px solid var(--hairline);
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-size: 0.86em;
     }
 
     /* ---------- footer ---------- */
     footer.site {
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
       padding: 48px 0 56px;
-      background: var(--bg);
+      background: var(--canvas);
     }
     .footer-grid {
       display: flex;
@@ -625,52 +764,63 @@
       align-items: flex-start;
     }
     .footer-brand { max-width: 360px; }
-    .footer-brand p { color: var(--text-secondary); font-size: 0.95rem; margin: 12px 0 0; }
+    .footer-brand p { color: var(--muted); font-size: 0.95rem; margin: 12px 0 0; }
     .footer-links { display: flex; gap: 52px; flex-wrap: wrap; }
     .footer-col h4 {
-      font-size: 0.78rem;
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.72rem;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--text-muted);
+      letter-spacing: 0.18em;
+      color: var(--muted);
       margin: 0 0 12px;
     }
-    .footer-col a { display: block; color: var(--text-secondary); font-weight: 600; padding: 4px 0; font-size: 0.95rem; }
-    .footer-col a:hover { color: var(--text); text-decoration: none; }
+    .footer-col a { display: block; color: var(--muted); font-weight: 600; padding: 4px 0; font-size: 0.95rem; }
+    .footer-col a:hover { color: var(--ink); text-decoration: none; }
     .footer-bottom {
       margin-top: 40px;
       padding-top: 24px;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--hairline);
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       justify-content: space-between;
-      color: var(--text-muted);
+      color: var(--muted);
       font-size: 0.88rem;
     }
-    .footer-bottom .built b { color: var(--text-secondary); }
+    .footer-bottom .built b { color: var(--ink); }
   </style>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <div class="stage-spark" aria-hidden="true"></div>
 
   <header class="site">
     <div class="wrap nav">
-      <a class="brand" href="#main" aria-label="wicked-interactive, Liveboard home">
+      <a class="brand" href="#main" aria-label="wicked-interactive home">
         <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-          <rect width="32" height="32" rx="7" fill="#13091D"/>
-          <rect x="5" y="8" width="22" height="14" rx="3" fill="none" stroke="#A100FF" stroke-width="2"/>
-          <path d="M18.5 18.5l3.2 8.2 2-3.4 3.4-2z" fill="#A100FF"/>
-          <circle cx="24.5" cy="9.5" r="2.4" fill="#F59E0B"/>
+          <rect width="32" height="32" rx="7" fill="#232324"/>
+          <rect x="5" y="7" width="17" height="4" rx="1.5" fill="#ffda19"/>
+          <rect x="5" y="14" width="22" height="3" rx="1.5" fill="#b7b3a4"/>
+          <rect x="5" y="20" width="14" height="3" rx="1.5" fill="#b7b3a4"/>
+          <path d="M20.5 19l8.5 4-3.6 1.4L26.6 29l-2.6-1z" fill="#ffda19" stroke="#232324" stroke-width="1"/>
         </svg>
-        <span class="wordmark"><span class="live">Live</span><span class="board">board</span><span class="spark" aria-hidden="true">.</span></span>
+        <span class="wordmark"><span class="wi">wicked</span><span class="dash">-</span><span class="wi">interactive</span></span>
       </a>
       <nav class="nav-links" aria-label="Primary">
         <a href="#loop">The loop</a>
         <a href="#demo">Point &amp; fix</a>
         <a href="#make">What you can make</a>
         <a href="#start">Get started</a>
-        <a class="btn-nav" href="#start">Get it running</a>
+        <span class="nav-actions">
+          <button type="button" class="icon-btn theme-toggle" id="themeToggle" aria-label="Toggle light and dark theme" aria-pressed="false">
+            <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>
+          </button>
+          <a class="icon-btn" href="https://github.com/mikeparcewski/wicked-interactive" aria-label="wicked-interactive on GitHub" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C18.3 4.6 19.3 5 19.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+          </a>
+          <a class="btn-nav" href="#start">Get it running</a>
+        </span>
       </nav>
     </div>
   </header>
@@ -679,21 +829,23 @@
 
     <!-- HERO -->
     <section class="hero">
+      <div class="grid-floor" aria-hidden="true"></div>
       <div class="wrap hero-grid">
         <div>
-          <p class="late-night">It's 11pm. The deck's due tomorrow. <b>You haven't opened PowerPoint.</b></p>
-          <h1>If you can say it, <span class="hl">you can make it.</span></h1>
-          <p class="promise">Liveboard is a living studio where the page <em>is</em> the canvas. Point at it, watch it change under your hands — and never touch a terminal.</p>
-          <div class="cta-row">
+          <p class="kicker rise" style="animation-delay:.02s">wicked-interactive</p>
+          <p class="late-night rise" style="animation-delay:.06s">It's 11pm. The deck's due tomorrow. <b>You haven't opened PowerPoint.</b></p>
+          <h1 class="rise" style="animation-delay:.12s">If you can say it, <span class="stamp">you can make it.</span></h1>
+          <p class="promise rise" style="animation-delay:.2s">A living studio where the page <em>is</em> the canvas. Highlight any block, say what's wrong in plain English, and watch it regenerate live under your hands — never touch a terminal.</p>
+          <div class="cta-row rise" style="animation-delay:.28s">
             <a class="btn btn-primary" href="#start">Get it running &rarr;</a>
-            <a class="btn btn-ghost" href="https://github.com/mikeparcewski/wicked-interactive">View on GitHub</a>
+            <a class="btn btn-ghost" href="https://github.com/mikeparcewski/wicked-interactive" rel="noopener">View on GitHub</a>
           </div>
         </div>
-        <div class="live-card" role="img" aria-label="A glass card reshaping mid-edit: a Q3 revenue metric updating from 4.0 million to 4.2 million dollars while the touched block glows amber.">
+        <div class="live-card card-surface rise" style="animation-delay:.34s" role="img" aria-label="A card reshaping mid-edit: a Q3 revenue metric updating from 4.0 million to 4.2 million dollars while the touched block glows signal-yellow.">
           <p class="card-eyebrow" aria-hidden="true">Q3 Board Update</p>
           <p class="card-h" aria-hidden="true">Revenue, ahead of plan</p>
           <div class="touched" aria-hidden="true">
-            <p class="card-metric">$<span class="swap"><span class="from">4.0M</span><span class="to" aria-hidden="true">4.2M</span></span></p>
+            <p class="card-metric">$<span class="swap"><span class="from">4.0M</span><span class="to">4.2M</span></span></p>
           </div>
           <div class="card-line" aria-hidden="true"></div>
           <div class="card-line short" aria-hidden="true"></div>
@@ -704,7 +856,7 @@
     <!-- THE LOOP -->
     <section id="loop" class="section-pad">
       <div class="wrap">
-        <p class="eyebrow">The loop</p>
+        <p class="kicker">The loop</p>
         <h2 class="section-title">Four beats, then it's shipped</h2>
         <p class="section-lead">No blank page, no design ticket, no "let me loop in the team." Just describe it, then steer.</p>
         <ol class="loop-tiles" id="loopTiles" aria-label="The four-beat flow">
@@ -721,7 +873,7 @@
           <li class="tile">
             <div class="num" aria-hidden="true"></div>
             <h3>Point at what to change</h3>
-            <p>Highlight a block, say what's wrong, watch it rewrite itself.</p>
+            <p>Highlight a block, attach plain-language feedback, watch it regenerate.</p>
           </li>
           <li class="tile">
             <div class="num" aria-hidden="true"></div>
@@ -736,14 +888,14 @@
     <!-- POINT AND FIX (live demo) -->
     <section id="demo" class="demo section-pad">
       <div class="wrap">
-        <p class="eyebrow">The defining moment</p>
+        <p class="kicker">The defining moment</p>
         <h2 class="section-title">Fix it by pointing</h2>
-        <p class="section-lead">See something off? Highlight the block, say what you want in plain English, and watch it rewrite itself live — while you're looking at it.</p>
-        <div class="demo-stage" role="img" aria-label="A browser showing a landing page. One block is highlighted with an amber dashed border. A violet cursor chip reads: 'make this headline punchier — and that number's 4.2 million, not 4 million.' The block is regenerating in place.">
+        <p class="section-lead">See something off? Highlight the block, say what you want in plain English, and watch it regenerate live — while you're looking at it. The supervising Claude session is the intelligence in the loop.</p>
+        <div class="demo-stage" role="img" aria-label="A browser showing a landing page. One block is highlighted with a signal-yellow dashed border. A yellow cursor chip reads: 'make this punchier — and that's 4.2 million, not 4 million.' The block is regenerating in place.">
           <div class="browser-bar" aria-hidden="true">
-            <span class="dot" style="background:#F59E0B"></span>
-            <span class="dot" style="background:#6B2FA0"></span>
-            <span class="dot" style="background:#A100FF"></span>
+            <span class="dot" style="background:#9d4f56"></span>
+            <span class="dot" style="background:#c6a413"></span>
+            <span class="dot" style="background:#60acc6"></span>
             <span class="url">localhost — your draft, live</span>
           </div>
           <div class="demo-canvas" aria-hidden="true">
@@ -753,12 +905,12 @@
             <div class="body-line w1"></div>
             <div class="body-line w2"></div>
             <div class="body-line w1" style="width:80%"></div>
-            <span class="cursor-chip" aria-hidden="true">
+            <span class="cursor-chip">
               <span class="pointer"></span>
               "make this punchier — and that's $4.2M, not $4M"
             </span>
           </div>
-          <p class="demo-caption" aria-hidden="true">No menus. No re-export. You point, you say it, it changes in place.</p>
+          <p class="demo-caption" aria-hidden="true">No menus. No re-export. You point, you say it, it regenerates in place.</p>
         </div>
       </div>
     </section>
@@ -766,12 +918,12 @@
     <!-- WHAT YOU CAN MAKE -->
     <section id="make" class="section-pad">
       <div class="wrap">
-        <p class="eyebrow">What you can make</p>
+        <p class="kicker">What you can make</p>
         <h2 class="section-title">Stuff you'd normally dread</h2>
         <div class="card-grid">
           <div class="card">
             <div class="icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#A100FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 17v3M8 20h8"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 17v3M8 20h8"/></svg>
             </div>
             <h3>Decks</h3>
             <p>Board updates, pitch decks, QBRs — on-brand and export-ready.</p>
@@ -779,7 +931,7 @@
           </div>
           <div class="card">
             <div class="icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#A100FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4M9 13h6M9 17h6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v4h4M9 13h6M9 17h6"/></svg>
             </div>
             <h3>Docs &amp; one-pagers</h3>
             <p>Reports, briefs, proposals — fully formed, not a blank doc.</p>
@@ -787,7 +939,7 @@
           </div>
           <div class="card">
             <div class="icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#A100FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M3 9h18M8 13h8M8 16h5"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18v14H3z"/><path d="M3 9h18M8 13h8M8 16h5"/></svg>
             </div>
             <h3>Marketing pages</h3>
             <p>Landing pages, launch posts, sales pages — anything that lives on the web.</p>
@@ -795,7 +947,7 @@
           </div>
           <div class="card">
             <div class="icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#A100FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="#A100FF" stroke="none"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="#9a7f10" stroke="none"/></svg>
             </div>
             <h3>Demo videos</h3>
             <p>Point it at your live app, say what to show, get a narrated walkthrough.</p>
@@ -808,31 +960,31 @@
     <!-- WHY PEOPLE GET HOOKED -->
     <section id="why" class="value section-pad">
       <div class="wrap">
-        <p class="eyebrow">Why people get hooked</p>
+        <p class="kicker">Why people get hooked</p>
         <h2 class="section-title">It feels less like software, more like a coworker</h2>
         <div class="value-list">
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2l2.6 6.4L21 11l-6.4 2.6L12 20l-2.6-6.4L3 11l6.4-2.6z"/></svg></span>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="#9a7f10"><path d="M12 2l2.6 6.4L21 11l-6.4 2.6L12 20l-2.6-6.4L3 11l6.4-2.6z"/></svg></span>
             <div><h3>Just start talking.</h3><p>Give it a topic, get a real first draft back — never a blank page. The supervising Claude session is the intelligence in the loop; you're the director.</p></div>
           </div>
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-6 1 4 6-3 2-4-6-5 5z"/></svg></span>
-            <div><h3>Fix it by pointing.</h3><p>See something off? Highlight the block, say what you want in plain English, and watch it rewrite itself live while you're looking at it.</p></div>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-6 1 4 6-3 2-4-6-5 5z"/></svg></span>
+            <div><h3>Fix it by pointing.</h3><p>See something off? Highlight the block, say what you want in plain English, and watch it regenerate live while you're looking at it.</p></div>
           </div>
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/></svg></span>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6"/></svg></span>
             <div><h3>It uses your actual numbers.</h3><p>Drop in your files and folders and it reads them, so the real figures land in the deck — no copy-paste, no stale screenshots.</p></div>
           </div>
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/></svg></span>
             <div><h3>You literally cannot lose work.</h3><p>Every change is a saved version. Rewind to the one you liked three edits ago, or fork it and chase two ideas at once.</p></div>
           </div>
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="#F59E0B" stroke="none"/></svg></span>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="#9a7f10" stroke="none"/></svg></span>
             <div><h3>Your live app becomes a video.</h3><p>Point it at your product, say what to show, and get a narrated walkthrough with clickable, YouTube-style chapters. Want a different take? Just ask again.</p></div>
           </div>
           <div class="value-item">
-            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/><path d="M8 10h8"/></svg></span>
+            <span class="spark-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#9a7f10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H7l-3 3z"/><path d="M8 10h8"/></svg></span>
             <div><h3>Send it to anyone, one clean file.</h3><p>Export self-contained HTML, PDF, a native editable PowerPoint, or the video — nothing for them to install or figure out. No scary black terminal, ever.</p></div>
           </div>
         </div>
@@ -842,8 +994,8 @@
     <!-- NEVER LOSE WORK -->
     <section id="versions" class="section-pad">
       <div class="wrap">
-        <p class="eyebrow">Never lose work</p>
-        <h2 class="section-title">A glowing timeline you can rewind and branch</h2>
+        <p class="kicker">Never lose work</p>
+        <h2 class="section-title">A timeline you can rewind and branch</h2>
         <p class="section-lead">Every edit quietly saves a version. Don't like where it went three changes ago? Jump back. Can't choose between two directions? Fork and keep both.</p>
         <div class="timeline" role="img" aria-label="A timeline of saved versions: v1 first draft, v2 punchier headline, v3 saved as approved, then a fork branching to chase a second idea.">
           <div class="vnode" aria-hidden="true">
@@ -869,7 +1021,7 @@
     <!-- GROUNDED IN REAL NUMBERS -->
     <section id="grounded" class="value section-pad">
       <div class="wrap">
-        <p class="eyebrow">Grounded in your real numbers</p>
+        <p class="kicker">Grounded in your real numbers</p>
         <h2 class="section-title">Drop in your files — it reads them</h2>
         <div class="grounded-grid">
           <div>
@@ -881,7 +1033,7 @@
             </div>
           </div>
           <div class="trust-note">
-            <span class="tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg> Model-free service</span>
+            <span class="tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg> Model-free service</span>
             <p>The service ships no model of its own. Your files and every saved version stay in your workspace — durable on disk, not in some cloud. The intelligence is the Claude session you're already running.</p>
           </div>
         </div>
@@ -891,9 +1043,9 @@
     <!-- GET IT RUNNING -->
     <section id="start" class="start section-pad">
       <div class="wrap">
-        <p class="eyebrow">Get it running</p>
+        <p class="kicker">Get it running</p>
         <h2 class="section-title">One-time setup, then never again</h2>
-        <p class="section-lead">You'll need <a href="https://claude.com/claude-code">Claude Code</a>. Paste two lines, then the only thing you ever type is a sentence.</p>
+        <p class="section-lead">You'll need <a href="https://claude.com/claude-code" rel="noopener">Claude Code</a>. Paste two lines, then the only thing you ever type is a sentence.</p>
         <div class="start-card">
           <ol class="steps">
             <li>
@@ -919,7 +1071,7 @@
           <p class="one-time">Rather install the helpers yourself? Set <code>WI_NO_AUTOINSTALL=1</code> and it'll just tell you what to run.</p>
         </div>
         <div class="cta-row" style="margin-top:28px;">
-          <a class="btn btn-primary" href="https://github.com/mikeparcewski/wicked-interactive">Open the repo &rarr;</a>
+          <a class="btn btn-primary" href="https://github.com/mikeparcewski/wicked-interactive" rel="noopener">Open the repo &rarr;</a>
         </div>
       </div>
     </section>
@@ -930,16 +1082,17 @@
     <div class="wrap">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="brand" href="#main" aria-label="wicked-interactive, Liveboard">
+          <a class="brand" href="#main" aria-label="wicked-interactive">
             <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
-              <rect width="32" height="32" rx="7" fill="#13091D"/>
-              <rect x="5" y="8" width="22" height="14" rx="3" fill="none" stroke="#A100FF" stroke-width="2"/>
-              <path d="M18.5 18.5l3.2 8.2 2-3.4 3.4-2z" fill="#A100FF"/>
-              <circle cx="24.5" cy="9.5" r="2.4" fill="#F59E0B"/>
+              <rect width="32" height="32" rx="7" fill="#232324"/>
+              <rect x="5" y="7" width="17" height="4" rx="1.5" fill="#ffda19"/>
+              <rect x="5" y="14" width="22" height="3" rx="1.5" fill="#b7b3a4"/>
+              <rect x="5" y="20" width="14" height="3" rx="1.5" fill="#b7b3a4"/>
+              <path d="M20.5 19l8.5 4-3.6 1.4L26.6 29l-2.6-1z" fill="#ffda19" stroke="#232324" stroke-width="1"/>
             </svg>
-            <span class="wordmark"><span class="live">Live</span><span class="board">board</span><span class="spark" aria-hidden="true">.</span></span>
+            <span class="wordmark"><span class="wi">wicked</span><span class="dash">-</span><span class="wi">interactive</span></span>
           </a>
-          <p>The page is the canvas. Say what you want, watch it change, ship it — never touch a terminal.</p>
+          <p>The page is the canvas. Say what you want, watch it regenerate, ship it — never touch a terminal. Part of the wickedagile family.</p>
         </div>
         <div class="footer-links">
           <div class="footer-col">
@@ -951,15 +1104,15 @@
           </div>
           <div class="footer-col">
             <h4>Project</h4>
-            <a href="https://github.com/mikeparcewski/wicked-interactive">GitHub repo</a>
-            <a href="https://github.com/mikeparcewski/wicked-interactive/blob/main/LICENSE">MIT License</a>
-            <a href="https://github.com/mikeparcewski/wicked-interactive/issues">Report an issue</a>
+            <a href="https://github.com/mikeparcewski/wicked-interactive" rel="noopener">GitHub repo</a>
+            <a href="https://github.com/mikeparcewski/wicked-interactive/blob/main/LICENSE" rel="noopener">MIT License</a>
+            <a href="https://github.com/mikeparcewski/wicked-interactive/issues" rel="noopener">Report an issue</a>
           </div>
           <div class="footer-col">
-            <h4>Built on</h4>
-            <a href="https://github.com/mikeparcewski/wicked-bus">wicked-bus</a>
-            <a href="https://github.com/mikeparcewski/wicked-garden">wicked-garden</a>
-            <a href="https://github.com/mikeparcewski/wicked-brain">wicked-brain</a>
+            <h4>wicked family</h4>
+            <a href="https://github.com/mikeparcewski/wicked-bus" rel="noopener">wicked-bus</a>
+            <a href="https://github.com/mikeparcewski/wicked-garden" rel="noopener">wicked-garden</a>
+            <a href="https://github.com/mikeparcewski/wicked-brain" rel="noopener">wicked-brain</a>
           </div>
         </div>
       </div>
@@ -974,8 +1127,25 @@
     // Footer year — keeps the copyright current without a build step.
     document.getElementById('year').textContent = String(new Date().getFullYear());
 
-    // The Loop: cycle the amber "active" pulse across the four beats, reinforcing
-    // the "it edits itself" identity. Pauses for reduced-motion users.
+    // Theme toggle: flip <html class="dark"> and persist the choice.
+    (function () {
+      var btn = document.getElementById('themeToggle');
+      if (!btn) return;
+      var root = document.documentElement;
+      function sync() {
+        var isDark = root.classList.contains('dark');
+        btn.setAttribute('aria-pressed', String(isDark));
+      }
+      sync();
+      btn.addEventListener('click', function () {
+        var nowDark = root.classList.toggle('dark');
+        try { localStorage.setItem('theme', nowDark ? 'dark' : 'light'); } catch (e) {}
+        sync();
+      });
+    })();
+
+    // The Loop: cycle the signal-yellow "active" pulse across the four beats,
+    // reinforcing the live-edit identity. Pauses for reduced-motion users.
     (function () {
       var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (reduce) return;
