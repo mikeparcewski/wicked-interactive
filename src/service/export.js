@@ -318,9 +318,11 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
   if (noHeaderFooter) flags.push("--no-pdf-header-footer");
   flags.push(...args, `--print-to-pdf=${pdfPath}`, `file://${htmlPath}`);
   return new Promise((resolveP, reject) => {
-    const child = spawn(chrome, flags, { timeout: 60000 });
+    // ignore stdout (unread + full → deadlock); pipe stderr only; guard the stderr stream.
+    const child = spawn(chrome, flags, { timeout: 60000, stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
     child.stderr?.on("data", (d) => { stderr += d; });
+    child.stderr?.on("error", () => {});
     child.on("error", reject);
     child.on("close", (code, signal) => {
       if (code !== 0 || !existsSync(pdfPath)) {
