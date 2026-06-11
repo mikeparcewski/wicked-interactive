@@ -4,10 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>wicked-interactive</title>
-    <script type="module" crossorigin src="/assets/index-Bt5uB8VI.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Dq_AQHYX.css">
+    <!-- wickedagile "Wicked Good" type: Archivo (display), Hanken Grotesk (body), JetBrains Mono (kickers) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Pre-paint theme: set <html class> from localStorage || prefers-color-scheme BEFORE first paint
+         so there is no light/dark flash. Light ("paper") is the default ground. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("wi-theme");
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme = saved || (prefersDark ? "dark" : "light");
+          document.documentElement.classList.toggle("dark", theme === "dark");
+          document.documentElement.dataset.wiTheme = theme;
+        } catch (e) {
+          /* private mode / no storage — fall back to the light default already in CSS */
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-mZ_wO7dF.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-KsPTwco5.css">
   </head>
-  <body>
+  <body class="wi-grain">
     <div id="root"></div>
   </body>
 </html>
