@@ -40,6 +40,8 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.demo.requested":      { subdomain: "demo",       owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.theme.requested":     { subdomain: "theme",      owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.theme.learned":       { subdomain: "theme",      owners: [SERVICE],       uiEmittable: false },
+  "wicked.review.requested":    { subdomain: "review",     owners: [UI, AGENT],     uiEmittable: true  },
+  "wicked.review.completed":    { subdomain: "review",     owners: [AGENT],         uiEmittable: false },
   "wicked.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
   "wicked.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   "wicked.error.raised":        { subdomain: "error",      owners: [SERVICE],       uiEmittable: false },

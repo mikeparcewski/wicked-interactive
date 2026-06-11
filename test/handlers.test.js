@@ -181,6 +181,49 @@ test("materializeThemeRequested grabs the URL and emits theme.learned with rende
   } finally { cleanup(dir); }
 });
 
+test("materializeThemeRequested learns from a LOCAL file (no grab) — emits theme.learned with the path (ADR-0023)", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    // A local PDF the user pointed at: the agent reads it in place, the service must NOT grab.
+    const pdf = join(dir, "brand.pdf");
+    writeFileSync(pdf, "%PDF-1.4 fake");
+    let grabCalled = false;
+    const out = await materializeThemeRequested(dir, { path: pdf }, ctx, { grab: () => { grabCalled = true; return { path: pdf }; } });
+    assert.equal(grabCalled, false, "must not invoke the URL grab for a local file");
+    assert.equal(out.render_path, pdf);
+    assert.equal(out.format, "pdf");
+    const learned = ctx.events.find((e) => e.type === "wicked.theme.learned");
+    assert.ok(learned, "emitted wicked.theme.learned");
+    assert.equal(learned.payload.render_path, pdf);
+    assert.equal(learned.payload.format, "pdf");
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
+  } finally { cleanup(dir); }
+});
+
+test("materializeThemeRequested classifies an image file as format:image", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    const png = join(dir, "shot.png");
+    writeFileSync(png, "\x89PNG fake");
+    const out = await materializeThemeRequested(dir, { path: png }, ctx, { grab: () => { throw new Error("should not grab"); } });
+    assert.equal(out.format, "image");
+    assert.equal(out.render_path, png);
+  } finally { cleanup(dir); }
+});
+
+test("materializeThemeRequested rejects a missing file with an error status (no throw)", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    const out = await materializeThemeRequested(dir, { path: join(dir, "nope.pdf") }, ctx, { grab: () => ({}) });
+    assert.ok(out.error, "returns an error, does not throw");
+    assert.ok(ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.theme.learned"));
+  } finally { cleanup(dir); }
+});
+
 test("materializeThemeRequested surfaces an error status (not a throw) on a bad URL", async () => {
   const dir = ws();
   const ctx = spyCtx();

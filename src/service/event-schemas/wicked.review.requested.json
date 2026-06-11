@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Learn-a-theme-from-a-URL requested",
+  "title": "Review pass requested",
   "type": "object",
   "required": [
     "document_id",
@@ -13,12 +13,12 @@
     "ts": {
       "type": "string"
     },
-    "url": {
-      "type": "string",
-      "format": "uri"
-    },
-    "path": {
-      "type": "string"
+    "reviewers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["match", "a11y", "copy", "qe"]
+      }
     }
   },
   "additionalProperties": true

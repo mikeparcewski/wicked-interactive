@@ -119,8 +119,22 @@ export function themeArtifactPath(dir, ts = Date.now()) {
  */
 export async function materializeThemeRequested(dir, payload, ctx, { grab = grabUrlToPdf } = {}) {
   const url = String(payload.url || "").trim();
+  const filePath = String(payload.path || "").trim();
   try {
-    if (!url) throw new Error("a theme URL is required");
+    // Learn from a LOCAL file (PDF/image) the user pointed at: no grab — the file IS the render,
+    // the agent reads it in place (nothing uploads, local-first). Announce it like a grabbed PDF.
+    if (filePath) {
+      const abs = resolve(filePath);
+      if (!existsSync(abs)) throw new Error(`file not found: ${filePath}`);
+      const ext = abs.toLowerCase().split(".").pop();
+      if (!["pdf", "png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
+        throw new Error(`learn-from-file needs a PDF or image (got .${ext})`);
+      }
+      const format = ext === "pdf" ? "pdf" : "image";
+      ctx.emit("wicked.theme.learned", { path: abs, render_path: abs, format });
+      return { path: abs, render_path: abs, format };
+    }
+    if (!url) throw new Error("a theme URL or file is required");
     // Validate http(s) up front (mirrors server.js's demo branch) so a bad-protocol URL fails
     // fast WITHOUT touching the filesystem or invoking the grab — grabUrlToPdf re-checks too.
     let u;
