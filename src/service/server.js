@@ -89,13 +89,13 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
 
   // Export to self-contained HTML or PDF (ADR-0009), triggered from the browser. POST creates
   // the file; the response carries a `download` URL the frontend hits to pull the bytes.
-  app.post("/api/export", (req, res) => {
+  app.post("/api/export", async (req, res) => {
     const version = Number(req.body?.version);
     const format = String(req.body?.format || "html").toLowerCase();
     if (!Number.isInteger(version)) return res.status(400).json({ error: "version (number) required" });
     if (!["html", "pdf", "pptx"].includes(format)) return res.status(400).json({ error: "format must be html, pdf, or pptx" });
     try {
-      const result = format === "pdf" ? exportPdf(dir, version)
+      const result = format === "pdf" ? await exportPdf(dir, version)
         : format === "pptx" ? exportPptx(dir, version)
         : exportHtml(dir, version);
       const file = basename(result.path);
