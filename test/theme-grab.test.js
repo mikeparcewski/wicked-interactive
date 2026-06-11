@@ -65,6 +65,7 @@ test("isBlockedIp blocks loopback / link-local / private / ULA / CGNAT / unspeci
     // IPv4-mapped in HEX spelling — the form the WHATWG URL parser actually produces (the bypass
     // an earlier cut missed): ::ffff:a9fe:a9fe == 169.254.169.254, ::ffff:7f00:1 == 127.0.0.1, etc.
     "::ffff:a9fe:a9fe", "::ffff:7f00:1", "::ffff:0a00:0001", "::ffff:c0a8:0101",
+    "64:ff9b::a9fe:a9fe", "64:ff9b::7f00:1",  // NAT64 well-known prefix embedding metadata/loopback
     "::a9fe:a9fe"]) {  // IPv4-compatible ::/96 (deprecated) embedding link-local
     assert.equal(isBlockedIp(bad), true, `${bad} must be blocked`);
   }

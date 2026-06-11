@@ -73,6 +73,10 @@ export function isBlockedIp(ip) {
     // isn't over-blocked. Mapped-but-undecodable fails closed.
     const mapped = a.match(/^::ffff:(.+)$/);
     if (mapped) { const v4 = embeddedV4(mapped[1]); return v4 ? isBlockedIp(v4) : true; }
+    // NAT64 well-known prefix 64:ff9b::/96 embeds an IPv4 in its low 32 bits; on a NAT64-capable
+    // network it routes to that v4, so decode + range-check it too (defense in depth).
+    const nat64 = a.match(/^64:ff9b::(.+)$/);
+    if (nat64) { const v4 = embeddedV4(nat64[1]); if (v4) return isBlockedIp(v4); }
     // IPv4-compatible ::/96 (deprecated): ::a.b.c.d or ::x:y — decode + range-check the embedded v4.
     const compat = a.match(/^::(.+)$/);
     if (compat) { const v4 = embeddedV4(compat[1]); if (v4) return isBlockedIp(v4); }
