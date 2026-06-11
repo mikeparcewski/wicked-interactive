@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { grabUrlToPdf, chromeUrlRenderer, assertPublicUrl, isBlockedIp, resolveRedirectChain } from "../src/service/theme-grab.js";
+import { grabUrlToPdf, chromeUrlRenderer, playwrightUrlRenderer, assertPublicUrl, isBlockedIp, resolveRedirectChain } from "../src/service/theme-grab.js";
 
 process.env.WICKED_NO_BUS = "1";
 
@@ -55,6 +55,111 @@ test("grabUrlToPdf rejects a non-http(s) url before spawning (no DNS, no fetch)"
   await assert.rejects(grabUrlToPdf("not a url at all", "/tmp/x.pdf", { renderer: fakeRenderer, fetchImpl: noFetch }), /valid http\(s\) URL/);
   assert.equal(calls, 0, "the renderer is never invoked for an invalid url");
   assert.equal(fetches, 0, "fetch is never invoked — initial-host validation fails first");
+});
+
+// --- playwright renderer (ADR-0024): the default. We inject `importPlaywright` with a fake
+// chromium so the wiring (networkidle wait, IP pin, settle, retry, page.pdf, browser teardown) is
+// covered with NO real browser or network. crawlee was evaluated and rejected (40–75 MB for one
+// page.pdf() call); we use the plain `playwright` the service already ships. ---
+
+// Build a fake `playwright` import: chromium.launch → browser → newContext → newPage, recording
+// every call. `failTimes` makes the first N goto() calls throw (to exercise the retry loop).
+function fakePlaywrightImport({ pdfBytes = "%PDF-1.4 pw", failTimes = 0 } = {}) {
+  const captured = { launchArgs: null, contextOpts: null, gotoArgs: [], pageCalls: [], closed: 0, attempts: 0 };
+  let failsLeft = failTimes;
+  const chromium = {
+    launch: async ({ headless, args }) => {
+      captured.launchArgs = args;
+      return {
+        newContext: async (opts) => {
+          captured.contextOpts = opts;
+          return {
+            newPage: async () => ({
+              goto: async (url, o) => {
+                captured.attempts++; captured.gotoArgs.push([url, o]);
+                if (failsLeft > 0) { failsLeft--; throw new Error("nav timeout (anti-bot 403)"); }
+              },
+              waitForTimeout: async (ms) => captured.pageCalls.push(["waitForTimeout", ms]),
+              emulateMedia: async (o) => captured.pageCalls.push(["emulateMedia", o]),
+              pdf: async (o) => { captured.pageCalls.push(["pdf", o]); mkdirSync(join(o.path, ".."), { recursive: true }); writeFileSync(o.path, pdfBytes); },
+            }),
+          };
+        },
+        close: async () => { captured.closed++; },
+      };
+    },
+  };
+  return { import: async () => ({ chromium }), captured };
+}
+
+test("playwrightUrlRenderer waits for networkidle, pins the IP, settles, and writes a PDF", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    const { import: importPlaywright, captured } = fakePlaywrightImport();
+    const res = await playwrightUrlRenderer("https://500designs.com/", out, {
+      pinnedIp: "93.184.216.34", settleMs: 10, importPlaywright,
+    });
+    assert.equal(res.path, out);
+    assert.ok(existsSync(out), "the playwright renderer produced a PDF");
+    assert.equal(captured.gotoArgs[0][0], "https://500designs.com/", "navigated to exactly the final URL");
+    assert.equal(captured.gotoArgs[0][1].waitUntil, "networkidle", "waits for networkidle so JS-heavy pages paint");
+    // IP pin survives into Chromium launch args (anti-DNS-rebinding preserved).
+    assert.ok(captured.launchArgs.some((a) => a === "--host-resolver-rules=MAP 500designs.com 93.184.216.34"),
+      "pins host→validated IP via --host-resolver-rules");
+    assert.ok(captured.pageCalls.some(([m, o]) => m === "pdf" && o.printBackground === true), "prints with backgrounds on");
+    assert.ok(captured.pageCalls.some(([m]) => m === "waitForTimeout"), "gives late hydration a settle frame");
+    assert.equal(captured.closed, 1, "closes the browser so none is left running");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("playwrightUrlRenderer retries a transient nav failure, then succeeds", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    const { import: importPlaywright, captured } = fakePlaywrightImport({ failTimes: 1 });
+    const res = await playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 2, importPlaywright });
+    assert.equal(res.path, out);
+    assert.ok(existsSync(out), "produced a PDF after a retry");
+    assert.equal(captured.attempts, 2, "retried once (first goto threw) then succeeded");
+    assert.equal(captured.closed, 2, "each attempt's browser is closed");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("playwrightUrlRenderer surfaces a render failure after retries (no silent empty PDF)", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    const { import: importPlaywright } = fakePlaywrightImport({ failTimes: 99 });
+    await assert.rejects(
+      playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 1, importPlaywright }),
+      /Playwright URL render failed/,
+    );
+    assert.ok(!existsSync(out), "no PDF artifact on failure");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("playwrightUrlRenderer throws a clear 'Playwright is not installed' error when the import fails", async () => {
+  const importPlaywright = async () => { throw new Error("Cannot find package 'playwright'"); };
+  await assert.rejects(
+    playwrightUrlRenderer("https://example.com/", "/tmp/nope.pdf", { importPlaywright }),
+    /Playwright is not installed/,
+  );
+});
+
+test("grabUrlToPdf uses the playwright renderer by default and wires through the final url + pin", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    const { import: importPlaywright, captured } = fakePlaywrightImport();
+    // Inject ONLY the playwright import (via renderOpts) — let grabUrlToPdf pick its DEFAULT renderer.
+    await grabUrlToPdf("https://example.com/pricing", out, {
+      validate: approve, fetchImpl: fetch200, renderOpts: { settleMs: 5, importPlaywright },
+    });
+    assert.ok(existsSync(out), "default (playwright) renderer produced a PDF");
+    assert.equal(captured.gotoArgs[0][0], "https://example.com/pricing", "rendered the validated final URL");
+    assert.ok(captured.launchArgs.some((a) => a.includes("MAP example.com 93.184.216.34")), "the validated pin reached the default renderer");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("chromeUrlRenderer throws a clear 'set WI_CHROME' error when no Chrome is found", () => {

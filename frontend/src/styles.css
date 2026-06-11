@@ -777,6 +777,15 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-crumb b { color: var(--wi-chrome-ink); font-weight: 700; }
 .wi-crumb--empty { color: var(--wi-chrome-ink-faint); }
 
+/* Brand lockup in the top bar: "wickedagile / <doc>". Mirrors the sidebar wordmark two-tone —
+   "wicked" in ink, "agile" in signal-yellow accent — with the doc name trailing after a slash. */
+.wi-brandcrumb { gap: 0; min-width: 0; }
+.wi-brandcrumb__brand { font-family: var(--wi-font-display); font-weight: 800; font-size: .92rem; letter-spacing: -.01em; line-height: 1; }
+.wi-brandcrumb__brand b { color: var(--wi-chrome-ink); font-weight: 800; }
+.wi-brandcrumb__brand i { font-style: normal; font-weight: 800; color: var(--wi-accent-bright); }
+.wi-brandcrumb__doc { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--wi-chrome-ink-faint); }
+.wi-brandcrumb__doc b { color: var(--wi-chrome-ink-soft); font-weight: 600; }
+
 /* Canvas + the framed document (centered, wide, clears the composer) */
 .wi-canvas { flex: 1 1 auto; min-height: 0; }
 .wi-doc { top: 20px; bottom: 172px; left: 50%; right: auto; transform: translateX(-50%); width: calc(100% - 44px); max-width: 1180px; }
@@ -815,8 +824,19 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-chip { font-family: var(--wi-mono); font-size: .7rem; letter-spacing: .02em; color: var(--wi-ink-soft); background: var(--wi-panel-2); border: 1px solid var(--wi-line); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 7px; }
 .wi-chip--review { background: var(--wi-accent-soft); border-color: color-mix(in oklab, var(--wi-accent) 40%, transparent); color: var(--wi-accent-ink); }
 .wi-chip__dot { width: 6px; height: 6px; border-radius: 999px; background: var(--wi-accent-ink); }
+/* Mode switch — segmented control above the bar: Interactive (default) vs Demo recording.
+   Active segment takes the signal-yellow stamp, matching the other segmented controls. */
+.wi-modeswitch { display: inline-flex; gap: 0; margin: 0 6px 9px; padding: 3px; border-radius: 999px; background: var(--wi-panel-2); border: 1px solid var(--wi-line); width: fit-content; }
+.wi-modeswitch__opt { border: 0; background: transparent; cursor: pointer; font: inherit; font-family: var(--wi-mono); font-size: .68rem; letter-spacing: .04em; color: var(--wi-ink-soft); padding: 5px 13px; border-radius: 999px; transition: background .14s var(--wi-ease), color .14s var(--wi-ease); }
+.wi-modeswitch__opt:hover { color: var(--wi-ink); }
+.wi-modeswitch__opt.is-on { background: var(--wi-accent); color: var(--wi-on-accent); font-weight: 700; box-shadow: var(--wi-sh-1); }
+.wi-modeswitch__opt:focus-visible { outline: 2px solid var(--wi-accent); outline-offset: 2px; }
+
 .wi-bar { position: relative; display: flex; align-items: flex-end; gap: 10px; background: var(--wi-surface); border: 1px solid var(--wi-line-2); border-radius: 18px; padding: 9px 11px; box-shadow: 0 10px 30px -18px rgba(0,0,0,.4); transition: border-color .15s var(--wi-ease), box-shadow .15s var(--wi-ease); }
 .wi-bar:focus-within { border-color: var(--wi-accent); box-shadow: 0 0 0 3px var(--wi-ring), 0 10px 30px -18px rgba(0,0,0,.4); }
+/* Demo-recording mode — the bar wears the accent border + soft wash so the mode is unmistakable. */
+.wi-bar--demo { border-color: var(--wi-accent); background: var(--wi-accent-soft); box-shadow: 0 0 0 2px var(--wi-ring), 0 10px 30px -18px rgba(0,0,0,.4); }
+.wi-bar--demo textarea::placeholder { color: var(--wi-accent-ink); opacity: .85; }
 .wi-iconbtn { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px; border: 1px solid transparent; background: transparent; color: var(--wi-ink-faint); cursor: pointer; display: grid; place-items: center; transition: background .14s var(--wi-ease), color .14s var(--wi-ease); }
 .wi-iconbtn:hover { background: var(--wi-panel-2); color: var(--wi-ink); }
 .wi-iconbtn--plus { color: var(--wi-ink); }
