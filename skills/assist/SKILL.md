@@ -30,8 +30,9 @@ files, no HTTP endpoints, no bespoke tail. Run this as a continuous loop until t
 > included) only re-invoke the agent when a backgrounded process **completes** — a
 > `wicked-bus subscribe` tail that never exits will never wake you, so `wicked.doc.created`,
 > `wicked.chat.posted`, and `wicked.feedback.processed` pile up unread and the in-browser loop
-> silently hangs. The fix (Step 1) is `wicked-bus subscribe --drain` (bus ≥ 2.1.0): it delivers
-> pending events and **exits**, so process-completion wakes you — then you re-arm (Step 11).
+> silently hangs. The fix (Step 1) is `wicked-bus subscribe --drain`: it delivers pending events
+> and **exits**, so process-completion wakes you — then you re-arm (Step 11). (`--drain` is always
+> available — wicked-bus is a pinned dependency; don't check its version.)
 
 ## Step 0 — Set your bus identity
 
@@ -53,34 +54,33 @@ wibus() {  # wibus <event_type> <subdomain> <json-payload>
 }
 ```
 
-## Step 1 — Subscribe to the loop (self-exiting drain)
+## Step 1 — Go live: greet, then arm the watch
 
-`wicked-bus subscribe --drain` (bus ≥ 2.1.0) delivers every event pending past your **durable
-cursor** — one JSON line each — then **exits 0**; `--idle-timeout <ms>` makes it first *block* for
-new events (the timer resets on each delivery) and exit only once things go quiet. That self-exit
-is the whole point: most agent harnesses re-invoke you only when a backgrounded process
-**completes**, so a drain-then-exit subscribe is exactly what wakes you. No never-ending tail, no
-tail file, no watcher — and because the cursor is durable, any event that arrives **while you're
-handling a batch** is held by the bus and delivered on your *next* drain (nothing lost, nothing
-redelivered).
+Two actions, in order. **No version checks, no choosing between approaches** — do exactly this:
 
-Each loop iteration, run ONE drain. For real-time pickup, run it under your harness's per-line
-stream watcher (in Claude Code, the **Monitor tool**) so each delivered line wakes you the instant
-it arrives; the command self-exits after the idle window and you re-arm (Step 11):
+**1. Greet** so the user sees the agent is live (use the doc they have open; omit `document_id`
+only if none is open yet):
+
+```bash
+wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"agent","text":"I'\''m here — describe a change or click any block and I'\''ll get to work."}'
+```
+
+**2. Arm the watch.** In Claude Code, run this self-exiting drain **with the Monitor tool** so each
+delivered line wakes you the instant it arrives. This is THE way — not a background tail (that only
+wakes you on completion → events pile up unread, the #11 bug), and not a decision to weigh:
 
 ```bash
 wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
   --cursor-init latest --drain --idle-timeout 120000
 ```
 
-Each delivered line is an event envelope:
-`{ "event_type", "payload": { "document_id", … }, "producer_id", … }`.
+`--drain` delivers every event past your **durable cursor** (one JSON envelope per line —
+`{ "event_type", "payload": { "document_id", … }, "producer_id", … }`) then **exits**, which is
+what wakes you. Anything that arrives while you're working is held by the durable cursor and
+delivered on your next drain (nothing lost, nothing redelivered). When it exits, re-arm (Step 11).
 
-> **Do NOT run a never-exiting `subscribe` as a fire-and-forget background task.** A plain
-> background process notifies you only on *completion*, so a tail that never returns never wakes
-> you and events pile up unread — that was the #11 bug. Always use the self-exiting `--drain`
-> above: watch it per-line for real-time wake, or take the whole batch when it exits — either way
-> it **returns**, and you re-arm.
+*(Not in Claude Code? Run the exact same command without Monitor — take the batch when it exits,
+then re-arm. Same command either way.)*
 
 `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`); per-doc state-plane reads
 live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and act on the rest**:
