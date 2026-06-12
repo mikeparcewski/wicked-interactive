@@ -59,14 +59,20 @@ front: invoke the **`wicked-brain-server`** skill (or any `wicked-brain` skill, 
 it). A brain that's installed-but-down silently no-ops grounding — warming it here makes the
 "grounded, not plausibly-wrong" guarantee real instead of best-effort.
 
-## Step 2 — Pick the documents root
+## Step 2 — Pick the documents root (default = the ONE shared instance)
 
-Ask the user where their documents live, or default to `~/wicked-interactive/docs`. This is
-THEIR workspace (one subdirectory per document), never the plugin directory.
+**Default to the canonical root `~/wicked-interactive/docs` — do NOT pick a per-session or
+`/tmp` root.** This is the whole point of sharing: every session that uses the same root reuses
+the *one* running bridge instead of spawning its own on another port. One instance, one URL, no
+"why is it on five ports" confusion. Only choose a different root if the user explicitly wants a
+**separate, isolated** instance (a distinct project that should not share docs).
 
 ```bash
 DOCS="${WI_DOCS:-$HOME/wicked-interactive/docs}"; mkdir -p "$DOCS"; echo "$DOCS"
 ```
+
+(`serve` with no `--root` now defaults to this same canonical root, so a bare
+`wicked-interactive serve --daemon` joins the shared instance too.)
 
 ## Step 3 — Start the service in the background
 

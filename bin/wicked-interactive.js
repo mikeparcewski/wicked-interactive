@@ -1,24 +1,29 @@
 #!/usr/bin/env node
 // wicked-interactive CLI — the one command a business user runs (INV-6).
 //
-//   wicked-interactive serve --root <docs-dir> [--port N] [--daemon]
+//   wicked-interactive serve [--root <docs-dir>] [--port N] [--daemon] [--restart]
 //       Multi-document mode (ADR-0015). Hosts every workspace under <docs-dir>; new docs are
 //       created from the UI. The control plane is wicked-bus (ADR-0019).
+//
+//   ONE SHARED INSTANCE by default (ADR-0022 amended). With no --root, every session uses the
+//   canonical root ~/wicked-interactive/docs — so `serve --daemon` from any session REUSES the one
+//   running bridge instead of spawning another on a different port (the "why is it on 5 ports"
+//   confusion). Pass --root only when you deliberately want a SEPARATE, isolated instance.
 //
 //   Ports, identity & the bridge (ADR-0022). The port is DYNAMIC (no --port → first free from
 //   4400 up; --port N is a preference that falls forward if taken). Each root records its live
 //   bridge in <root>/.wi-serve.json. Reuse is IDENTITY-aware: we hit the recorded port's
-//   /api/health and only reuse if it reports THIS root — if something else is there (or nothing),
-//   we start fresh on a new port. So distinct roots never collide and a stale lockfile never
-//   points you at the wrong instance.
+//   /api/health (retried while the recorded pid is alive, so a busy daemon is reused, not
+//   duplicated) and only reuse if it reports THIS root. Distinct roots never collide.
 //
-//   --daemon self-detaches: it spawns the server in the background (survives the launching
-//   shell/agent call — no nohup/disown needed), waits until the bridge answers, prints the URL,
-//   and exits 0. Run it again and it reuses the live bridge for the root.
+//   --daemon self-detaches: spawns the server in the background (survives the launching shell/agent
+//   call — no nohup/disown), waits until the bridge answers, prints the URL, exits 0. `--restart`
+//   stops an existing daemon for the root first (clean upgrade); plain re-run reuses the live one.
 
-import { readFileSync, openSync } from "node:fs";
+import { readFileSync, openSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { createMultiServer } from "../src/service/server.js";
 import {
@@ -60,9 +65,16 @@ function printBanner(prefix, root, base) {
 async function liveBridgeFor(root) {
   const lock = readLock(root);
   if (!lock) return null;
-  const id = await bridgeIdentity(lock.host, lock.port);
-  if (id && resolve(id) === root) return `http://localhost:${lock.port}`;
-  if (!id && !pidAlive(lock.pid)) removeLock(root); // stale — clean it
+  // If the recorded daemon process is ALIVE it may just be slow to answer (busy materializing,
+  // GC, a cold first hit) — retry the identity check before concluding it's unusable. This is the
+  // anti-"spawn a duplicate on a fallback port" guard: prefer REUSING the one shared instance.
+  const attempts = pidAlive(lock.pid) ? 3 : 1;
+  for (let i = 0; i < attempts; i++) {
+    const id = await bridgeIdentity(lock.host, lock.port, { timeoutMs: 1500 });
+    if (id && resolve(id) === root) return `http://localhost:${lock.port}`;
+    if (i < attempts - 1) await sleep(300);
+  }
+  if (!pidAlive(lock.pid)) removeLock(root); // truly gone — clean the stale lock
   return null;
 }
 
@@ -132,11 +144,15 @@ async function daemonize(root, requested, restart = false) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args._[0] !== "serve" || !args.root) {
-    console.error("usage: wicked-interactive serve --root <docs-dir> [--port N] [--daemon] [--restart]");
+  if (args._[0] !== "serve") {
+    console.error("usage: wicked-interactive serve [--root <docs-dir>] [--port N] [--daemon] [--restart]");
     process.exit(1);
   }
-  const root = resolve(args.root);
+  // ONE shared instance by default (ADR-0022 amended): every session converges on the canonical
+  // root ~/wicked-interactive/docs, so `serve --daemon` from any session REUSES the single running
+  // bridge instead of spawning another on a new port. Pass --root only for an isolated instance.
+  const root = args.root ? resolve(args.root) : resolve(homedir(), "wicked-interactive", "docs");
+  try { mkdirSync(root, { recursive: true }); } catch { /* unwritable — serve surfaces it */ }
   const requested = args.port ? Number(args.port) : null;
   const restart = !!args.restart;   // stop any existing daemon for this root before starting (clean upgrade)
 
