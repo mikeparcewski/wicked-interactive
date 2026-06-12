@@ -538,16 +538,15 @@ export default function App() {
           <div className="wi-rail__sep" />
           <RailSection title="Demos" newLabel="New demo" onNew={openNewDemo} items={demos} currentDoc={currentDoc} glyph="demo" newRef={newDemoRef} />
           <div className="wi-sidebar__spacer" />
-          <div className="wi-sidebar__foot">local-first · model-free · nothing uploads</div>
         </div>
       </aside>
 
       <div className="wi-main">
         <header className="wi-toolbar wi-toolbar--top">
           <div className="wi-toolbar__group">
-            <span className="wi-crumb wi-brandcrumb">
+            <span className={`wi-crumb wi-brandcrumb${(sideOpen || sideHover) ? " is-doconly" : ""}`}>
               <span className="wi-brandcrumb__brand"><b>wicked</b><i>agile</i></span>
-              {currentDoc && <span className="wi-brandcrumb__doc"> / <b>{currentDoc}</b></span>}
+              {currentDoc && <span className="wi-brandcrumb__doc"><span className="wi-brandcrumb__sep"> / </span><b>{currentDoc}</b></span>}
             </span>
           </div>
         <div className="wi-toolbar__group wi-toolbar__group--center">

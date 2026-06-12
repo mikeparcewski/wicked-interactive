@@ -763,7 +763,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 /* reveal labels when expanded (mirrors the legacy .wi-rail:hover) */
 .wi-sidebar.is-hovering .wi-rail__label, .wi-app--side-open .wi-rail__label { opacity: 1; transform: none; }
 .wi-sidebar.is-hovering .wi-rail__heading .wi-rail__label, .wi-app--side-open .wi-rail__heading .wi-rail__label { opacity: .7; }
-.wi-sidebar__brand { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 2px 0 5px; margin-bottom: 8px; white-space: nowrap; flex: 0 0 auto; }
+.wi-sidebar__brand { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 2px 8px 5px; margin-bottom: 16px; white-space: nowrap; flex: 0 0 auto; border-bottom: 1px solid var(--wi-chrome-line); }
 .wi-sidebar__word { font-family: var(--wi-font-display); font-weight: 800; font-size: 1rem; letter-spacing: -.01em; line-height: 1; opacity: 0; transition: opacity .16s var(--wi-ease); }
 .wi-sidebar__word b { color: var(--wi-chrome-ink); font-weight: 800; }
 .wi-sidebar__word i { font-style: normal; color: var(--wi-accent-bright); }
@@ -791,6 +791,9 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-brandcrumb__brand i { font-style: normal; font-weight: 800; color: var(--wi-accent-bright); }
 .wi-brandcrumb__doc { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--wi-chrome-ink-faint); }
 .wi-brandcrumb__doc b { color: var(--wi-chrome-ink-soft); font-weight: 600; }
+/* When the sidebar is expanded it already shows the wickedagile wordmark, so the top-nav logo is
+   redundant — hide the brand (+ its separator), keep just the document name. */
+.wi-brandcrumb.is-doconly .wi-brandcrumb__brand, .wi-brandcrumb.is-doconly .wi-brandcrumb__sep { display: none; }
 
 /* Canvas + the framed document (centered, wide, clears the composer) */
 .wi-canvas { flex: 1 1 auto; min-height: 0; }
