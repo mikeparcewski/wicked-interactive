@@ -99,6 +99,7 @@ live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and ac
 | `wicked.theme.learned`               | the service grabbed a URL to a PDF, OR the user pointed at a local PDF/image | read its design, synthesize + apply a theme (Step 8.5) |
 | `wicked.review.requested`            | user pressed "Review" with reviewers selected | run the named review passes, post verdicts (Step 8.6) |
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
+| `wicked.status.requested`            | UI heartbeat — you've been quiet while working | post a real `working` status now, naming the current step (Step 3d) |
 
 After you've handled the drained batch, **re-run the drain** (Step 11). The durable cursor has
 already advanced past what you drained, so the next drain returns only new events — including
@@ -180,6 +181,18 @@ browser, not just your terminal):
 wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","message":"Reworking that card…","version":5}'
 # …after the new version lands:
 wibus wicked.status.posted status '{"document_id":"<doc>","state":"complete","message":"Done — updated.","version":6}'
+```
+
+**Cadence — never go silent while you work.** A long step with no status reads as a frozen UI. Post a
+`working` status *before* every multi-second step (dispatching a crew, rendering, verifying, re-rendering
+a PDF, a long brain query) and at each checkpoint — not just at the end. Rule of thumb: if a stretch of
+work runs past ~20s with no status, post one. The browser also fires a **`wicked.status.requested`**
+heartbeat (~every 20s while the doc is in a working state); when you see one, reply immediately with a
+`working` status naming what you're doing **right now**. Make it real and specific — the app shows playful
+filler between your updates, so yours is the substance, not more filler:
+
+```bash
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"working","message":"Re-rendering the PDF to check the lane layout…"}'
 ```
 
 If you need a decision, ask with options (renders as buttons in the lock):
@@ -402,22 +415,37 @@ A `wicked.review.requested` event carries `reviewers: string[]` (any of `match`,
 and post each verdict back so it lands in the conversation thread. **Review only; do not edit** —
 the user decides what to act on (offer to apply fixes, don't apply unasked).
 
-For each selected reviewer, evaluate the head version's HTML and post a concise verdict as a chat
-message with `role: "review"` (the UI renders these as review lines):
+Reviews are **non-blocking and concurrent** in the UI: the user keeps editing while a review runs,
+and several reviewers can be in flight at once. The rail shows a per-reviewer spinner that clears
+when that reviewer's verdict lands. To keep this working, two rules:
+
+- **Tag review progress as a review** so the UI never veils/locks the canvas for it. On any
+  `wicked.status.posted` you emit *for a review*, set `review: true`:
+  `wibus wicked.status.posted status '{"document_id":"<doc>","state":"working","review":true,"message":"Running the a11y pass…"}'`.
+- **Close each reviewer out** with `wicked.review.completed` carrying its `reviewer` key — this is
+  what clears that reviewer's rail spinner:
+  `wibus wicked.review.completed review '{"document_id":"<doc>","ts":"<iso>","reviewer":"a11y","passed":true,"verdict":"✓ Contrast passes AA throughout."}'`.
+
+For each selected reviewer, evaluate the head version's HTML and post a concise verdict. Post it as
+a chat message with `role: "review"` (the UI renders these as review lines) AND/OR as
+`wicked.review.completed` (which also clears the rail spinner). Including the `reviewer` key on
+either lets the UI match the verdict to the right rail button:
 
 ```bash
-wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"review","text":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
+wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"review","reviewer":"match","text":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
+wibus wicked.review.completed review '{"document_id":"<doc>","ts":"<iso>","reviewer":"match","passed":true,"verdict":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
 ```
 
-| reviewer | what to check | how |
+| reviewer (UI name) | what to check | how |
 |----------|---------------|-----|
-| `match`  | does the output do what was asked? | re-read the brief / recent chat vs the head HTML; flag drift, missing asks |
+| `match` (**Intent**) | does the version still match the **original ask/intent**? | read the SAVED intent — the **first user entry in the doc's `conversation.jsonl`** (the service seeds the creation brief / first ask there) — and compare it to the head HTML; flag drift, dropped asks, scope creep. This is why intent is persisted: judge against what was actually asked, not vibes. |
 | `a11y`   | accessibility + contrast | run text/background pairs through WCAG-AA (`skills/assist/references/quality-checklist.md`); flag < 4.5:1, missing alt/landmarks, focus order |
 | `copy`   | copy & clarity | tighten wording, reading level, consistency; flag jargon, hedging, inconsistent terms |
-| `qe`     | full QE crew | for a heavier multi-perspective pass, assemble a wicked-garden crew (Step 7) — semantic + a11y + content reviewers — and synthesize their findings |
+| `qe` (**Quality**) | full quality crew | for a heavier multi-perspective pass, assemble a wicked-garden crew (Step 7) — semantic + a11y + content reviewers — and synthesize their findings |
 
 Lead each verdict with `✓` (pass) or `⚠` (issue + the specific fix). Keep each to a sentence or
-two. Narrate start/finish with `wicked.status.posted` (`state:"working"` → `complete`); a review
+two. Narrate start/finish with `wicked.status.posted` carrying `review:true` (`state:"working"` →
+`complete`) — the `review:true` flag keeps the canvas un-veiled so the user keeps editing. A review
 pass creates **no new version** unless the user then asks you to apply a fix.
 
 ## Step 9 — Index attached reference sources (ADR-0017)

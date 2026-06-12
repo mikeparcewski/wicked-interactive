@@ -419,6 +419,9 @@ export function createMultiServer({ root, frontendDir } = {}) {
       const dir = docDir(name);
       initWorkspace(dir, html);
       await mountDoc(name);
+      // Seed the original ask as the first conversation entry — the durable "intent" the Intent
+      // review (semantic-reviewer) checks the current version against. Best-effort.
+      if (brief) appendConversation(dir, { role: "user", text: brief });
       const docKind = fromSource ? "source" : (kind || "html");
       await emitEvent("wicked.doc.created",
         { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}) },

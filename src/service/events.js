@@ -35,6 +35,7 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
   "wicked.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE],uiEmittable: false },
+  "wicked.status.requested":    { subdomain: "status",     owners: [UI],            uiEmittable: true  },
   "wicked.source.attached":     { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
   "wicked.source.updated":      { subdomain: "sources",    owners: [AGENT],         uiEmittable: false },
   "wicked.demo.requested":      { subdomain: "demo",       owners: [UI, AGENT],     uiEmittable: true  },

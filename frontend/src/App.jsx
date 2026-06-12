@@ -4,13 +4,14 @@ import InlineComment from "./components/InlineComment.jsx";
 import VersionStrip from "./components/VersionStrip.jsx";
 import Composer from "./components/Composer.jsx";
 import Thread from "./components/Thread.jsx";
+import ToolRail, { REVIEW_LABEL } from "./components/ToolRail.jsx";
 import FsPicker from "./components/FsPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -29,10 +30,13 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(() => {       // sidebar: open on first session, then collapsed (hover-expands)
     try { return !localStorage.getItem("wi-side-seen"); } catch { return true; }
   });
+  const [sideHover, setSideHover] = useState(false);     // JS hover-expand — so an explicit collapse isn't instantly re-expanded by the lingering pointer
+  const sideSuppressRef = useRef(false);                 // set on collapse; blocks hover-expand until the pointer leaves + re-enters
   const [threadOpen, setThreadOpen] = useState(true);    // conversation panel (floats above the composer)
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
   const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
+  const [demoMode, setDemoMode] = useState(false);       // composer mode: false = Interactive, true = Demo recording (toggle lives in the top nav)
   const [showThemeUrl, setShowThemeUrl] = useState(false); // learn-a-theme-from-a-URL (ADR-0020)
   const [newDocError, setNewDocError] = useState(null);
   const [newDocBrief, setNewDocBrief] = useState("");    // seeded when the launch-state chat starts a doc
@@ -42,10 +46,11 @@ export default function App() {
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
   const [pickMode, setPickMode] = useState("sources");   // FsPicker routes results: "sources" | "theme"
-  const [reviewers, setReviewers] = useState({ match: false, a11y: false, copy: false, qe: false }); // review passes (ADR-0023)
+  const [reviewInFlight, setReviewInFlight] = useState({}); // per-reviewer in-flight: { match:true } — reviews run NON-BLOCKING + CONCURRENT, never veil the canvas
   const [agentBusy, setAgentBusy] = useState(false);     // agent console: the agent is actively working (ADR-0024)
   const [renderReady, setRenderReady] = useState(false); // a new version landed — console may close
   const [consoleEscape, setConsoleEscape] = useState(false); // safety: allow closing a hung console
+  const [realStatusAt, setRealStatusAt] = useState(0);   // bumps when a REAL agent status lands — resets the whimsy filler so it never talks over a fresh update
   // Theme: class-driven on <html> (the pre-paint script in index.html sets the initial
   // class from localStorage || prefers-color-scheme before first paint). This state just
   // mirrors it so the toggle button shows the right glyph and persists the user's choice.
@@ -90,8 +95,10 @@ export default function App() {
   // Refs so the SSE handlers (stable closures) read the live state.
   const busyRef = useRef(false);
   const renderReadyRef = useRef(false);
+  const reviewInFlightRef = useRef({});
   useEffect(() => { busyRef.current = agentBusy; }, [agentBusy]);
   useEffect(() => { renderReadyRef.current = renderReady; }, [renderReady]);
+  useEffect(() => { reviewInFlightRef.current = reviewInFlight; }, [reviewInFlight]);
   const consoleActive = agentBusy || renderReady || !!question;   // the thread takes over as the live surface
   const working = (agentBusy || !!question) && !renderReady && !consoleEscape; // blur + lock-open while truly busy
   // Safety valve: if the agent goes quiet, let the user close after 75s (no permanent lock).
@@ -241,7 +248,12 @@ export default function App() {
       }
     },
     "wicked.status.posted": (payload) => {
-      if (payload.message || payload.question) appendChat({ role: "agent", text: payload.question || payload.message });
+      // Review narration must NEVER veil/lock the canvas (reviews are non-blocking + concurrent —
+      // the user keeps editing). The agent tags review status with `review:true`; as a belt-and-
+      // braces fallback we also treat a "working" status as review-only when a review is in flight
+      // and no edit/question is active. A review status routes its message into the review thread.
+      const isReview = payload.review === true || payload.kind === "review";
+      if (payload.message || payload.question) { appendChat({ role: isReview ? "review" : "agent", text: payload.question || payload.message }); setRealStatusAt(Date.now()); }
       if (payload.state === "asking") {
         setQuestion({ text: payload.question, options: payload.options || [], requestId: payload.request_id });
         setProcMsg(payload.message || "A quick question");
@@ -251,15 +263,31 @@ export default function App() {
         setProcessing(true); setAgentBusy(true);
         if (payload.message) setProcMsg(payload.message);
       } else {
-        // "working" is a non-lock progress state (demo recording, source indexing) — still
-        // narrate it live in the console.
+        // "working" is a non-lock progress state (demo recording, source indexing, REVIEWS) —
+        // narrate it live, but a review-only spell must not trip the lock path.
         if (payload.message) setProcMsg(payload.message);
-        if (payload.state === "working") setAgentBusy(true);
+        if (payload.state === "working" && !isReview && !busyRef.current) setAgentBusy(true);
         if (payload.state === "complete") { setProcessing(false); setQuestion(null); if (!renderReadyRef.current) setAgentBusy(false); }
         if (payload.state === "error") { setProcessing(false); setAgentBusy(false); setStatus({ kind: "error", text: payload.message || "error" }); }
       }
     },
-    "wicked.chat.posted": (payload) => appendChat({ role: payload.role || "user", text: payload.text }),
+    "wicked.chat.posted": (payload) => {
+      appendChat({ role: payload.role || "user", text: payload.text });
+      // A review verdict can also arrive as a chat line (role:"review", SKILL Step 8.6). If it
+      // names its reviewer, clear that reviewer's in-flight indicator on the rail.
+      if (payload.role === "review" && payload.reviewer) {
+        setReviewInFlight((m) => ({ ...m, [payload.reviewer]: false }));
+      }
+    },
+    // Reviews are non-blocking + concurrent: a verdict streams straight into the Thread and clears
+    // ONLY that reviewer's rail spinner — it never touches the agentBusy/veil lock path.
+    "wicked.review.completed": (payload) => {
+      const text = payload.verdict || payload.message || (payload.reviewer ? `${payload.reviewer} review complete` : "Review complete");
+      appendChat({ role: "review", text });
+      setRealStatusAt(Date.now());
+      if (payload.reviewer) setReviewInFlight((m) => ({ ...m, [payload.reviewer]: false }));
+      else setReviewInFlight({});   // unspecified reviewer — clear all in-flight
+    },
     "wicked.source.attached": (payload) => {
       setSources((prev) => {
         const known = new Set(prev.map((s) => s.path));
@@ -413,16 +441,22 @@ export default function App() {
     }
   }
 
-  const toggleReviewer = (key) => setReviewers((r) => ({ ...r, [key]: !r[key] }));
-  async function runReview() {
-    const selected = Object.entries(reviewers).filter(([, v]) => v).map(([k]) => k);
-    if (!selected.length) { setStatus({ kind: "error", text: "Pick at least one reviewer in the + menu first." }); return; }
+  // Reviews are NON-BLOCKING + CONCURRENT (Change-2): a review NEVER calls kickoff() — it does not
+  // enter the locked/veiled working state, so the user keeps editing the document while it runs.
+  // We mark THAT reviewer in-flight (rail shows a spinner) and emit the request for it alone;
+  // multiple reviewers can be in flight at once. The verdict streams back into the Thread via
+  // wicked.review.completed / wicked.chat.posted(role:"review") and clears just that spinner.
+  async function startReview(key) {
+    if (!key || reviewInFlightRef.current[key]) return;   // already running this one
+    setReviewInFlight((m) => ({ ...m, [key]: true }));
+    setThreadOpen(true);   // surface the conversation so the verdict is visible — but no lock/veil
     try {
-      kickoff();
-      await emitReviewRequested(selected);
-      appendChat({ role: "event", text: `Review requested — ${selected.join(", ")}` });
+      await emitReviewRequested([key]);
+      const label = REVIEW_LABEL[key] || key;
+      appendChat({ role: "review", text: `Running the ${label} review…` });
     } catch (e) {
-      appendChat({ role: "event", text: `(couldn't request review: ${e.message})` });
+      setReviewInFlight((m) => ({ ...m, [key]: false }));
+      appendChat({ role: "event", text: `(couldn't start ${key} review: ${e.message})` });
     }
   }
 
@@ -432,6 +466,8 @@ export default function App() {
   const documents = docs.filter((d) => docKind(d) !== "demo");
   const currentIsDemo = currentDoc && demos.some((d) => (typeof d === "string" ? d : d.name) === currentDoc);
   useEffect(() => { isDemoRef.current = !!currentIsDemo; }, [currentIsDemo]);
+  // The Interactive/Demo toggle only applies to an open interactive doc — reset it otherwise.
+  useEffect(() => { if ((!currentDoc || currentIsDemo) && demoMode) setDemoMode(false); }, [currentDoc, currentIsDemo, demoMode]);
 
   // Anchor the launch hints to the real "New" buttons so the arrows point at the badges
   // regardless of how many docs/demos are listed (the demo button shifts as the list grows).
@@ -476,7 +512,11 @@ export default function App() {
 
   return (
     <div className={`wi-app${sideOpen ? " wi-app--side-open" : ""}`}>
-      <aside className="wi-sidebar">
+      <aside
+        className={`wi-sidebar${sideHover ? " is-hovering" : ""}`}
+        onMouseEnter={() => { if (!sideSuppressRef.current) setSideHover(true); }}
+        onMouseLeave={() => { sideSuppressRef.current = false; setSideHover(false); }}
+      >
         <div className="wi-sidebar__inner">
           <div className="wi-sidebar__brand">
             <span className="wi-logo__mark" aria-hidden="true">
@@ -485,7 +525,7 @@ export default function App() {
               </svg>
             </span>
             <span className="wi-sidebar__word"><b>wicked</b><i>agile</i><small>wicked-interactive</small></span>
-            <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => !o)}>{sideOpen ? "⇤" : "⇥"}</button>
+            <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => { const next = !o; if (!next) { sideSuppressRef.current = true; setSideHover(false); } return next; })}>{sideOpen ? "⇤" : "⇥"}</button>
           </div>
           <RailSection title="Documents" newLabel="New document" onNew={openNewDoc} items={documents} currentDoc={currentDoc} glyph="doc" newRef={newDocRef} />
           <div className="wi-rail__sep" />
@@ -510,6 +550,12 @@ export default function App() {
           )}
         </div>
         <div className="wi-toolbar__group">
+          {currentDoc && !currentIsDemo && (
+            <div className="wi-modeswitch wi-modeswitch--nav" role="group" aria-label="Composer mode">
+              <button type="button" className={`wi-modeswitch__opt${!demoMode ? " is-on" : ""}`} aria-pressed={!demoMode} onClick={() => setDemoMode(false)}>Interactive</button>
+              <button type="button" className={`wi-modeswitch__opt${demoMode ? " is-on" : ""}`} aria-pressed={demoMode} onClick={() => setDemoMode(true)}>● Demo recording</button>
+            </div>
+          )}
           {status && currentDoc && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
           {currentIsDemo && (
             <button className="wi-btn wi-btn--ghost" disabled={processing} onClick={recordDemoNow} title="Re-run the recorded walkthrough">
@@ -566,7 +612,7 @@ export default function App() {
             </span>
             <span className="wi-kicker">Live edit</span>
             <h2 className="wi-blank__title">Start something</h2>
-            <p className="wi-blank__hint">Describe what you want in the box below and I'll build it — or open a document from the sidebar. Use <b>+</b> to learn a style or attach your content.</p>
+            <p className="wi-blank__hint">Describe what you want in the box below and I'll build it — or open a document from the sidebar. Once a document's open, the right-edge tool-rail lets you learn a style or run a review.</p>
           </div>
         )}
         {currentDoc && (
@@ -588,6 +634,14 @@ export default function App() {
           </div>
         )}
         {working && <div className="wi-veil" aria-hidden="true" />}
+        {currentDoc && !currentIsDemo && !working && (
+          <ToolRail
+            onLearnWebsite={openThemeUrl}
+            onLearnFile={openLearnFile}
+            reviewInFlight={reviewInFlight}
+            onStartReview={startReview}
+          />
+        )}
       </main>
 
         <Thread
@@ -596,6 +650,9 @@ export default function App() {
           open={threadOpen}
           forceOpen={consoleActive}
           lockOpen={working}
+          working={working}
+          realStatusAt={realStatusAt}
+          onHeartbeat={() => { emitStatusRequested("ui-heartbeat").catch(() => {}); }}
           question={question}
           onAnswer={answerQuestion}
           renderReady={renderReady}
@@ -607,14 +664,10 @@ export default function App() {
           onSend={sendChat}
           busy={processing}
           logLen={chat.length}
+          demoMode={demoMode}
           sources={sources}
-          onLearnWebsite={!currentIsDemo && currentDoc ? openThemeUrl : undefined}
-          onLearnFile={!currentIsDemo && currentDoc ? openLearnFile : undefined}
           onAttach={openAttach}
           onRecordDemo={openNewDemo}
-          reviewers={!currentIsDemo && currentDoc ? reviewers : undefined}
-          onToggleReviewer={toggleReviewer}
-          onReviewNow={runReview}
         />
       </div>
 
