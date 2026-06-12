@@ -123,6 +123,12 @@ reuses the live one or starts a durable new one, every time, and prints the URL.
 root's bridge *without* starting anything, read `<DOCS>/.wi-serve.json` and confirm
 `http://localhost:<port>/api/health` reports `root` == your `$DOCS`.
 
+**After a reinstall/upgrade, add `--restart`:** `serve --root "$DOCS" --daemon --restart`. Reuse
+would otherwise keep serving the *old* running build; `--restart` stops the existing daemon for the
+root first (SIGTERM → SIGKILL if it's wedged → clears the lockfile), then starts the new version
+clean. One command, no manual `kill`. (Plain SIGTERM/SIGINT also always terminates the daemon now —
+it has a hard 2.5s shutdown cap so a held-open SSE connection can't wedge it.)
+
 ## Step 4 — Open the browser
 
 Open the printed base URL. If documents already exist, open `/?doc=<name>`; otherwise

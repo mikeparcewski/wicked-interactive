@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source removed from context — UI drops an attached reference",
+  "type": "object",
+  "required": [
+    "document_id",
+    "path"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

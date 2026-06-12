@@ -37,6 +37,26 @@ export function pidAlive(pid) {
   catch (e) { return e.code === "EPERM"; }
 }
 
+// Stop the daemon recorded in <root>'s lockfile so a restart/upgrade is clean (ADR-0022).
+// SIGTERM first (the daemon's handler closes + exits, with its own hard cap), poll until the pid
+// is gone, then escalate to SIGKILL if it's wedged (e.g. an old build whose graceful stop hangs
+// on open SSE). Always clears the lockfile. `kill`/`alive`/`sleep` are injectable for tests.
+// Returns { stopped, pid, forced } — stopped:false{reason:"not-running"} when nothing was up.
+export async function stopDaemon(root, { kill = process.kill, alive = pidAlive, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), graceMs = 3000, stepMs = 150 } = {}) {
+  const lock = readLock(root);
+  const pid = lock && lock.pid;
+  if (!pid || !alive(pid)) { removeLock(root); return { stopped: false, reason: "not-running" }; }
+  try { kill(pid, "SIGTERM"); } catch { /* already gone between read and signal */ }
+  for (let waited = 0; waited < graceMs; waited += stepMs) {
+    if (!alive(pid)) { removeLock(root); return { stopped: true, pid, forced: false }; }
+    await sleep(stepMs);
+  }
+  try { kill(pid, "SIGKILL"); } catch { /* gone */ }   // wedged — force it
+  await sleep(stepMs);
+  removeLock(root);
+  return { stopped: true, pid, forced: true };
+}
+
 // True iff `port` can be bound right now (probe binds + immediately releases it).
 export function isPortFree(port) {
   return new Promise((res) => {

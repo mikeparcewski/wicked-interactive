@@ -11,7 +11,7 @@ import NewDemoModal from "./components/NewDemoModal.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitSourceRemoved, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -134,6 +134,13 @@ export default function App() {
     } catch (e) {
       setStatus({ kind: "error", text: e.message });
     }
+  }
+
+  // Remove an attached source from context: drop it optimistically + persist via the bus (the
+  // service rewrites sources.json, so it stays gone on reload).
+  async function removeSource(path) {
+    setSources((prev) => prev.filter((s) => s.path !== path));
+    try { await emitSourceRemoved(path); } catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
   async function onCreateDoc(name, html, meta) {
@@ -666,6 +673,7 @@ export default function App() {
           logLen={chat.length}
           demoMode={demoMode}
           sources={sources}
+          onRemoveSource={removeSource}
           onAttach={openAttach}
           onRecordDemo={openNewDemo}
         />

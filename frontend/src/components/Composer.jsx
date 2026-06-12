@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 export default function Composer({
   onSend, busy, logLen = 0,
   demoMode = false,                                   // composer mode (the toggle now lives in the top nav)
-  sources = [],
+  sources = [], onRemoveSource,
   onAttach, onRecordDemo,
 }) {
   const [text, setText] = useState("");
@@ -37,15 +37,6 @@ export default function Composer({
   return (
     <div className="wi-composer-wrap">
       <div className="wi-composer">
-        {sources.length > 0 && (
-          <div className="wi-composer__chips">
-            {sources.map((s) => {
-              const name = s.path.split("/").filter(Boolean).pop() || s.path;
-              return <span key={s.path} className="wi-chip" title={s.path}>📎 {name}</span>;
-            })}
-          </div>
-        )}
-
         <form className={`wi-bar${demoMode ? " wi-bar--demo" : ""}`} onSubmit={send}>
           <textarea
             ref={taRef}
@@ -69,9 +60,24 @@ export default function Composer({
           </button>
         </form>
 
-        <p className="wi-composer__hint">
-          Click any block in the document to edit it, or just describe what you want.
-        </p>
+        {sources.length > 0 ? (
+          <div className="wi-composer__sources" aria-label="Attached context">
+            {sources.map((s) => {
+              const name = s.path.split("/").filter(Boolean).pop() || s.path;
+              return (
+                <span key={s.path} className="wi-srcchip" title={s.path}>
+                  <span className="wi-srcchip__name">📎 {name}</span>
+                  {onRemoveSource && (
+                    <button type="button" className="wi-srcchip__x" aria-label={`Remove ${name} from context`}
+                      title="Remove from context" onClick={() => onRemoveSource(s.path)}>×</button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="wi-composer__hint">Click any block in the document to edit it, or just describe what you want.</p>
+        )}
       </div>
     </div>
   );
