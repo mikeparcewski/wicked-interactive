@@ -8,6 +8,7 @@ const TYPES = [
   "wicked.feedback.processed",
   "wicked.status.posted",
   "wicked.chat.posted",
+  "wicked.review.completed",
   "wicked.source.attached",
   "wicked.source.updated",
   "wicked.error.raised",

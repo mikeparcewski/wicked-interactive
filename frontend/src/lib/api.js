@@ -45,6 +45,9 @@ export const emitThemeFromFile = (path) => postEvent("wicked.theme.requested", {
 // Run a review pass on the current version with the selected reviewers; the agent posts
 // verdicts back as wicked.chat.posted (role: "review").
 export const emitReviewRequested = (reviewers) => postEvent("wicked.review.requested", { reviewers });
+// Heartbeat while the agent is working: nudge it to post a real status update (the UI fires
+// this on a timer during the working state). The agent answers with wicked.status.posted.
+export const emitStatusRequested = (reason) => postEvent("wicked.status.requested", { ts: Date.now(), ...(reason ? { reason } : {}) });
 
 // --- State-plane reads (doc-prefixed) ---
 export async function getVersions() {

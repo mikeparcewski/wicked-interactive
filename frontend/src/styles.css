@@ -724,6 +724,12 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
   40% { transform: translateY(-3px); opacity: 1; }
 }
 
+/* Ephemeral "alive while working" filler — visually subordinate to real agent messages:
+   muted, italic, no bubble. Reads as decoration, not substance. */
+.wi-whimsy { display: inline-flex; align-items: center; gap: 8px; padding: 2px 2px; opacity: .7;
+  animation: wi-msg-in .18s var(--wi-ease) both; }
+.wi-whimsy__text { font-style: italic; color: var(--wi-ink-faint); font-size: var(--wi-text-sm); }
+
 /* Collapsed-strip pulse: surface "agent is working" when the chat panel is closed */
 .wi-chat__pulse { width: 14px; height: 14px; border-radius: 50%;
   background: var(--wi-accent); display: inline-block;
@@ -797,8 +803,11 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-blank__hint { margin: 0; max-width: 44ch; color: var(--wi-ink-faint); font-size: var(--wi-text-base); line-height: 1.5; }
 .wi-blank__hint b { color: var(--wi-ink-soft); }
 
-/* Conversation thread — floats above the composer; collapsible to a tab. */
-.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: 162px; width: min(820px, calc(100% - 64px)); z-index: 40;
+/* Conversation thread — floats above the composer; collapsible to a tab.
+   z-index 55 sits ABOVE the composer dock (z 50) so the conversation HISTORY overlays the
+   composer where they overlap (Change-3 fix: previously z 40 < composer 50, so the opaque
+   composer dock rendered in front of and clipped the thread). */
+.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: 162px; width: min(820px, calc(100% - 64px)); z-index: 55;
   display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: color-mix(in oklab, var(--wi-surface) 92%, transparent); backdrop-filter: blur(10px);
   border: 1px solid var(--wi-line); border-radius: 16px; box-shadow: 0 22px 60px -30px rgba(0,0,0,.45); }
@@ -806,14 +815,25 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-thread__head .wi-kicker { flex: 1 1 auto; }
 .wi-thread__close { border: 0; background: transparent; color: var(--wi-ink-faint); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: var(--wi-r-sm); }
 .wi-thread__close:hover { background: var(--wi-panel-2); color: var(--wi-ink); }
+/* Clear, discoverable collapse control (Change-1) — a labeled pill, not a lone glyph, shown only
+   when the agent is NOT mid-edit. One click collapses the panel to the tab, clearing the canvas. */
+.wi-thread__collapse { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; border: 1px solid var(--wi-line-2);
+  background: var(--wi-field); color: var(--wi-ink-soft); cursor: pointer; font-family: var(--wi-mono); font-size: .64rem;
+  letter-spacing: .12em; text-transform: uppercase; font-weight: 600; padding: 5px 11px 5px 9px; border-radius: 999px;
+  transition: background .14s var(--wi-ease), color .14s var(--wi-ease), border-color .14s var(--wi-ease); }
+.wi-thread__collapse:hover { background: var(--wi-accent-soft); color: var(--wi-accent-ink); border-color: color-mix(in oklab, var(--wi-accent) 50%, transparent); }
+.wi-thread__collapse svg { display: block; }
 .wi-thread__log { flex: 1 1 auto; overflow-y: auto; padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
-.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: 158px; z-index: 40;
+.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: 158px; z-index: 55;
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
   border: 1px solid var(--wi-line); background: var(--wi-surface); color: var(--wi-ink-soft); cursor: pointer; font: inherit;
   box-shadow: 0 8px 22px -14px rgba(0,0,0,.4); }
 .wi-thread-tab:hover { border-color: var(--wi-accent); color: var(--wi-ink); }
 .wi-thread-tab__n { background: var(--wi-accent); color: var(--wi-on-accent); border-radius: 999px; min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center; font-family: var(--wi-mono); font-size: 11px; font-weight: 700; }
-.wi-msg--review .wi-msg__text { background: transparent; border-radius: 0; border-left: 2px solid var(--wi-accent); padding: 0 0 0 11px; color: var(--wi-ink-soft); }
+/* Review verdicts read like an agent message (left-aligned filled bubble), just with a
+   "Review · <name>" byline — not a centered/different treatment. */
+.wi-msg--review { align-items: flex-start; }
+.wi-msg--review .wi-msg__text { background: var(--wi-panel-2); color: var(--wi-ink); border-radius: 14px; border-bottom-left-radius: 4px; padding: 9px 12px; }
 
 /* Composer dock — fixed bottom, framed by a top hairline (like the sidebar edge). */
 .wi-composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; justify-content: center;
@@ -824,10 +844,11 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-chip { font-family: var(--wi-mono); font-size: .7rem; letter-spacing: .02em; color: var(--wi-ink-soft); background: var(--wi-panel-2); border: 1px solid var(--wi-line); border-radius: 999px; padding: 5px 11px; display: inline-flex; align-items: center; gap: 7px; }
 .wi-chip--review { background: var(--wi-accent-soft); border-color: color-mix(in oklab, var(--wi-accent) 40%, transparent); color: var(--wi-accent-ink); }
 .wi-chip__dot { width: 6px; height: 6px; border-radius: 999px; background: var(--wi-accent-ink); }
-/* Mode switch — segmented control above the bar: Interactive (default) vs Demo recording.
+/* Mode switch — segmented control: Interactive (default) vs Demo recording. Lives in the top nav.
    Active segment takes the signal-yellow stamp, matching the other segmented controls. */
-.wi-modeswitch { display: inline-flex; gap: 0; margin: 0 6px 9px; padding: 3px; border-radius: 999px; background: var(--wi-panel-2); border: 1px solid var(--wi-line); width: fit-content; }
-.wi-modeswitch__opt { border: 0; background: transparent; cursor: pointer; font: inherit; font-family: var(--wi-mono); font-size: .68rem; letter-spacing: .04em; color: var(--wi-ink-soft); padding: 5px 13px; border-radius: 999px; transition: background .14s var(--wi-ease), color .14s var(--wi-ease); }
+.wi-modeswitch { display: inline-flex; gap: 0; margin: 0; padding: 3px; border-radius: 999px; background: var(--wi-panel-2); border: 1px solid var(--wi-line); width: fit-content; }
+.wi-modeswitch--nav { margin-right: 4px; }
+.wi-modeswitch__opt { border: 0; background: transparent; cursor: pointer; font: inherit; font-family: var(--wi-mono); font-size: .68rem; letter-spacing: .04em; color: var(--wi-ink-soft); padding: 4px 12px; border-radius: 999px; transition: background .14s var(--wi-ease), color .14s var(--wi-ease); }
 .wi-modeswitch__opt:hover { color: var(--wi-ink); }
 .wi-modeswitch__opt.is-on { background: var(--wi-accent); color: var(--wi-on-accent); font-weight: 700; box-shadow: var(--wi-sh-1); }
 .wi-modeswitch__opt:focus-visible { outline: 2px solid var(--wi-accent); outline-offset: 2px; }
@@ -849,29 +870,35 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-composer__hint { text-align: center; font-family: var(--wi-mono); font-size: .62rem; letter-spacing: .04em; color: var(--wi-ink-faint); margin: 9px 0 0; }
 .wi-composer__hint b { color: var(--wi-ink-soft); font-weight: 500; }
 
-/* The + menu (popover above the + button) */
-.wi-menu-backdrop { position: fixed; inset: 0; z-index: 45; }
-.wi-plusmenu { position: absolute; left: 0; bottom: 56px; width: 340px; z-index: 60; background: var(--wi-surface); border: 1px solid var(--wi-line-2); border-radius: 16px; box-shadow: 0 26px 64px -28px rgba(0,0,0,.5); padding: 8px; animation: wi-pop .16s var(--wi-ease); }
 @keyframes wi-pop { from { opacity: 0; transform: translateY(6px); } }
-.wi-plusmenu__sec { padding: 8px 6px 4px; }
-.wi-plusmenu__sec .wi-kicker { display: block; margin: 0 6px 6px; }
-.wi-plusmenu__item { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; background: transparent; color: var(--wi-ink); font: inherit; font-size: var(--wi-text-base); text-align: left; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
-.wi-plusmenu__item:hover { background: var(--wi-panel-2); }
-.wi-plusmenu__ic { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; background: var(--wi-panel-2); display: grid; place-items: center; }
-.wi-plusmenu__mt { display: flex; flex-direction: column; gap: 1px; }
-.wi-plusmenu__mt small { color: var(--wi-ink-faint); font-size: .72rem; }
-.wi-plusmenu__sep { height: 1px; background: var(--wi-line); margin: 6px 4px; }
-.wi-rev { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
-.wi-rev:hover { background: var(--wi-panel-2); }
-.wi-rev__box { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--wi-line-2); display: grid; place-items: center; color: var(--wi-on-accent); }
-.wi-rev.is-on .wi-rev__box { background: var(--wi-accent); border-color: var(--wi-accent); }
-.wi-rev__box svg { opacity: 0; }
-.wi-rev.is-on .wi-rev__box svg { opacity: 1; }
-.wi-rev__t { flex: 1 1 auto; font-size: var(--wi-text-base); }
-.wi-rev__t small { display: block; color: var(--wi-ink-faint); font-size: .72rem; }
-.wi-plusmenu__runrow { padding: 6px; }
-.wi-plusmenu__run { width: 100%; border: 0; border-radius: 10px; background: var(--wi-accent); color: var(--wi-on-accent); font: inherit; font-family: var(--wi-mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; padding: 10px; cursor: pointer; }
-.wi-plusmenu__run:hover { background: var(--wi-accent-h); }
+
+/* ---- Floating right-edge tool-rail (Change-2, Adobe-style) ---- */
+/* Docked to the right edge of the canvas pane. Icon buttons reveal their labels on hover/focus.
+   Holds learn-a-style (document-changing) + the four review passes (non-blocking + concurrent).
+   Sits above the document/overlay (z 14) but below the composer/thread; hidden while the veil is up. */
+/* Vertically centered within the band ABOVE the composer dock (which occupies ~130px at the
+   bottom of the canvas) — so the rail never tucks behind the composer at the bottom. */
+.wi-toolrail { position: absolute; top: calc((100% - 130px) / 2); right: 14px; transform: translateY(-50%); z-index: 14;
+  display: flex; flex-direction: column; gap: 11px; padding: 9px 8px;
+  max-height: calc(100% - 150px); overflow: visible;
+  background: color-mix(in oklab, var(--wi-surface) 94%, transparent); backdrop-filter: blur(10px);
+  border: 1px solid var(--wi-line); border-radius: 10px; box-shadow: var(--wi-sh-2);
+  /* opacity-only entrance — a transform here would clobber the translateY(-50%) centering. */
+  animation: wi-fade-in .25s var(--wi-ease) both; }
+@keyframes wi-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.wi-toolrail__group { display: flex; flex-direction: column; gap: 4px; }
+/* Distinct section header: bold uppercase mono caption with a hairline beneath it. */
+.wi-toolrail__cap { font-family: var(--wi-mono); font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--wi-ink-faint); text-align: center; padding: 0 0 5px; margin-bottom: 3px; border-bottom: 1px solid var(--wi-line); }
+/* Icon-only buttons — the label is a native tooltip (title) on hover. */
+.wi-toolrail__btn { position: relative; display: grid; place-items: center;
+  width: 38px; height: 38px; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent;
+  color: var(--wi-ink-soft); cursor: pointer; font: inherit; transition: background .14s var(--wi-ease), color .14s var(--wi-ease), border-color .14s var(--wi-ease); }
+.wi-toolrail__btn:hover { background: var(--wi-panel-2); color: var(--wi-ink); }
+.wi-toolrail__btn.is-busy { color: var(--wi-accent-ink); border-color: color-mix(in oklab, var(--wi-accent) 45%, transparent); background: var(--wi-accent-soft); }
+.wi-toolrail__btn svg { display: block; }
+.wi-toolrail__spin { width: 18px; height: 18px; margin: 0; }
+.wi-toolrail__btn:focus-visible { outline: 2px solid var(--wi-accent); outline-offset: 2px; }
 
 @media (max-width: 720px) {
   .wi-app, .wi-app--side-open { grid-template-columns: 0 1fr; }
