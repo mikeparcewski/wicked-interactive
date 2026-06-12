@@ -20,12 +20,46 @@ const WHIMSY = [
 const WHIMSY_MS = 4000;     // rotate the playful line every ~4s
 const HEARTBEAT_MS = 20000; // nudge the agent for a real status every 20s while working
 
-export default function Thread({ log, agentThinking, open, forceOpen, lockOpen, working, realStatusAt, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle }) {
+// --- Tiny, dependency-free markdown for agent-authored messages. Renders to React nodes (never
+//     dangerouslySetInnerHTML), so message text can't inject markup. Inline: **bold**, *italic*,
+//     `code`, [label](url). Block: "- "/"* " bullet lists, "1." ordered lists, blank-line para
+//     breaks. The .wi-md container overrides the bubble's pre-wrap so these blocks own spacing. ---
+function mdInline(text, kp) {
+  const out = [];
+  const re = /(`[^`]+`)|(\*\*[^*]+?\*\*)|(\*[^*]+?\*)|(\[[^\]]+\]\((https?:\/\/[^)\s]+)\))/g;
+  let last = 0, m, i = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const t = m[0];
+    if (t[0] === "`") out.push(<code key={`${kp}c${i}`}>{t.slice(1, -1)}</code>);
+    else if (t.startsWith("**")) out.push(<strong key={`${kp}b${i}`}>{t.slice(2, -2)}</strong>);
+    else if (t[0] === "*") out.push(<em key={`${kp}i${i}`}>{t.slice(1, -1)}</em>);
+    else { const rb = t.indexOf("]"); out.push(<a key={`${kp}a${i}`} href={m[5]} target="_blank" rel="noreferrer">{t.slice(1, rb)}</a>); }
+    last = re.lastIndex; i += 1;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function Markdown({ text }) {
+  const src = String(text == null ? "" : text).trim();
+  if (!src) return null;
+  return src.split(/\n{2,}/).map((block, bi) => {
+    const lines = block.split(/\n/).filter((l) => l.trim() !== "");
+    if (lines.length && lines.every((l) => /^\s*[-*]\s+/.test(l)))
+      return <ul key={bi} className="wi-md__ul">{lines.map((l, li) => <li key={li}>{mdInline(l.replace(/^\s*[-*]\s+/, ""), `${bi}.${li}.`)}</li>)}</ul>;
+    if (lines.length && lines.every((l) => /^\s*\d+\.\s+/.test(l)))
+      return <ol key={bi} className="wi-md__ol">{lines.map((l, li) => <li key={li}>{mdInline(l.replace(/^\s*\d+\.\s+/, ""), `${bi}.${li}.`)}</li>)}</ol>;
+    return <p key={bi} className="wi-md__p">{lines.map((l, li) => <span key={li}>{li > 0 && <br />}{mdInline(l, `${bi}.${li}.`)}</span>)}</p>;
+  });
+}
+
+export default function Thread({ log, open, forceOpen, lockOpen, working, realStatusAt, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle }) {
   const scrollRef = useRef(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [log, agentThinking, open, forceOpen, question]);
+  }, [log, working, open, forceOpen, question]);
 
   // ---- "Alive while working": rotating whimsy + a 20s heartbeat. Both run ONLY while truly
   // working; both intervals clear on working-end / unmount so nothing leaks. ----
@@ -45,7 +79,7 @@ export default function Thread({ log, agentThinking, open, forceOpen, lockOpen, 
   useEffect(() => { if (working && realStatusAt) setWhimsyIdx(0); }, [realStatusAt, working]);
 
   const count = log.length;
-  const hasContent = count > 0 || agentThinking || !!question || forceOpen;
+  const hasContent = count > 0 || working || !!question || forceOpen;
   if (!hasContent) return null;
 
   const isOpen = forceOpen || open;
@@ -94,23 +128,17 @@ export default function Thread({ log, agentThinking, open, forceOpen, lockOpen, 
       <div className="wi-thread__log" ref={scrollRef}>
         {log.map((m, i) => {
           if (m.role === "event") return <div key={i} className="wi-msg wi-msg--event"><span className="wi-msg__event">{m.text}</span></div>;
-          if (m.role === "review") return <div key={i} className="wi-msg wi-msg--review"><span className="wi-msg__who">Review</span><span className="wi-msg__text">{m.text}</span></div>;
+          if (m.role === "review") return <div key={i} className="wi-msg wi-msg--review"><span className="wi-msg__who">Review</span><div className="wi-msg__text wi-md"><Markdown text={m.text} /></div></div>;
+          const isUser = m.role === "user";
           return (
             <div key={i} className={`wi-msg wi-msg--${m.role}`}>
-              <span className="wi-msg__who">{m.role === "user" ? "You" : "Assistant"}</span>
-              <span className="wi-msg__text">{m.text}</span>
+              <span className="wi-msg__who">{isUser ? "You" : "Assistant"}</span>
+              {isUser
+                ? <span className="wi-msg__text">{m.text}</span>
+                : <div className="wi-msg__text wi-md"><Markdown text={m.text} /></div>}
             </div>
           );
         })}
-        {agentThinking && (
-          <div className="wi-msg wi-msg--agent wi-msg--thinking" aria-live="polite">
-            <span className="wi-msg__who">Assistant</span>
-            <span className="wi-msg__text">
-              <span className="wi-typing"><span></span><span></span><span></span></span>
-              <span className="wi-typing__label">working on it…</span>
-            </span>
-          </div>
-        )}
         {/* Ephemeral whimsy filler — muted/italic, aria-hidden so it never narrates to screen
             readers. The real wicked.status.posted messages above are the announced substance. */}
         {working && (

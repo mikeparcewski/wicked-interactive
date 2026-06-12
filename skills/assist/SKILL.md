@@ -97,7 +97,7 @@ live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and ac
 | `wicked.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
 | `wicked.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
 | `wicked.theme.learned`               | the service grabbed a URL to a PDF, OR the user pointed at a local PDF/image | read its design, synthesize + apply a theme (Step 8.5) |
-| `wicked.review.requested`            | user pressed "Review" with reviewers selected | run the named review passes, post verdicts (Step 8.6) |
+| `wicked.review.requested`            | user clicked a reviewer on the right-edge tool-rail | run the named review pass (non-blocking), post the verdict (Step 8.6) |
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
 | `wicked.status.requested`            | UI heartbeat — you've been quiet while working | post a real `working` status now, naming the current step (Step 3d) |
 
@@ -194,6 +194,20 @@ filler between your updates, so yours is the substance, not more filler:
 ```bash
 wibus wicked.status.posted status '{"document_id":"<doc>","state":"working","message":"Re-rendering the PDF to check the lane layout…"}'
 ```
+
+**Format — write messages that scan, not blobs.** The thread renders light **markdown**, so structure
+the `message` text of `wicked.status.posted` (and any `wicked.chat.posted` reply) instead of shipping a
+wall of prose:
+
+- Lead with one short line that says what changed or what's happening *now*.
+- Use `-` bullets when there's more than one point; **bold** the key term per line.
+- Use `` `code` `` for file/event/flag names; `[label](url)` for links.
+- Blank line between blocks; keep lines short. One scannable update beats a paragraph.
+
+Supported: `**bold**`, `*italic*`, `` `code` ``, `[label](url)`, `-`/`*` bullet lists, `1.` numbered
+lists, blank-line paragraph breaks. Anything else renders as plain text — don't lean on tables or
+headings. A status update is still one tight line; reserve the bulleted shape for substantive
+`chat.posted` replies (a summary of what you changed, options, next steps).
 
 If you need a decision, ask with options (renders as buttons in the lock):
 
@@ -402,7 +416,7 @@ The deterministic grab (service) → vision read (you) → token apply (theming 
 bus, reusing every existing seam. **There is nothing model-driven in the service half and nothing
 deterministic in the read half** — keep that line clean (ADR-0010).
 
-**Learn from a local PDF or image** (the + menu's "From a PDF or image"). The user pointed at a
+**Learn from a local PDF or image** (the tool-rail's **Style → from a PDF or image**). The user pointed at a
 file on their own machine; the service does **not** grab anything — it emits `wicked.theme.learned`
 with `render_path` = that file and `format: "pdf"|"image"`. Read it exactly as above (vision works
 on both PDFs and images), synthesize + quality-gate + apply the same way. Nothing uploads; you read
