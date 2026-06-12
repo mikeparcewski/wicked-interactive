@@ -5,13 +5,14 @@ import VersionStrip from "./components/VersionStrip.jsx";
 import Composer from "./components/Composer.jsx";
 import Thread from "./components/Thread.jsx";
 import ToolRail, { REVIEW_LABEL } from "./components/ToolRail.jsx";
+import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 import FsPicker from "./components/FsPicker.jsx";
 import NewDocModal from "./components/NewDocModal.jsx";
 import NewDemoModal from "./components/NewDemoModal.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitSourceRemoved, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitSourceRemoved, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested, getProjects } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -35,6 +36,8 @@ export default function App() {
   const [threadOpen, setThreadOpen] = useState(true);    // conversation panel (floats above the composer)
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
+  const [projects, setProjects] = useState([]);          // other running instances for the project switcher
+  const [projectRoot, setProjectRoot] = useState(null);  // this instance's docs root (shown when expanded)
   const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
   const [demoMode, setDemoMode] = useState(false);       // composer mode: false = Interactive, true = Demo recording (toggle lives in the top nav)
   const [showThemeUrl, setShowThemeUrl] = useState(false); // learn-a-theme-from-a-URL (ADR-0020)
@@ -124,6 +127,7 @@ export default function App() {
     getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
     listDocs().then(setDocs).catch(() => setDocs([]));
     getSources().then((r) => setSources(r.sources || [])).catch(() => setSources([]));
+    getProjects().then((r) => { setProjects(r.projects || []); setProjectRoot(r.root || null); }).catch(() => {});
   }, [refreshVersions, checkPreflight]);
 
   async function attachSources(paths, note) {
@@ -534,6 +538,7 @@ export default function App() {
             <span className="wi-sidebar__word"><b>wicked</b><i>agile</i><small>wicked-interactive</small></span>
             <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => { const next = !o; if (!next) { sideSuppressRef.current = true; setSideHover(false); } return next; })}>{sideOpen ? "⇤" : "⇥"}</button>
           </div>
+          <ProjectSwitcher projects={projects} currentRoot={projectRoot} expanded={sideOpen || sideHover} />
           <RailSection title="Documents" newLabel="New document" onNew={openNewDoc} items={documents} currentDoc={currentDoc} glyph="doc" newRef={newDocRef} />
           <div className="wi-rail__sep" />
           <RailSection title="Demos" newLabel="New demo" onNew={openNewDemo} items={demos} currentDoc={currentDoc} glyph="demo" newRef={newDemoRef} />
@@ -734,7 +739,7 @@ function ThemeToggle({ theme, onToggle }) {
 }
 
 const RAIL_GLYPHS = {
-  doc: <path d="M12 5v14M5 12h14" />,                                   // plus
+  doc: <><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>, // document
   demo: <path d="M8 5v14l11-7z" />,                                    // play triangle
 };
 

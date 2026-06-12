@@ -24,6 +24,8 @@ import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflight } from "./preflight.js";
+import { listInstances } from "./instances.mjs";
+import { pidAlive } from "./serve-bridge.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -357,6 +359,16 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // Identity probe (ADR-0022): says WHICH instance this is (the docs root it serves) so a
   // launching agent can tell "my bridge is already up" from "someone else is on this port".
   top.get("/api/health", (_req, res) => res.json({ ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null }));
+  // The running instances the UI's project switcher can jump between (ADR-0025 follow-up). Live
+  // pids only; the current root is flagged + sorted first. Each `serve` registers itself on start.
+  top.get("/api/projects", (_req, res) => {
+    const here = resolve(root);
+    const projects = listInstances({ isAlive: pidAlive })
+      .map((i) => ({ root: i.root, name: i.name, port: i.port, version: i.version,
+        url: `http://localhost:${i.port}/`, current: resolve(i.root) === here }))
+      .sort((a, b) => (a.current === b.current ? a.name.localeCompare(b.name) : a.current ? -1 : 1));
+    res.json({ root: here, projects });
+  });
   top.get("/api/preflight", (_req, res) => res.json(preflight()));
   top.get("/api/docs", (_req, res) => res.json(listDocs()));
 

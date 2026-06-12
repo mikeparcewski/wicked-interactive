@@ -69,6 +69,12 @@ export async function getSources() {
   return r.json();
 }
 
+// The running instances the project switcher offers (top-level route, not doc-scoped).
+export async function getProjects() {
+  try { const r = await fetch("/api/projects"); return r.ok ? r.json() : { root: null, projects: [] }; }
+  catch { return { root: null, projects: [] }; }
+}
+
 // Local path picker — lists a directory's entries so the user navigates instead of typing.
 export async function browseFs(path) {
   const r = await fetch(apiPath(`/api/fs${path ? `?path=${encodeURIComponent(path)}` : ""}`));
