@@ -9,7 +9,7 @@
     {
       "name": "wicked-interactive",
       "description": "Interactive HTML & presentation builder with an in-browser feedback loop. One command starts the service, opens the browser, and puts the running Claude session into the supervising-agent loop. Deterministic edits apply instantly; structural edits, drafts, and demos flow over wicked-bus events between the UI, the service, and the agent (data-wid preserving). Requires wicked-garden and wicked-brain.",
-      "version": "0.5.14",
+      "version": "0.5.15",
       "source": "./",
       "author": {
         "name": "Mike Parcewski",

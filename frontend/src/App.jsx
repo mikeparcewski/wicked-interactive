@@ -95,6 +95,14 @@ export default function App() {
   // conversation thread (blur behind, no collapse) until a new render is ready. ----
   const kickoff = () => { setAgentBusy(true); setRenderReady(false); setConsoleEscape(false); };
   const closeConsole = () => { setAgentBusy(false); setRenderReady(false); setConsoleEscape(false); setQuestion(null); setProcessing(false); };
+  // Clean finish for work that lands NO new version — a chat reply, a finished review, an agent
+  // "I'm done" status. Without this the working state would only ever clear on version.created, so
+  // version-less work left agentBusy stuck true: the 20s heartbeat fired forever and the 75s
+  // consoleEscape valve eventually flipped and vanished the surface. settle() drops the lock so
+  // `working` goes false → heartbeat stops → the thread relaxes to a normal collapsible
+  // conversation (messages retained). It does NOT touch renderReady (a version-ready surface owns
+  // its own close) and does NOT force the panel shut — the transcript stays exactly where it is.
+  const settle = () => { setAgentBusy(false); setQuestion(null); setProcessing(false); setConsoleEscape(false); };
   // Refs so the SSE handlers (stable closures) read the live state.
   const busyRef = useRef(false);
   const renderReadyRef = useRef(false);
@@ -278,7 +286,13 @@ export default function App() {
         // narrate it live, but a review-only spell must not trip the lock path.
         if (payload.message) setProcMsg(payload.message);
         if (payload.state === "working" && !isReview && !busyRef.current) setAgentBusy(true);
-        if (payload.state === "complete") { setProcessing(false); setQuestion(null); if (!renderReadyRef.current) setAgentBusy(false); }
+        // The agent posts a "complete" status when it finishes work that produced NO new version
+        // (a chat reply, a finished review). Treat it as a clean finish: settle() drops the lock so
+        // `working` goes false, the 20s heartbeat stops, and the thread relaxes to a normal
+        // collapsible conversation with its messages intact. A review's "complete" is non-blocking
+        // and never held the lock, so settle() is a harmless no-op there. Skip only when a new
+        // version is already staged (renderReady) — that surface owns its own close.
+        if (payload.state === "complete" && !renderReadyRef.current) settle();
         if (payload.state === "error") { setProcessing(false); setAgentBusy(false); setStatus({ kind: "error", text: payload.message || "error" }); }
       }
     },
@@ -412,13 +426,9 @@ export default function App() {
 
   const viewingIsHead = manifest && viewing === manifest.head;
 
-  // "Agent is working" indicator. The transcript is append-only and the SSE round-trip is
-  // sub-100ms, so deriving from the last entry beats juggling a separate timer: the moment
-  // the user's message lands, the indicator lights; the moment the agent posts ANYTHING
-  // (status or message), it clears. The processing lock already covers structural edits,
-  // so we suppress the chat indicator while it's up to avoid double feedback.
-  const lastEntry = chat[chat.length - 1];
-  const agentThinking = !processing && lastEntry?.role === "user";
+  // The "alive while working" signal in the Thread is now carried entirely by the rotating
+  // whimsy filler (gated on `working`) plus the real wicked.status.posted messages — no separate
+  // "working on it…" bubble, which used to double up with both of those.
 
   const openNewDoc = () => { setNewDocError(null); setNewDocBrief(""); setShowNewDoc(true); };
   const openNewDemo = () => { setNewDemoError(null); setShowNewDemo(true); };
@@ -657,7 +667,6 @@ export default function App() {
 
         <Thread
           log={chat}
-          agentThinking={agentThinking}
           open={threadOpen}
           forceOpen={consoleActive}
           lockOpen={working}
