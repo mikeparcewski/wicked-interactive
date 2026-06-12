@@ -758,23 +758,23 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
   border-right: 1px solid var(--wi-chrome-line);
   overflow: hidden; transition: width .2s var(--wi-ease), box-shadow .2s var(--wi-ease);
 }
-.wi-app--side-open .wi-sidebar__inner, .wi-sidebar:hover .wi-sidebar__inner { width: 268px; }
-.wi-sidebar:hover .wi-sidebar__inner { box-shadow: 22px 0 50px -28px var(--wi-rail-cast); }
+.wi-app--side-open .wi-sidebar__inner, .wi-sidebar.is-hovering .wi-sidebar__inner { width: 268px; }
+.wi-sidebar.is-hovering .wi-sidebar__inner { box-shadow: 22px 0 50px -28px var(--wi-rail-cast); }
 /* reveal labels when expanded (mirrors the legacy .wi-rail:hover) */
-.wi-sidebar:hover .wi-rail__label, .wi-app--side-open .wi-rail__label { opacity: 1; transform: none; }
-.wi-sidebar:hover .wi-rail__heading .wi-rail__label, .wi-app--side-open .wi-rail__heading .wi-rail__label { opacity: .7; }
+.wi-sidebar.is-hovering .wi-rail__label, .wi-app--side-open .wi-rail__label { opacity: 1; transform: none; }
+.wi-sidebar.is-hovering .wi-rail__heading .wi-rail__label, .wi-app--side-open .wi-rail__heading .wi-rail__label { opacity: .7; }
 .wi-sidebar__brand { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 2px 0 5px; margin-bottom: 8px; white-space: nowrap; flex: 0 0 auto; }
 .wi-sidebar__word { font-family: var(--wi-font-display); font-weight: 800; font-size: 1rem; letter-spacing: -.01em; line-height: 1; opacity: 0; transition: opacity .16s var(--wi-ease); }
 .wi-sidebar__word b { color: var(--wi-chrome-ink); font-weight: 800; }
 .wi-sidebar__word i { font-style: normal; color: var(--wi-accent-bright); }
 .wi-sidebar__word small { display: block; font-family: var(--wi-mono); font-weight: 500; font-size: .56rem; letter-spacing: .12em; color: var(--wi-chrome-ink-faint); margin-top: 3px; }
-.wi-app--side-open .wi-sidebar__word, .wi-sidebar:hover .wi-sidebar__word { opacity: 1; }
+.wi-app--side-open .wi-sidebar__word, .wi-sidebar.is-hovering .wi-sidebar__word { opacity: 1; }
 .wi-sidebar__pin { margin-left: auto; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--wi-chrome-line); background: transparent; color: var(--wi-chrome-ink-soft); cursor: pointer; opacity: 0; transition: opacity .16s var(--wi-ease), border-color .14s, color .14s; }
-.wi-app--side-open .wi-sidebar__pin, .wi-sidebar:hover .wi-sidebar__pin { opacity: 1; }
+.wi-app--side-open .wi-sidebar__pin, .wi-sidebar.is-hovering .wi-sidebar__pin { opacity: 1; }
 .wi-sidebar__pin:hover { border-color: var(--wi-accent); color: var(--wi-chrome-ink); }
 .wi-sidebar__spacer { flex: 1 1 auto; }
 .wi-sidebar__foot { opacity: 0; transition: opacity .16s var(--wi-ease); font-family: var(--wi-mono); font-size: .56rem; letter-spacing: .06em; color: var(--wi-chrome-ink-faint); padding: 8px; white-space: nowrap; flex: 0 0 auto; }
-.wi-app--side-open .wi-sidebar__foot, .wi-sidebar:hover .wi-sidebar__foot { opacity: 1; }
+.wi-app--side-open .wi-sidebar__foot, .wi-sidebar.is-hovering .wi-sidebar__foot { opacity: 1; }
 
 /* Main column */
 .wi-main { grid-column: 2; grid-row: 1; position: relative; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
@@ -807,7 +807,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
    z-index 55 sits ABOVE the composer dock (z 50) so the conversation HISTORY overlays the
    composer where they overlap (Change-3 fix: previously z 40 < composer 50, so the opaque
    composer dock rendered in front of and clipped the thread). */
-.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: 162px; width: min(820px, calc(100% - 64px)); z-index: 55;
+.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: 112px; width: min(820px, calc(100% - 64px)); z-index: 55;
   display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: color-mix(in oklab, var(--wi-surface) 92%, transparent); backdrop-filter: blur(10px);
   border: 1px solid var(--wi-line); border-radius: 16px; box-shadow: 0 22px 60px -30px rgba(0,0,0,.45); }
@@ -824,7 +824,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-thread__collapse:hover { background: var(--wi-accent-soft); color: var(--wi-accent-ink); border-color: color-mix(in oklab, var(--wi-accent) 50%, transparent); }
 .wi-thread__collapse svg { display: block; }
 .wi-thread__log { flex: 1 1 auto; overflow-y: auto; padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
-.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: 158px; z-index: 55;
+.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: 108px; z-index: 55;
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
   border: 1px solid var(--wi-line); background: var(--wi-surface); color: var(--wi-ink-soft); cursor: pointer; font: inherit;
   box-shadow: 0 8px 22px -14px rgba(0,0,0,.4); }
@@ -886,9 +886,9 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
   /* opacity-only entrance — a transform here would clobber the translateY(-50%) centering. */
   animation: wi-fade-in .25s var(--wi-ease) both; }
 @keyframes wi-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.wi-toolrail__group { display: flex; flex-direction: column; gap: 4px; }
-/* Distinct section header: bold uppercase mono caption with a hairline beneath it. */
-.wi-toolrail__cap { font-family: var(--wi-mono); font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+.wi-toolrail__group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* Distinct section header: bold uppercase mono caption with a hairline beneath it (full width). */
+.wi-toolrail__cap { align-self: stretch; font-family: var(--wi-mono); font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
   color: var(--wi-ink-faint); text-align: center; padding: 0 0 5px; margin-bottom: 3px; border-bottom: 1px solid var(--wi-line); }
 /* Icon-only buttons — the label is a native tooltip (title) on hover. */
 .wi-toolrail__btn { position: relative; display: grid; place-items: center;
@@ -899,10 +899,16 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-toolrail__btn svg { display: block; }
 .wi-toolrail__spin { width: 18px; height: 18px; margin: 0; }
 .wi-toolrail__btn:focus-visible { outline: 2px solid var(--wi-accent); outline-offset: 2px; }
+/* Descriptive tooltip — appears to the LEFT of the right-docked rail on hover/focus. */
+.wi-toolrail__btn::after { content: attr(data-tip); position: absolute; right: calc(100% + 9px); top: 50%; transform: translateY(-50%);
+  white-space: nowrap; background: var(--wi-ink); color: var(--wi-surface); font-family: var(--wi-mono); font-size: 11px; letter-spacing: .01em;
+  padding: 5px 9px; border-radius: 7px; box-shadow: var(--wi-sh-2); pointer-events: none; opacity: 0; transform: translateY(-50%) translateX(4px);
+  transition: opacity .12s var(--wi-ease), transform .12s var(--wi-ease); z-index: 30; }
+.wi-toolrail__btn:hover::after, .wi-toolrail__btn:focus-visible::after { opacity: 1; transform: translateY(-50%) translateX(0); }
 
 @media (max-width: 720px) {
   .wi-app, .wi-app--side-open { grid-template-columns: 0 1fr; }
-  .wi-sidebar:hover .wi-sidebar__inner, .wi-app--side-open .wi-sidebar__inner { width: 240px; }
+  .wi-sidebar.is-hovering .wi-sidebar__inner, .wi-app--side-open .wi-sidebar__inner { width: 240px; }
 }
 
 /* ---- Browser-chrome framed document (ADR-0024) ---- */

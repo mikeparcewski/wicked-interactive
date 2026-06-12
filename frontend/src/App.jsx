@@ -30,6 +30,8 @@ export default function App() {
   const [sideOpen, setSideOpen] = useState(() => {       // sidebar: open on first session, then collapsed (hover-expands)
     try { return !localStorage.getItem("wi-side-seen"); } catch { return true; }
   });
+  const [sideHover, setSideHover] = useState(false);     // JS hover-expand — so an explicit collapse isn't instantly re-expanded by the lingering pointer
+  const sideSuppressRef = useRef(false);                 // set on collapse; blocks hover-expand until the pointer leaves + re-enters
   const [threadOpen, setThreadOpen] = useState(true);    // conversation panel (floats above the composer)
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
   const [showNewDoc, setShowNewDoc] = useState(false);
@@ -510,7 +512,11 @@ export default function App() {
 
   return (
     <div className={`wi-app${sideOpen ? " wi-app--side-open" : ""}`}>
-      <aside className="wi-sidebar">
+      <aside
+        className={`wi-sidebar${sideHover ? " is-hovering" : ""}`}
+        onMouseEnter={() => { if (!sideSuppressRef.current) setSideHover(true); }}
+        onMouseLeave={() => { sideSuppressRef.current = false; setSideHover(false); }}
+      >
         <div className="wi-sidebar__inner">
           <div className="wi-sidebar__brand">
             <span className="wi-logo__mark" aria-hidden="true">
@@ -519,7 +525,7 @@ export default function App() {
               </svg>
             </span>
             <span className="wi-sidebar__word"><b>wicked</b><i>agile</i><small>wicked-interactive</small></span>
-            <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => !o)}>{sideOpen ? "⇤" : "⇥"}</button>
+            <button className="wi-sidebar__pin" title={sideOpen ? "Collapse sidebar" : "Keep sidebar open"} aria-label="Toggle sidebar" onClick={() => setSideOpen((o) => { const next = !o; if (!next) { sideSuppressRef.current = true; setSideHover(false); } return next; })}>{sideOpen ? "⇤" : "⇥"}</button>
           </div>
           <RailSection title="Documents" newLabel="New document" onNew={openNewDoc} items={documents} currentDoc={currentDoc} glyph="doc" newRef={newDocRef} />
           <div className="wi-rail__sep" />

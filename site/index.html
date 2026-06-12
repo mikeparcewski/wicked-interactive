@@ -505,6 +505,18 @@ body::after {
   font-family: var(--font-mono); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--on-accent); background: var(--accent); padding: 13px 22px; border-radius: 10px; cursor: pointer; border: none; text-decoration: none; }
 .closer .cta:hover { background: var(--accent-bright); }
+/* install box — the two Claude Code commands, copy-able, on the page itself */
+.install { margin: 30px auto 22px; max-width: 560px; text-align: left; border: 1px solid var(--hairline);
+  border-radius: 12px; background: var(--surface); overflow: hidden; }
+.install__bar { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 14px; border-bottom: 1px solid var(--hairline); }
+.install__label { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+.install__copy { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); background: transparent; border: 1px solid var(--hairline); border-radius: 7px; padding: 4px 11px; cursor: pointer; }
+.install__copy:hover { color: var(--ink); border-color: var(--accent); }
+.install__code { margin: 0; padding: 14px 16px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.95;
+  color: var(--ink); white-space: pre; overflow-x: auto; }
+.install__code .p { color: var(--accent-ink); font-weight: 700; }
 .footer { border-top: 1px solid var(--hairline); padding: 42px 0 52px; color: var(--muted); }
 .footer-grid { display: flex; flex-wrap: wrap; gap: 30px 72px; align-items: flex-start; justify-content: space-between; }
 .footer-tag { margin: 10px 0 0; max-width: 34ch; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; line-height: 1.7; color: var(--muted); }
@@ -752,7 +764,16 @@ body::after {
     <div class="kicker">That's the loop</div>
     <h2>One block changed. Everything else held.</h2>
     <p>That is the entire product: describe, watch it build, point and say the change, ship. The same headline you read as a prompt is the one that got re-set and stamped — proof by layout, not by claim.</p>
-    <a class="cta" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">Get started →</a>
+    <div class="install" role="group" aria-label="Install in Claude Code">
+      <div class="install__bar">
+        <span class="install__label">Install in Claude Code</span>
+        <button class="install__copy" type="button" aria-label="Copy install commands"
+          onclick="navigator.clipboard&&navigator.clipboard.writeText('/plugin marketplace add mikeparcewski/wicked-interactive\n/plugin install wicked-interactive').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
+      </div>
+      <pre class="install__code"><code><span class="p">/plugin</span> marketplace add mikeparcewski/wicked-interactive
+<span class="p">/plugin</span> install wicked-interactive</code></pre>
+    </div>
+    <a class="cta" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">View on GitHub →</a>
   </div>
 </section>
 

@@ -10,10 +10,10 @@
 // The four review passes. `short` is the (tooltip) name; `label`/`sub` describe the pass.
 //   • Intent (semantic-reviewer): does the current version still match the original ask/intent.
 export const REVIEWERS = [
-  { key: "match", label: "Matches your original ask", sub: "semantic-reviewer", short: "Intent" },
-  { key: "a11y", label: "Accessibility + contrast", sub: "WCAG-AA pass", short: "A11y" },
-  { key: "copy", label: "Copy & clarity", sub: "editorial pass", short: "Copy" },
-  { key: "qe", label: "Full quality crew", sub: "wicked-testing reviewers", short: "Quality" },
+  { key: "match", short: "Intent", do: "Check it still matches your original ask" },
+  { key: "a11y", short: "A11y", do: "Check accessibility & contrast (WCAG AA)" },
+  { key: "copy", short: "Copy", do: "Tighten the copy & clarity" },
+  { key: "qe", short: "Quality", do: "Run the full quality crew" },
 ];
 
 // reviewer key → human label, exported so App can name it in the thread.
@@ -26,12 +26,13 @@ const REVIEW_GLYPH = {
   qe: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4" />, // shield-check
 };
 
-function RailButton({ title, busy, on, onClick, children }) {
+function RailButton({ title, tip, busy, on, onClick, children }) {
   return (
     <button
       type="button"
       className={`wi-toolrail__btn${on ? " is-on" : ""}${busy ? " is-busy" : ""}`}
       title={title}
+      data-tip={tip || title}
       aria-label={title}
       aria-pressed={on || undefined}
       aria-busy={busy || undefined}
@@ -55,12 +56,12 @@ export default function ToolRail({ onLearnWebsite, onLearnFile, reviewInFlight =
         <div className="wi-toolrail__group" role="group" aria-label="Style">
           <span className="wi-toolrail__cap">Style</span>
           {onLearnWebsite && (
-            <RailButton title="Style — learn from a website" onClick={onLearnWebsite}>
+            <RailButton title="Style — learn from a website" tip="Match the look of a website" onClick={onLearnWebsite}>
               <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z" />
             </RailButton>
           )}
           {onLearnFile && (
-            <RailButton title="Style — learn from a PDF or image (stays on your machine)" onClick={onLearnFile}>
+            <RailButton title="Style — learn from a PDF or image (stays on your machine)" tip="Match the look of a PDF or image" onClick={onLearnFile}>
               <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.6" /><path d="M21 15l-5-5L5 21" />
             </RailButton>
           )}
@@ -73,7 +74,8 @@ export default function ToolRail({ onLearnWebsite, onLearnFile, reviewInFlight =
           {REVIEWERS.map((r) => (
             <RailButton
               key={r.key}
-              title={`${r.short} — ${r.label}${reviewInFlight[r.key] ? " (running…)" : " (click to run)"}`}
+              title={`${r.short} — ${r.do}`}
+              tip={`${r.do}${reviewInFlight[r.key] ? " — running…" : ""}`}
               busy={!!reviewInFlight[r.key]}
               onClick={() => onStartReview(r.key)}
             >
