@@ -24,7 +24,12 @@ export default function Composer({
   const [text, setText] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);   // false = Interactive (default), true = Demo recording
   const taRef = useRef(null);
+
+  // The demo toggle is only meaningful when the demo capability is wired (onRecordDemo present).
+  // If it disappears (e.g. navigating to a context without it), fall back to Interactive.
+  useEffect(() => { if (!onRecordDemo && demoMode) setDemoMode(false); }, [onRecordDemo, demoMode]);
 
   useEffect(() => {
     const ta = taRef.current;
@@ -36,6 +41,9 @@ export default function Composer({
 
   function send(e) {
     if (e) e.preventDefault();
+    // Demo-recording mode: the send action triggers the existing demo flow rather than a chat.
+    // It doesn't require composer text (the walkthrough is captured, not typed).
+    if (demoMode && onRecordDemo) { onRecordDemo(); return; }
     const t = text.trim();
     if (!t) return;
     setSending(true);
@@ -45,7 +53,7 @@ export default function Composer({
 
   const hasLearn = !!(onLearnWebsite || onLearnFile);
   const hasReviewers = !!(reviewers && onToggleReviewer);
-  const hasExtras = !!(onAttach || onRecordDemo);
+  const hasExtras = !!onAttach;
   const activeReviewers = reviewers ? REVIEWERS.filter((r) => reviewers[r.key]) : [];
 
   const pick = (fn) => () => { setMenuOpen(false); fn && fn(); };
@@ -68,7 +76,28 @@ export default function Composer({
           </div>
         )}
 
-        <form className="wi-bar" onSubmit={send}>
+        {onRecordDemo && (
+          <div className="wi-modeswitch" role="group" aria-label="Composer mode">
+            <button
+              type="button"
+              className={`wi-modeswitch__opt${!demoMode ? " is-on" : ""}`}
+              aria-pressed={!demoMode}
+              onClick={() => setDemoMode(false)}
+            >
+              Interactive
+            </button>
+            <button
+              type="button"
+              className={`wi-modeswitch__opt${demoMode ? " is-on" : ""}`}
+              aria-pressed={demoMode}
+              onClick={() => setDemoMode(true)}
+            >
+              ● Demo recording
+            </button>
+          </div>
+        )}
+
+        <form className={`wi-bar${demoMode ? " wi-bar--demo" : ""}`} onSubmit={send}>
           <button
             type="button"
             className={`wi-iconbtn wi-iconbtn--plus${menuOpen ? " is-open" : ""}`}
@@ -83,7 +112,9 @@ export default function Composer({
             ref={taRef}
             rows={1}
             value={text}
-            placeholder="Describe a change, or click a block in the document…"
+            placeholder={demoMode
+              ? "Demo recording — press send to capture a walkthrough of your app…"
+              : "Describe a change, or click a block in the document…"}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) send(e); }}
           />
@@ -94,7 +125,7 @@ export default function Composer({
             </button>
           )}
 
-          <button type="submit" className="wi-send" title="Send" disabled={!text.trim() || busy || sending}>
+          <button type="submit" className="wi-send" title={demoMode ? "Record a demo walkthrough" : "Send"} disabled={busy || sending || (!demoMode && !text.trim())}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11l5-5 5 5M12 6v13" /></svg>
           </button>
 
@@ -154,12 +185,6 @@ export default function Composer({
                       <button type="button" className="wi-plusmenu__item" onClick={pick(onAttach)}>
                         <span className="wi-plusmenu__ic">📁</span>
                         <span className="wi-plusmenu__mt">Attach files or data<small>Point at local files — read in place</small></span>
-                      </button>
-                    )}
-                    {onRecordDemo && (
-                      <button type="button" className="wi-plusmenu__item" onClick={pick(onRecordDemo)}>
-                        <span className="wi-plusmenu__ic">▶</span>
-                        <span className="wi-plusmenu__mt">Record a demo<small>Capture a walkthrough of your app</small></span>
                       </button>
                     )}
                   </div>

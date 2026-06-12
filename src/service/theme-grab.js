@@ -166,11 +166,89 @@ export async function resolveRedirectChain(url, { fetchImpl = fetch, maxHops = 5
 }
 
 /**
- * Default URL renderer: ASYNC headless Chrome `--print-to-pdf` over a live https URL. Uses `spawn`
- * (not spawnSync) so a multi-second render never blocks the Node event loop / SSE heartbeats.
- * When `pinnedIp` is given, the host is pinned to it via --host-resolver-rules so the address
- * Chrome connects to is exactly the one assertPublicUrl validated (anti-DNS-rebinding). A missing
- * Chrome degrades to the same clear "set WI_CHROME" error as PDF export.
+ * Playwright URL renderer (the default, ADR-0024): drive a real headless Chromium so JS-heavy /
+ * anti-bot pages (e.g. https://500designs.com) are fully PAINTED before we capture. Unlike the raw
+ * `chrome --print-to-pdf` path (chromeUrlRenderer), this:
+ *   - waits for `networkidle` and then a short settle delay so late-hydrating React/SPA content and
+ *     webfonts have a frame to lay out (the actual fix for "the grabbed PDF is half-rendered");
+ *   - retries transient navigation failures (anti-bot 403, flaky net) up to `maxRetries`;
+ *   - uses a realistic desktop viewport + UA so trivially-fingerprinted pages render normally.
+ *
+ * We use the `playwright` the service ALREADY ships (demo.js drives it the same way) — no extra
+ * dependency. crawlee was evaluated and rejected: it's a multi-page crawling framework (~40–75 MB,
+ * 14 sub-packages) and we'd use one class for one `page.pdf()` call; everything needed here is a
+ * `page.goto(networkidle)` + settle + retry on plain Playwright.
+ *
+ * The SSRF posture is UNCHANGED — grabUrlToPdf already walked + re-validated the whole redirect
+ * chain Node-side and passes us the FINAL url + its validated IP. We keep the anti-DNS-rebinding pin
+ * by mapping host→pinnedIp via Chromium's `--host-resolver-rules` launch arg (same mechanism
+ * chromeUrlRenderer used), and navigate to exactly finalUrl (no in-browser redirect following).
+ *
+ * playwright is loaded lazily (dynamic import) so the service still boots and the OTHER code paths
+ * run even if its browser binaries are absent; only an actual URL grab needs it, mirroring demo.js.
+ * @returns {Promise<{path:string}>}
+ */
+export async function playwrightUrlRenderer(url, pdfPath, opts = {}) {
+  const {
+    pinnedIp,
+    headless = true,
+    settleMs = 1500,              // extra paint time after networkidle for late-hydrating SPAs
+    navigationTimeoutMs = 45000,
+    maxRetries = 2,               // retry transient nav failures (anti-bot 403, flaky net)
+    importPlaywright = () => import("playwright"),
+  } = opts;
+
+  let chromium;
+  try {
+    ({ chromium } = await importPlaywright());
+  } catch {
+    throw new Error("Playwright is not installed — run `npx playwright install` (the install gate should have caught this)");
+  }
+
+  // Pin the validated IP into Chromium so the address it connects to is exactly the one the SSRF
+  // guard approved (anti-DNS-rebinding) — same `--host-resolver-rules` trick chromeUrlRenderer used.
+  const launchArgs = ["--disable-gpu", "--no-sandbox"];
+  if (pinnedIp) {
+    const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+    launchArgs.push(`--host-resolver-rules=MAP ${host} ${pinnedIp}`);
+  }
+
+  let lastErr = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    let browser = null;
+    try {
+      browser = await chromium.launch({ headless, args: launchArgs });
+      const ctx = await browser.newContext({
+        viewport: { width: 1280, height: 1600 },
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        locale: "en-US",
+      });
+      const page = await ctx.newPage();
+      // networkidle: wait until the page has actually fetched + run its bundle before we snapshot it.
+      await page.goto(url, { waitUntil: "networkidle", timeout: navigationTimeoutMs });
+      await page.waitForTimeout(settleMs);            // late hydration / webfonts get a frame to paint
+      await page.emulateMedia({ media: "screen" });   // capture the SCREEN design, not @media print
+      await page.pdf({ path: pdfPath, printBackground: true, preferCSSPageSize: false });
+      if (existsSync(pdfPath)) return { path: pdfPath };
+      lastErr = new Error("no PDF produced");
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+    } finally {
+      if (browser) await browser.close().catch(() => {});  // never leave a Chromium bound after a grab
+    }
+  }
+  throw new Error(`Playwright URL render failed: ${String(lastErr && lastErr.message ? lastErr.message : lastErr).slice(0, 300)}`);
+}
+
+/**
+ * Legacy/fallback URL renderer: ASYNC headless Chrome `--print-to-pdf` over a live https URL. Uses
+ * `spawn` (not spawnSync) so a multi-second render never blocks the Node event loop / SSE
+ * heartbeats. When `pinnedIp` is given, the host is pinned to it via --host-resolver-rules so the
+ * address Chrome connects to is exactly the one assertPublicUrl validated (anti-DNS-rebinding). A
+ * missing Chrome degrades to the same clear "set WI_CHROME" error as PDF export. Kept as an
+ * injectable fallback for environments without Playwright browsers; it does NOT wait for
+ * networkidle, so JS-heavy pages may capture under-rendered (the reason playwrightUrlRenderer is
+ * now the default).
  * @returns {Promise<{path:string}>}
  */
 export function chromeUrlRenderer(url, pdfPath, opts = {}) {
@@ -202,15 +280,21 @@ export function chromeUrlRenderer(url, pdfPath, opts = {}) {
 }
 
 /**
- * Grab a live URL to a PDF at `outPath`. SSRF-guards the URL BEFORE spawning anything: instead of
+ * Grab a live URL to a PDF at `outPath`. SSRF-guards the URL BEFORE rendering anything: instead of
  * validating only the initial URL, it walks the MAIN-document redirect chain Node-side
  * (resolveRedirectChain), re-validating EVERY hop, so a 302 to a private/metadata host can't smuggle
- * Chrome onto an internal target (issue #21). It then renders the FINAL url, pinned to the FINAL
- * host's validated IP. Async — awaits the render so it never blocks the loop. `renderer`, `validate`,
- * and `fetchImpl` are injectable for tests.
+ * the browser onto an internal target (issue #21). It then renders the FINAL url, pinned to the
+ * FINAL host's validated IP. Async — awaits the render so it never blocks the loop.
+ *
+ * The default `renderer` is now `playwrightUrlRenderer` (ADR-0024): plain Playwright (already shipped)
+ * drives a real Chromium and WAITS for networkidle + a settle delay so JS-heavy pages are fully
+ * painted before capture (the old raw `chrome --print-to-pdf` path didn't wait and produced
+ * half-rendered SPAs). `chromeUrlRenderer` remains exported as a no-browser-deps fallback. `renderer`,
+ * `validate`, and `fetchImpl` are injectable for tests (the suite injects a fake renderer, so no
+ * browser runs).
  * @returns {Promise<{path:string}>}
  */
-export async function grabUrlToPdf(url, outPath, { renderer = chromeUrlRenderer, chromePath, renderOpts = {}, validate = assertPublicUrl, fetchImpl = fetch } = {}) {
+export async function grabUrlToPdf(url, outPath, { renderer = playwrightUrlRenderer, chromePath, renderOpts = {}, validate = assertPublicUrl, fetchImpl = fetch } = {}) {
   const { finalUrl, pinnedIp } = await resolveRedirectChain(url, { fetchImpl, validate });
   await renderer(finalUrl, outPath, { chromePath, pinnedIp, ...renderOpts });
   return { path: outPath };

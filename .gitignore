@@ -24,3 +24,6 @@ frontend/.vite/
 # wicked-interactive serve lockfile (runtime, per docs-root) — ADR-0022
 .wi-serve.json
 .wi-serve.log
+
+# Playwright MCP scratch output
+.playwright-mcp/

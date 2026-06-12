@@ -498,9 +498,10 @@ export default function App() {
       <div className="wi-main">
         <header className="wi-toolbar wi-toolbar--top">
           <div className="wi-toolbar__group">
-            {currentDoc
-              ? <span className="wi-crumb"><b>{currentDoc}</b></span>
-              : <span className="wi-crumb wi-crumb--empty">No document open</span>}
+            <span className="wi-crumb wi-brandcrumb">
+              <span className="wi-brandcrumb__brand"><b>wicked</b><i>agile</i></span>
+              {currentDoc && <span className="wi-brandcrumb__doc"> / <b>{currentDoc}</b></span>}
+            </span>
           </div>
         <div className="wi-toolbar__group wi-toolbar__group--center">
           <VersionStrip manifest={manifest} viewing={viewing} onView={(v) => { setViewing(v); setSelected(null); }} />
