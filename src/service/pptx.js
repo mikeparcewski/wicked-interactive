@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { themesDir } from "./theme-source.js";
+import { downloadBase } from "./export.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILDER = join(HERE, "../../vendor/pptx/html_to_pptx.py");
@@ -49,7 +50,7 @@ export function exportPptx(dir, version, opts = {}) {
   }
   const exportsDir = join(dir, "exports");
   mkdirSync(exportsDir, { recursive: true });
-  const outPath = join(exportsDir, `export_v${version}.pptx`);
+  const outPath = join(exportsDir, `${downloadBase(dir, version)}.pptx`);
   const themeName = typeof opts.theme === "string" ? opts.theme : "corporate-light";
   const themeFile = join(themesDir(), `${themeName}.json`);
   const args = [BUILDER, htmlPath, outPath, ...(existsSync(themeFile) ? [themeFile] : [])];

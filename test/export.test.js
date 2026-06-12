@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from "node:fs";
+import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { inlineHtml, exportHtml, exportPdf, decorateForExport, isDeck, collectGradientClipSelectors } from "../src/service/export.js";
 import { initWorkspace } from "../src/service/workspace.js";
@@ -70,6 +70,18 @@ test("exportPdf builds the self-contained HTML and delegates to the renderer", a
     assert.match(readFileSync(path, "utf-8"), /^%PDF/);
     assert.ok(renderedHtmlPath && existsSync(renderedHtmlPath));
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("exports are named <doc-slug>_v<version>.<ext> (download name follows doc + version)", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wi-exp-"));
+  const dir = join(root, "my-deck");
+  mkdirSync(dir, { recursive: true });
+  try {
+    initWorkspace(dir, `<h1>Title</h1>`);
+    assert.equal(basename(exportHtml(dir, 0).path), "my-deck_v0.html");
+    const { path } = await exportPdf(dir, 0, undefined, { renderer: (h, p) => writeFileSync(p, "%PDF-1.4") });
+    assert.equal(basename(path), "my-deck_v0.pdf");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 // --- issue #12: print contract --------------------------------------------

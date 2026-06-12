@@ -6,7 +6,7 @@
 //       prezzie export pipeline used — ADR-0020).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, basename } from "node:path";
 import { spawn } from "node:child_process";
 import * as cheerio from "cheerio";
 import { readVersionHtml } from "./fsstore.js";
@@ -265,6 +265,15 @@ export function inlineHtml(html, { baseDir }) {
   return $.html();
 }
 
+/** Friendly download base — names exports after the doc + version: "<doc-slug>_v<version>"
+ *  (e.g. agent-harness_v17.pdf) instead of a generic export_v17.*. The doc slug is the doc
+ *  directory's basename (already slug-safe); we still sanitize defensively to the
+ *  Content-Disposition / download-route charset so the saved filename is always valid. */
+export function downloadBase(dir, version) {
+  const slug = (basename(dir) || "document").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "document";
+  return `${slug}_v${version}`;
+}
+
 function exportsDir(dir) {
   const out = join(dir, "exports");
   mkdirSync(out, { recursive: true });
@@ -277,7 +286,7 @@ export function exportHtml(dir, version, outPath) {
   // (issue #12). Decorating here fixes BOTH the HTML export and the PDF render,
   // since exportPdf renders this exact file.
   const html = decorateForExport(inlineHtml(readVersionHtml(dir, version), { baseDir: dir }));
-  const path = outPath || join(exportsDir(dir), `export_v${version}.html`);
+  const path = outPath || join(exportsDir(dir), `${downloadBase(dir, version)}.html`);
   writeFileSync(path, html);
   return { path, bytes: Buffer.byteLength(html) };
 }
@@ -342,7 +351,7 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
  */
 export async function exportPdf(dir, version, outPath, { renderer = chromeRenderer, chromePath, renderOpts = {} } = {}) {
   const { path: htmlPath } = exportHtml(dir, version, join(exportsDir(dir), `export_v${version}.pdf.html`));
-  const path = outPath || join(exportsDir(dir), `export_v${version}.pdf`);
+  const path = outPath || join(exportsDir(dir), `${downloadBase(dir, version)}.pdf`);
   await renderer(htmlPath, path, { chromePath, ...renderOpts });
   return { path };
 }
