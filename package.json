@@ -1,6 +1,6 @@
 {
   "name": "wicked-interactive",
-  "version": "0.5.13",
+  "version": "0.5.14",
   "description": "Interactive HTML & Presentation Builder with an in-browser feedback loop for business users.",
   "type": "module",
   "license": "MIT",

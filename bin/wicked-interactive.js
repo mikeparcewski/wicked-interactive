@@ -29,6 +29,7 @@ import { createMultiServer } from "../src/service/server.js";
 import {
   readLock, writeLock, removeLock, pidAlive, pickPort, bridgeIdentity, stopDaemon,
 } from "../src/service/serve-bridge.mjs";
+import { registerInstance, deregisterInstance } from "../src/service/instances.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -95,6 +96,7 @@ async function runServer(root, requested, restart = false) {
   }
   const base = `http://localhost:${actualPort}`;
   const wrote = writeLock(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, startedAt: new Date().toISOString(), version: pkgVersion() });
+  registerInstance(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, version: pkgVersion() }); // cross-instance registry (the UI project switcher)
   printBanner("wicked-interactive (multi-doc) serving", root, base);
   if (requested && requested !== actualPort) console.log(`  note:   port ${requested} was taken — using ${actualPort} instead`);
   if (!wrote) console.log(`  note:   could not write .wi-serve.json — other sessions won't auto-discover this bridge`);
@@ -102,7 +104,7 @@ async function runServer(root, requested, restart = false) {
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return; stopping = true;
-    removeLock(root);
+    removeLock(root); deregisterInstance(root);
     // Hard cap: SIGTERM/SIGINT must ALWAYS terminate the process, even if svc.stop() hangs
     // on a held-open SSE connection (the bug that left an old daemon wedged on the port).
     setTimeout(() => process.exit(0), 2500).unref?.();
@@ -111,7 +113,7 @@ async function runServer(root, requested, restart = false) {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-  process.on("exit", () => removeLock(root));
+  process.on("exit", () => { removeLock(root); deregisterInstance(root); });
 }
 
 // Parent of --daemon: reuse a live bridge, else spawn the server DETACHED, wait for it to answer,

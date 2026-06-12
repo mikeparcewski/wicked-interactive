@@ -776,6 +776,24 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-sidebar__foot { opacity: 0; transition: opacity .16s var(--wi-ease); font-family: var(--wi-mono); font-size: .56rem; letter-spacing: .06em; color: var(--wi-chrome-ink-faint); padding: 8px; white-space: nowrap; flex: 0 0 auto; }
 .wi-app--side-open .wi-sidebar__foot, .wi-sidebar.is-hovering .wi-sidebar__foot { opacity: 1; }
 
+/* Project switcher — top of the sidebar (above New document), with space below to separate it. */
+.wi-proj { position: relative; margin: 0 0 16px; flex: 0 0 auto; }
+.wi-proj__btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px; border: 1px solid var(--wi-chrome-line); border-radius: 10px; background: transparent; color: var(--wi-chrome-ink-soft); cursor: pointer; font: inherit; text-align: left; transition: background .14s var(--wi-ease), border-color .14s; }
+.wi-proj__btn:hover { background: var(--wi-chrome-wash); border-color: var(--wi-chrome-line-2); color: var(--wi-chrome-ink); }
+.wi-proj__glyph { flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--wi-chrome-3); color: var(--wi-chrome-ink); }
+.wi-proj__meta { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; opacity: 0; transition: opacity .16s var(--wi-ease); }
+.wi-app--side-open .wi-proj__meta, .wi-sidebar.is-hovering .wi-proj__meta { opacity: 1; }
+.wi-proj__name { font-family: var(--wi-font-display); font-weight: 700; font-size: .82rem; color: var(--wi-chrome-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wi-proj__root { font-family: var(--wi-mono); font-size: .55rem; letter-spacing: .01em; color: var(--wi-chrome-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.wi-proj__chev { flex: 0 0 auto; color: var(--wi-chrome-ink-faint); font-size: 12px; opacity: 0; transition: opacity .16s var(--wi-ease); }
+.wi-app--side-open .wi-proj__chev, .wi-sidebar.is-hovering .wi-proj__chev { opacity: 1; }
+.wi-proj__menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 50; background: var(--wi-surface); border: 1px solid var(--wi-line); border-radius: 10px; box-shadow: var(--wi-sh-2); padding: 5px; }
+.wi-proj__menu-cap { font-family: var(--wi-mono); font-size: .55rem; letter-spacing: .14em; text-transform: uppercase; color: var(--wi-ink-faint); padding: 4px 8px 5px; }
+.wi-proj__item { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; border-radius: 7px; text-decoration: none; color: var(--wi-ink-soft); }
+.wi-proj__item:hover { background: var(--wi-panel-2); color: var(--wi-ink); }
+.wi-proj__item-name { font-weight: 600; font-size: .8rem; }
+.wi-proj__item-root { font-family: var(--wi-mono); font-size: .55rem; color: var(--wi-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+
 /* Main column */
 .wi-main { grid-column: 2; grid-row: 1; position: relative; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
 .wi-toolbar--top { flex: 0 0 auto; min-height: 52px; }
