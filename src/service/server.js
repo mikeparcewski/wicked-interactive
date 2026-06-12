@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
-import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeThemeRequested } from "./handlers.js";
+import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
@@ -31,7 +31,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // status, question.answered — is handled by the bridge or another subscriber, not here).
 const COMMAND_TYPES = new Set([
   "wicked.feedback.submitted", "wicked.edit.completed", "wicked.draft.completed",
-  "wicked.demo.requested", "wicked.theme.requested", "wicked.source.attached", "wicked.source.updated",
+  "wicked.demo.requested", "wicked.theme.requested", "wicked.source.attached", "wicked.source.updated", "wicked.source.removed",
 ]);
 
 /**
@@ -214,6 +214,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       case "wicked.theme.requested":    return enqueue(() => materializeThemeRequested(dir, p, ctx));
       case "wicked.source.attached":    return enqueue(() => materializeSourceAttached(dir, p));
       case "wicked.source.updated":     return enqueue(() => materializeSourceUpdated(dir, p));
+      case "wicked.source.removed":     return enqueue(() => materializeSourceRemoved(dir, p));
       default: return Promise.resolve();
     }
   }

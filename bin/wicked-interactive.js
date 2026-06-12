@@ -22,7 +22,7 @@ import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMultiServer } from "../src/service/server.js";
 import {
-  readLock, writeLock, removeLock, pidAlive, pickPort, bridgeIdentity,
+  readLock, writeLock, removeLock, pidAlive, pickPort, bridgeIdentity, stopDaemon,
 } from "../src/service/serve-bridge.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -67,7 +67,8 @@ async function liveBridgeFor(root) {
 }
 
 // Run the actual server inline (foreground or the detached daemon child).
-async function runServer(root, requested) {
+async function runServer(root, requested, restart = false) {
+  if (restart) await stopDaemon(root);   // upgrade/restart: stop any existing daemon for this root first
   const reused = await liveBridgeFor(root);
   if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused); process.exit(0); }
 
@@ -87,7 +88,15 @@ async function runServer(root, requested) {
   if (!wrote) console.log(`  note:   could not write .wi-serve.json — other sessions won't auto-discover this bridge`);
 
   let stopping = false;
-  const shutdown = async () => { if (stopping) return; stopping = true; removeLock(root); try { await svc.stop(); } catch { /* best-effort */ } process.exit(0); };
+  const shutdown = async () => {
+    if (stopping) return; stopping = true;
+    removeLock(root);
+    // Hard cap: SIGTERM/SIGINT must ALWAYS terminate the process, even if svc.stop() hangs
+    // on a held-open SSE connection (the bug that left an old daemon wedged on the port).
+    setTimeout(() => process.exit(0), 2500).unref?.();
+    try { await svc.stop(); } catch { /* best-effort */ }
+    process.exit(0);
+  };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   process.on("exit", () => removeLock(root));
@@ -95,7 +104,8 @@ async function runServer(root, requested) {
 
 // Parent of --daemon: reuse a live bridge, else spawn the server DETACHED, wait for it to answer,
 // print the URL, and exit — so the bridge outlives this call without nohup/disown.
-async function daemonize(root, requested) {
+async function daemonize(root, requested, restart = false) {
+  if (restart) await stopDaemon(root);   // upgrade/restart: stop the old daemon, then spawn fresh (no reuse)
   const reused = await liveBridgeFor(root);
   if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused); return 0; }
 
@@ -123,17 +133,18 @@ async function daemonize(root, requested) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args._[0] !== "serve" || !args.root) {
-    console.error("usage: wicked-interactive serve --root <docs-dir> [--port N] [--daemon]");
+    console.error("usage: wicked-interactive serve --root <docs-dir> [--port N] [--daemon] [--restart]");
     process.exit(1);
   }
   const root = resolve(args.root);
   const requested = args.port ? Number(args.port) : null;
+  const restart = !!args.restart;   // stop any existing daemon for this root before starting (clean upgrade)
 
   // --daemon (and we're the parent, not the spawned child) → detach and return.
   if (args.daemon && !process.env.WI_DAEMON_CHILD) {
-    process.exit(await daemonize(root, requested));
+    process.exit(await daemonize(root, requested, restart));
   }
-  await runServer(root, requested);
+  await runServer(root, requested, restart);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

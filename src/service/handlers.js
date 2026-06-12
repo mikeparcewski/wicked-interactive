@@ -195,3 +195,11 @@ export function materializeSourceUpdated(dir, payload) {
   writeSources(dir, sources);
   return { sources };
 }
+
+/** UI removed a source from context → drop it from sources.json by path (persists the removal). */
+export function materializeSourceRemoved(dir, payload) {
+  const target = resolve(String(payload.path || "").trim());
+  const sources = readSources(dir).filter((s) => s.path !== target);
+  writeSources(dir, sources);
+  return { sources };
+}

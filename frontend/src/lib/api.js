@@ -36,6 +36,7 @@ export const emitFeedback = (items, author) => postEvent("wicked.feedback.submit
 export const emitChat = (text, role = "user") => postEvent("wicked.chat.posted", { role, text });
 export const emitAnswer = (requestId, answer) => postEvent("wicked.question.answered", { request_id: requestId, answer });
 export const emitSourceAttached = (added) => postEvent("wicked.source.attached", { added });
+export const emitSourceRemoved = (path) => postEvent("wicked.source.removed", { path });
 export const emitDemoRecord = () => postEvent("wicked.demo.requested", {});
 // Learn a theme from a live URL: the service grabs it to a PDF, the agent reads the design and
 // re-themes the current doc. document_id is stamped by postEvent.

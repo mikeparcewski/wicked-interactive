@@ -10,7 +10,7 @@ import { createServer as httpServer } from "node:http";
 
 import {
   LOCK_NAME, lockPath, readLock, writeLock, removeLock,
-  pidAlive, isPortFree, pickPort, bridgeHealthy, bridgeIdentity,
+  pidAlive, isPortFree, pickPort, bridgeHealthy, bridgeIdentity, stopDaemon,
 } from "../src/service/serve-bridge.mjs";
 
 function tmpRoot() {
@@ -122,4 +122,43 @@ test("bridgeIdentity returns the root /api/health reports (identity-aware reuse,
 
   const free = await pickPort(null);
   assert.equal(await bridgeIdentity("127.0.0.1", free, { timeoutMs: 1500 }), null, "nothing listening → null");
+});
+
+const noSleep = () => Promise.resolve();
+
+test("stopDaemon: no lock / dead pid → not-running, lock cleared (ADR-0022 restart)", async () => {
+  const root = tmpRoot();
+  try {
+    assert.deepEqual(await stopDaemon(root, { alive: () => false, sleep: noSleep }), { stopped: false, reason: "not-running" });
+    // a lockfile pointing at a dead pid is also "not-running" (and gets cleaned)
+    writeLock(root, { pid: 999999, port: 4400 });
+    assert.deepEqual(await stopDaemon(root, { alive: () => false, sleep: noSleep }), { stopped: false, reason: "not-running" });
+    assert.equal(readLock(root), null, "stale lock removed");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("stopDaemon: SIGTERM is enough → graceful stop, no SIGKILL", async () => {
+  const root = tmpRoot();
+  try {
+    writeLock(root, { pid: 4242, port: 4400 });
+    const sigs = []; let down = false;
+    const kill = (_pid, sig) => { sigs.push(sig); if (sig === "SIGTERM") down = true; };
+    const res = await stopDaemon(root, { kill, alive: () => !down, sleep: noSleep });
+    assert.deepEqual(res, { stopped: true, pid: 4242, forced: false });
+    assert.deepEqual(sigs, ["SIGTERM"], "only SIGTERM — it died, no force needed");
+    assert.equal(readLock(root), null, "lock removed after stop");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("stopDaemon: a wedged daemon that ignores SIGTERM is escalated to SIGKILL", async () => {
+  const root = tmpRoot();
+  try {
+    writeLock(root, { pid: 4243, port: 4400 });
+    const sigs = [];
+    const kill = (_pid, sig) => { sigs.push(sig); };   // never dies — simulates the hung-old-build bug
+    const res = await stopDaemon(root, { kill, alive: () => true, sleep: noSleep, graceMs: 300, stepMs: 100 });
+    assert.deepEqual(res, { stopped: true, pid: 4243, forced: true });
+    assert.deepEqual(sigs, ["SIGTERM", "SIGKILL"], "SIGTERM first, then SIGKILL when it wouldn't die");
+    assert.equal(readLock(root), null, "lock removed even after a forced kill");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
