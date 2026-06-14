@@ -267,17 +267,21 @@ wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","
 
 - If `source_paths` is non-empty, read every entry (each a file or a folder, expand `~`).
 - If `source_paths` is empty, generate from the `brief` alone — that IS the spec.
-- **Honor the `style` field**:
+- **Honor the `style` field** — before generating, read the format-specific craft reference at
+  `skills/assist/references/formats/<style>.md` for layout rules, typography constraints,
+  animation policy, and the format's quality gate. The one-liners below are reminders only;
+  the reference file is authoritative:
   - `web` → rich scrollable HTML with animations, interactivity, and vivid layout
   - `ppt` → fixed landscape slide layout, no animations, export-safe for PPTX
-  - `brochure` → portrait multi-page PDF, stylized pages, print-ready
+  - `brochure` → **landscape** multi-page PDF, stylized pages, print-ready
   - `doc` → minimal formatting, readable prose, content-first (like a Word doc)
 - **Ground it in knowledge** — consult/ingest **wicked-brain** so the draft uses the user's real
   numbers and prior decisions (Step 6). Don't invent figures the source doesn't support.
 - **Generate the document** — work the craft references under `skills/assist/references/` as a
-  pipeline: structure (outline-method) → narrative (story-arc) → visual design (design-principles)
-  → export-safe HTML (html-craft). For a multi-discipline brief, route through a **wicked-garden
-  crew** (Step 7) so design + copy + structure are reasoned about together.
+  pipeline: format rules (formats/<style>.md) → structure (outline-method) → narrative
+  (story-arc) → visual design (design-principles) → export-safe HTML (html-craft). For a
+  multi-discipline brief, route through a **wicked-garden crew** (Step 7) so design + copy +
+  structure are reasoned about together.
 - **Self-check before you emit** — run the draft past `skills/assist/references/quality-checklist.md`
   (narrative, content, visual, export-safety). Fix structure and content before surface; keep it
   proportional.
