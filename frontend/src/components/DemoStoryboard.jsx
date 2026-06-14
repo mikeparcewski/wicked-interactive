@@ -1,10 +1,18 @@
 // DemoStoryboard.jsx — video-player view for demo docs.
 //
 // Layout (3-zone):
-//   LEFT:   vertical chapter list (click to seek) + "Add scene" button
-//   RIGHT:  flex column — full-width video (top) + real-screenshot filmstrip (bottom)
+//   LEFT:   scene rail — Add scene / Record buttons + thumbnail chapter list
+//   RIGHT:  full-width video player
+//
+// Scene rail actions:
+//   Add a scene  → AddSceneModal → emitChat + open thread
+//   Edit (✏)     → EditSceneModal → emitChat + dirty
+//   Remove (✕)   → remove from local list + emitChat + dirty
+//   Record (●)   → emitDemoRecord; red when dirty (changes pending re-run)
 import { useEffect, useRef, useState } from "react";
+import { emitChat, emitDemoRecord } from "../lib/api.js";
 import AddSceneModal from "./AddSceneModal.jsx";
+import EditSceneModal from "./EditSceneModal.jsx";
 
 export default function DemoStoryboard({
   currentDoc,
@@ -13,16 +21,19 @@ export default function DemoStoryboard({
   videoSrc,
   posterSrc,
   processing,
-  onRecord,
-  onAddScene,
+  onOpenThread,
 }) {
   const [chapters, setChapters] = useState([]);
   const [activeIdx, setActiveIdx] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [showAddScene, setShowAddScene] = useState(false);
+  const [editScene, setEditScene] = useState(null);   // { index, title, id }
   const videoRef = useRef(null);
 
-  useEffect(() => { setPlaying(false); setActiveIdx(null); }, [videoSrc]);
+  // Reset on new recording
+  useEffect(() => { setPlaying(false); setActiveIdx(null); setDirty(false); setRecording(false); }, [videoSrc]);
 
   function handlePlayBtn() {
     videoRef.current?.play();
@@ -53,9 +64,37 @@ export default function DemoStoryboard({
     return () => { cancelled = true; };
   }, [storyboardUrl, currentDoc]);
 
-  function handleAddScene(req) {
+  async function handleAddScene({ description, mode }) {
     setShowAddScene(false);
-    onAddScene?.(req);
+    const modeLabel = mode === "rerecord" ? "re-record from the beginning" : "add it as a new scene";
+    await emitChat(`Add a scene: ${description}\n\nMode: ${modeLabel}`).catch(() => {});
+    setDirty(true);
+    onOpenThread?.();
+  }
+
+  async function handleEditScene({ scene, description }) {
+    setEditScene(null);
+    setChapters((prev) =>
+      prev.map((ch, i) => i === scene.index ? { ...ch, title: scene.title } : ch)
+    );
+    await emitChat(`Edit scene ${scene.index + 1} "${scene.title}": ${description}`).catch(() => {});
+    setDirty(true);
+    onOpenThread?.();
+  }
+
+  function handleRemoveScene(ch, i, e) {
+    e.stopPropagation();
+    setChapters((prev) => prev.filter((_, idx) => idx !== i));
+    if (activeIdx === i) setActiveIdx(null);
+    else if (activeIdx > i) setActiveIdx((a) => a - 1);
+    emitChat(`Remove scene ${i + 1} "${ch.title}" from the demo`).catch(() => {});
+    setDirty(true);
+    onOpenThread?.();
+  }
+
+  async function handleRecord() {
+    setRecording(true);
+    await emitDemoRecord().catch(() => {});
   }
 
   const hasVideo = !!videoSrc;
@@ -67,45 +106,75 @@ export default function DemoStoryboard({
         onSubmit={handleAddScene}
         onCancel={() => setShowAddScene(false)}
       />
+      <EditSceneModal
+        open={!!editScene}
+        scene={editScene}
+        onSubmit={handleEditScene}
+        onCancel={() => setEditScene(null)}
+      />
 
-      {/* Left: chapter list */}
+      {/* Left: scene rail */}
       <aside className="wi-sb-chapters">
         <div className="wi-sb-chapters__head">
           <span className="wi-kicker">Scenes</span>
-          <button className="wi-sb-add-scene" onClick={() => setShowAddScene(true)}>
-            <i className="wi-sb-add-scene__icon">+</i>
-            Add a scene
-          </button>
+          <div className="wi-sb-rail-actions">
+            <button className="wi-sb-add-scene" onClick={() => setShowAddScene(true)}>
+              <i className="wi-sb-add-scene__icon">+</i>
+              Add a scene
+            </button>
+            <button
+              className={`wi-sb-record${dirty ? " wi-sb-record--dirty" : ""}`}
+              onClick={handleRecord}
+              disabled={recording && !dirty}
+              title={dirty ? "Changes pending — re-record to apply" : "Re-record the walkthrough"}
+            >
+              <i className="wi-sb-record__dot" aria-hidden="true">●</i>
+              {dirty ? "Re-record" : "Record"}
+            </button>
+          </div>
         </div>
         <div className="wi-sb-chapters__list">
           {chapters.length === 0 && (
-            <p className="wi-sb-chapters__empty">Record to generate scenes.</p>
+            <p className="wi-sb-chapters__empty">
+              {hasVideo ? "No scenes found." : "Record to generate scenes."}
+            </p>
           )}
           {chapters.map((ch, i) => (
-            <button
-              key={ch.id}
-              className={`wi-sb-chitem${activeIdx === i ? " is-active" : ""}`}
-              onClick={() => seekTo(ch, i)}
-            >
-              <div className="wi-sb-chitem__thumb">
-                {ch.thumb
-                  ? <img src={ch.thumb} alt="" className="wi-sb-chitem__img" />
-                  : <SceneThumb index={i} />
-                }
-                {ch.badge && <span className="wi-sb-chitem__badge">{ch.badge}</span>}
+            <div key={ch.id} className={`wi-sb-chitem${activeIdx === i ? " is-active" : ""}`}>
+              <button className="wi-sb-chitem__seek" onClick={() => seekTo(ch, i)} aria-label={`Go to ${ch.title}`}>
+                <div className="wi-sb-chitem__thumb">
+                  {ch.thumb
+                    ? <img src={ch.thumb} alt="" className="wi-sb-chitem__img" />
+                    : <SceneThumb index={i} />
+                  }
+                  {ch.badge && <span className="wi-sb-chitem__badge">{ch.badge}</span>}
+                </div>
+                <div className="wi-sb-chitem__info">
+                  <span className="wi-sb-chitem__n">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="wi-sb-chitem__title">{ch.title || `Scene ${i + 1}`}</span>
+                </div>
+              </button>
+              <div className="wi-sb-chitem__actions">
+                <button
+                  className="wi-sb-chitem__actbtn"
+                  onClick={(e) => { e.stopPropagation(); setEditScene({ index: i, title: ch.title, id: ch.id }); }}
+                  title="Edit scene"
+                  aria-label="Edit scene"
+                >✏</button>
+                <button
+                  className="wi-sb-chitem__actbtn wi-sb-chitem__actbtn--remove"
+                  onClick={(e) => handleRemoveScene(ch, i, e)}
+                  title="Remove scene"
+                  aria-label="Remove scene"
+                >✕</button>
               </div>
-              <div className="wi-sb-chitem__info">
-                <span className="wi-sb-chitem__n">{String(i + 1).padStart(2, "0")}</span>
-                <span className="wi-sb-chitem__title">{ch.title || `Scene ${i + 1}`}</span>
-              </div>
-            </button>
+            </div>
           ))}
         </div>
       </aside>
 
-      {/* Right: video + filmstrip */}
+      {/* Right: video */}
       <div className="wi-sb-right">
-        {/* Video */}
         <div className="wi-sb-main">
           {hasVideo ? (
             <div className="wi-sb-player">
@@ -141,22 +210,18 @@ export default function DemoStoryboard({
               </div>
               <h3 className="wi-sb-norecording__title">No recording yet</h3>
               <p className="wi-sb-norecording__hint">The agent will walk through the scenes and record a walkthrough.</p>
-              {onRecord && (
-                <button className="wi-btn wi-btn--primary wi-btn--lg" onClick={onRecord} disabled={processing}>
-                  ● Record now
-                </button>
-              )}
+              <button className="wi-btn wi-btn--primary wi-btn--lg" onClick={handleRecord} disabled={recording}>
+                ● Record now
+              </button>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
 }
 
 function extractChapters(doc, fallbackName) {
-  // Primary: real step chapters with timestamps + screenshots
   const buttons = Array.from(doc.querySelectorAll(".wi-demo__chapter[data-seek]"));
   if (buttons.length) {
     return buttons.map((btn, i) => ({
@@ -167,7 +232,6 @@ function extractChapters(doc, fallbackName) {
       thumb: btn.querySelector("img")?.getAttribute("src") || null,
     }));
   }
-  // Fallback: heading-based chapters (no timestamps)
   const headings = Array.from(doc.querySelectorAll("body > h1, body > h2, main h2, article h2, section h2"));
   if (headings.length) {
     return headings.map((el, i) => ({
@@ -176,9 +240,7 @@ function extractChapters(doc, fallbackName) {
     }));
   }
   const h1 = doc.querySelector("h1");
-  if (h1) {
-    return [{ id: "ch-0", at: null, thumb: null, badge: "", title: h1.textContent?.trim() || fallbackName }];
-  }
+  if (h1) return [{ id: "ch-0", at: null, thumb: null, badge: "", title: h1.textContent?.trim() || fallbackName }];
   return [];
 }
 

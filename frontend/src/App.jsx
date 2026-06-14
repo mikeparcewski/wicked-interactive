@@ -634,11 +634,6 @@ export default function App() {
         </div>
         <div className="wi-toolbar__group">
           {status && currentDoc && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
-          {currentIsDemo && (
-            <button className="wi-btn wi-btn--ghost" disabled={processing} onClick={recordDemoNow} title="Re-run the recorded walkthrough">
-              ● Record
-            </button>
-          )}
           {currentIsDemo ? (
             <a
               className={`wi-btn wi-btn--primary wi-download${viewing == null ? " wi-download--disabled" : ""}`}
@@ -732,8 +727,7 @@ export default function App() {
             videoSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}.webm`)}
             posterSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}-poster.jpg`)}
             processing={processing}
-            onRecord={recordDemoNow}
-            onAddScene={handleAddScene}
+            onOpenThread={() => setThreadOpen(true)}
           />
         )}
         {showWizard && (
