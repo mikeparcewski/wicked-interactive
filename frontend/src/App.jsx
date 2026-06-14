@@ -728,6 +728,7 @@ export default function App() {
             posterSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}-poster.jpg`)}
             processing={processing}
             onOpenThread={() => setThreadOpen(true)}
+            onSetBusy={() => setAgentBusy(true)}
           />
         )}
         {showWizard && (

@@ -22,6 +22,7 @@ export default function DemoStoryboard({
   posterSrc,
   processing,
   onOpenThread,
+  onSetBusy,
 }) {
   const [chapters, setChapters] = useState([]);
   const [activeIdx, setActiveIdx] = useState(null);
@@ -64,12 +65,17 @@ export default function DemoStoryboard({
     return () => { cancelled = true; };
   }, [storyboardUrl, currentDoc]);
 
+  function openWithBusy() {
+    onSetBusy?.();
+    onOpenThread?.();
+  }
+
   async function handleAddScene({ description, mode }) {
     setShowAddScene(false);
     const modeLabel = mode === "rerecord" ? "re-record from the beginning" : "add it as a new scene";
     await emitChat(`Add a scene: ${description}\n\nMode: ${modeLabel}`).catch(() => {});
     setDirty(true);
-    onOpenThread?.();
+    openWithBusy();
   }
 
   async function handleEditScene({ scene, description }) {
@@ -79,7 +85,7 @@ export default function DemoStoryboard({
     );
     await emitChat(`Edit scene ${scene.index + 1} "${scene.title}": ${description}`).catch(() => {});
     setDirty(true);
-    onOpenThread?.();
+    openWithBusy();
   }
 
   function handleRemoveScene(ch, i, e) {
@@ -89,7 +95,7 @@ export default function DemoStoryboard({
     else if (activeIdx > i) setActiveIdx((a) => a - 1);
     emitChat(`Remove scene ${i + 1} "${ch.title}" from the demo`).catch(() => {});
     setDirty(true);
-    onOpenThread?.();
+    openWithBusy();
   }
 
   async function handleRecord() {
