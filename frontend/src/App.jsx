@@ -100,7 +100,7 @@ export default function App() {
   // ---- Agent activity (ADR-0024): a user action that kicks off agent work expands the
   // conversation thread (blur behind, no collapse) until a new render is ready. ----
   const kickoff = () => { setAgentBusy(true); setRenderReady(false); setConsoleEscape(false); };
-  const closeConsole = () => { setAgentBusy(false); setRenderReady(false); setConsoleEscape(false); setQuestion(null); setProcessing(false); };
+  const closeConsole = () => { setAgentBusy(false); setRenderReady(false); setConsoleEscape(false); setQuestion(null); setProcessing(false); setThreadOpen(false); };
   // Clean finish for work that lands NO new version — a chat reply, a finished review, an agent
   // "I'm done" status. Without this the working state would only ever clear on version.created, so
   // version-less work left agentBusy stuck true: the 20s heartbeat fired forever and the 75s

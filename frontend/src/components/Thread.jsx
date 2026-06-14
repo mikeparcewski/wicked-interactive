@@ -145,9 +145,11 @@ export default function Thread({ log, open, forceOpen, lockOpen, working, realSt
         ) : (
           // Not mid-edit: a clear, discoverable one-click collapse so you can review the document.
           // Labeled (not a lone glyph) per Change-1; collapses to the small tab, clearing the canvas.
+          // When forceOpen=true (escape valve fired, agent went quiet), onClose clears the stale
+          // agent state so forceOpen drops to false and the thread can actually close.
           <button
             className="wi-thread__collapse"
-            onClick={onToggle}
+            onClick={forceOpen ? onClose : onToggle}
             title="Collapse the conversation to review the document"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>

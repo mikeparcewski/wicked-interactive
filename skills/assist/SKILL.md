@@ -589,6 +589,28 @@ reports `WB-003` (cursor behind the retention window). The bus is transport, not
 
 ## Step 11 — Loop (re-arm the drain)
 
+**Before re-arming: check for orphaned docs.** Every reconnect (and every loop iteration after
+handling a batch), run a quick state-plane catchup so docs created in prior sessions aren't
+silently abandoned:
+
+```bash
+# Docs at v0 = created but never generated (bus event may be long gone)
+curl -s <BASE>/api/docs | node -e "
+  const docs = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
+  docs.filter(d => d.head === 0).forEach(d => console.log(d.id, d.kind));
+"
+```
+
+For any doc where `head === 0`:
+- `kind: "source"` → generate the draft (Step 5) — the user's files are still in `source_paths`
+- `kind: "demo"` → author the spec (Step 8) — the target URL is still in the doc's metadata
+- Post `processing` status so the browser reflects activity immediately
+
+> This catchup is what prevents the "user has to ask twice" failure mode where a doc is created
+> in one session, the agent says "on it," then reconnects and silently ignores the pending work.
+> The bus drain only delivers events the cursor hasn't seen; orphaned docs never surface again
+> via the bus alone.
+
 In Claude Code, arm the drain once with a **self-re-arming Monitor** so idle timeouts never kill
 the loop. Do this at the end of Step 1 (or immediately on re-entry after handling a batch):
 

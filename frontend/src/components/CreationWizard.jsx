@@ -22,7 +22,7 @@ function emptyScene() {
 const FORMAT_OPTIONS = [
   { id: "web",      label: "Web",      desc: "Scrollable HTML — animations, interactivity, and rich UX." },
   { id: "ppt",      label: "PPT",      desc: "Fixed landscape slides — no interactives, exports as PPTX." },
-  { id: "brochure", label: "Brochure", desc: "Portrait PDF — stylized pages, print-ready layout." },
+  { id: "brochure", label: "Brochure", desc: "Landscape PDF — stylized pages, print-ready layout." },
   { id: "doc",      label: "Doc",      desc: "Minimal formatting — content-first, easy to read and share." },
 ];
 
