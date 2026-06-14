@@ -722,7 +722,7 @@ export default function App() {
             currentDoc={currentDoc}
             viewing={viewing}
             storyboardUrl={viewing == null ? null : docUrl(viewing)}
-            videoSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}.webm`)}
+            playerSrc={viewing == null ? null : apiPath(`/api/demo/player/${viewing}`)}
             processing={processing}
             onRecord={recordDemoNow}
           />

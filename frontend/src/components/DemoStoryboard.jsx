@@ -8,7 +8,7 @@ export default function DemoStoryboard({
   currentDoc,
   viewing,
   storyboardUrl,  // URL to fetch storyboard HTML (for chapter extraction)
-  videoSrc,       // URL for the .webm recording
+  playerSrc,      // URL to the /api/demo/player/:version HTML page (iframe)
   processing,
   onRecord,
 }) {
@@ -17,9 +17,7 @@ export default function DemoStoryboard({
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
-  const [videoFailed, setVideoFailed] = useState(false);
   const editTitleRef = useRef(null);
-  const videoRef = useRef(null);
 
   // Parse chapter data from the storyboard HTML.
   useEffect(() => {
@@ -66,10 +64,7 @@ export default function DemoStoryboard({
     setChapters((prev) => prev.length > 1 ? prev.filter((ch) => ch.id !== id) : prev);
   }
 
-  const hasVideo = !!videoSrc && !videoFailed;
-
-  // Reset error state when the source changes (new recording landed).
-  useEffect(() => { setVideoFailed(false); }, [videoSrc]);
+  const hasVideo = !!playerSrc;
 
   return (
     <div className={`wi-storyboard${processing ? " wi-storyboard--busy" : ""}`}>
@@ -137,18 +132,13 @@ export default function DemoStoryboard({
       <div className="wi-sb-main">
         {hasVideo ? (
           <div className="wi-sb-player">
-            <video
-              ref={videoRef}
-              key={videoSrc}
-              controls
-              className="wi-sb-video"
-              preload="metadata"
-              onError={() => setVideoFailed(true)}
-            >
-              {/* mp4 first — Safari and mobile require H.264; webm as fallback for browsers that support it */}
-              <source src={videoSrc.replace(/\.webm$/, ".mp4")} type="video/mp4" />
-              <source src={videoSrc} type="video/webm" />
-            </video>
+            <iframe
+              key={playerSrc}
+              src={playerSrc}
+              className="wi-sb-player-frame"
+              title="Demo recording"
+              allowFullScreen
+            />
             <div className="wi-sb-player__meta">
               <span className="wi-kicker">{currentDoc}{viewing != null ? ` · v${viewing}` : ""}</span>
             </div>

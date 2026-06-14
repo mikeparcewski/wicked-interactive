@@ -157,6 +157,23 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     res.sendFile(filePath);
   });
 
+  // Standalone HTML player for a recorded version — served into an iframe in the storyboard.
+  // Using an iframe sidesteps React's cross-browser video element quirks entirely.
+  app.get("/api/demo/player/:version", (req, res) => {
+    const version = Number(req.params.version);
+    if (!Number.isInteger(version) || version < 0) return res.status(400).send("invalid version");
+    const base = `/d/${documentId}`;
+    const mp4 = `${base}/api/demo/recording/_v${version}.mp4`;
+    const webm = `${base}/api/demo/recording/_v${version}.webm`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#0b1020}video{width:100%;height:100%;display:block;object-fit:contain}</style>
+</head><body><video controls autoplay="false">
+  <source src="${mp4}" type="video/mp4">
+  <source src="${webm}" type="video/webm">
+</video></body></html>`);
+  });
+
   // Conversation transcript (ADR-0014): written by the bus bridge (chat/status), read here.
   app.get("/api/conversation", (_req, res) => {
     try {
