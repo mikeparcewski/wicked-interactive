@@ -535,7 +535,12 @@ export default function App() {
   const docKind = (d) => (typeof d === "string" ? "doc" : d.kind || "doc");
   const demos = docs.filter((d) => docKind(d) === "demo");
   const documents = docs.filter((d) => docKind(d) !== "demo");
-  const currentIsDemo = currentDoc && demos.some((d) => (typeof d === "string" ? d : d.name) === currentDoc);
+  // manifest.kind is available from refreshVersions() before listDocs() resolves, so use it as
+  // an early signal to avoid briefly showing the iframe (white storyboard HTML) while docs load.
+  const currentIsDemo = currentDoc && (
+    demos.some((d) => (typeof d === "string" ? d : d.name) === currentDoc) ||
+    manifest?.kind === "demo"
+  );
   useEffect(() => { isDemoRef.current = !!currentIsDemo; }, [currentIsDemo]);
   // The Interactive/Demo toggle only applies to an open interactive doc — reset it otherwise.
   useEffect(() => { if ((!currentDoc || currentIsDemo) && demoMode) setDemoMode(false); }, [currentDoc, currentIsDemo, demoMode]);
