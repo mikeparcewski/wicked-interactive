@@ -703,7 +703,7 @@ export default function App() {
             <p className="wi-blank__hint">Describe what you want in the box below and I'll build it — or open a document from the sidebar. Once a document's open, the right-edge tool-rail lets you learn a style or run a review.</p>
           </div>
         )}
-        {currentDoc && !currentIsDemo && (
+        {currentDoc && !currentIsDemo && manifest && (
           <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
             <div className="wi-doc__chrome" aria-hidden="true">
               <span className="wi-doc__lights"><i /><i /><i /></span>
