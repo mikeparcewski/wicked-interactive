@@ -7,8 +7,8 @@ import Thread from "./components/Thread.jsx";
 import ToolRail, { REVIEW_LABEL } from "./components/ToolRail.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 import FsPicker from "./components/FsPicker.jsx";
-import NewDocModal from "./components/NewDocModal.jsx";
-import NewDemoModal from "./components/NewDemoModal.jsx";
+import CreationWizard from "./components/CreationWizard.jsx";
+import DemoStoryboard from "./components/DemoStoryboard.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
@@ -33,24 +33,30 @@ export default function App() {
   });
   const [sideHover, setSideHover] = useState(false);     // JS hover-expand — so an explicit collapse isn't instantly re-expanded by the lingering pointer
   const sideSuppressRef = useRef(false);                 // set on collapse; blocks hover-expand until the pointer leaves + re-enters
-  const [threadOpen, setThreadOpen] = useState(true);    // conversation panel (floats above the composer)
+  // Initialize from sessionStorage so the working state is set on the very first paint —
+  // no flash of "idle" before the async getConversation effect fires (ADR-0024).
+  const [threadOpen, setThreadOpen] = useState(() => {
+    try { const g = sessionStorage.getItem("wi-generating"); const d = getCurrentDoc(); return !!(g && d && g === d); } catch { return false; }
+  });
   const [docs, setDocs] = useState([]);                  // multi-doc registry (ADR-0015)
-  const [showNewDoc, setShowNewDoc] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);    // unified creation wizard
+  const [wizardPath, setWizardPath] = useState(null);    // pre-select "interactive" | "demo" | null
   const [projects, setProjects] = useState([]);          // other running instances for the project switcher
   const [projectRoot, setProjectRoot] = useState(null);  // this instance's docs root (shown when expanded)
-  const [showNewDemo, setShowNewDemo] = useState(false); // demo creation (ADR-0018)
   const [demoMode, setDemoMode] = useState(false);       // composer mode: false = Interactive, true = Demo recording (toggle lives in the top nav)
   const [showThemeUrl, setShowThemeUrl] = useState(false); // learn-a-theme-from-a-URL (ADR-0020)
-  const [newDocError, setNewDocError] = useState(null);
+  const [wizardDocError, setWizardDocError] = useState(null);
+  const [wizardDemoError, setWizardDemoError] = useState(null);
   const [newDocBrief, setNewDocBrief] = useState("");    // seeded when the launch-state chat starts a doc
-  const [newDemoError, setNewDemoError] = useState(null);
   const [themeUrlError, setThemeUrlError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
   const [pickMode, setPickMode] = useState("sources");   // FsPicker routes results: "sources" | "theme"
   const [reviewInFlight, setReviewInFlight] = useState({}); // per-reviewer in-flight: { match:true } — reviews run NON-BLOCKING + CONCURRENT, never veil the canvas
-  const [agentBusy, setAgentBusy] = useState(false);     // agent console: the agent is actively working (ADR-0024)
+  const [agentBusy, setAgentBusy] = useState(() => {
+    try { const g = sessionStorage.getItem("wi-generating"); const d = getCurrentDoc(); return !!(g && d && g === d); } catch { return false; }
+  });
   const [renderReady, setRenderReady] = useState(false); // a new version landed — console may close
   const [consoleEscape, setConsoleEscape] = useState(false); // safety: allow closing a hung console
   const [realStatusAt, setRealStatusAt] = useState(0);   // bumps when a REAL agent status lands — resets the whimsy filler so it never talks over a fresh update
@@ -132,7 +138,20 @@ export default function App() {
   useEffect(() => {
     checkPreflight();
     refreshVersions().then((m) => setViewing((v) => (v == null ? m.head : v))).catch(() => {});
-    getConversation().then((log) => setChat(Array.isArray(log) ? log : []));
+    getConversation().then((log) => {
+      const entries = Array.isArray(log) ? log : [];
+      setChat(entries);
+      // If this doc was just created with a brief, start in working mode so the Thread
+      // opens immediately showing the brief and the "working" indicator — the agent will
+      // either generate right away or ask a clarifying question through the same panel.
+      try {
+        const gen = sessionStorage.getItem("wi-generating");
+        if (gen && gen === currentDoc) {
+          sessionStorage.removeItem("wi-generating");
+          // agentBusy + threadOpen already initialized from this flag before first paint
+        }
+      } catch { /* private mode / storage blocked */ }
+    });
     listDocs().then(setDocs).catch(() => setDocs([]));
     getSources().then((r) => setSources(r.sources || [])).catch(() => setSources([]));
     getProjects().then((r) => { setProjects(r.projects || []); setProjectRoot(r.root || null); }).catch(() => {});
@@ -140,6 +159,14 @@ export default function App() {
 
   async function attachSources(paths, note) {
     setShowPicker(false);
+    if (showWizard) {
+      // FsPicker was opened from the creation wizard — add paths to wizard, not the live session.
+      setWizardSources((prev) => {
+        const known = new Set(prev);
+        return [...prev, ...paths.filter((p) => !known.has(p))];
+      });
+      return;
+    }
     try {
       // Emit the attach intent; the source.attached frame echoes back and updates the panel.
       await emitSourceAttached(paths.map((p) => ({ path: p, note })));
@@ -156,25 +183,34 @@ export default function App() {
   }
 
   async function onCreateDoc(name, html, meta) {
-    setNewDocError(null);
+    setWizardDocError(null);
     try {
       // Navigate to the SERVER-assigned slug, not the raw input — the service slugifies
       // (e.g. "My Doc" → "my-doc"), and ?doc= must be the slug or getCurrentDoc rejects it
       // and we'd land back on the launch screen.
       const created = await createDoc(name, html, meta);
-      navigateToDoc(created?.name || name);   // hard-reloads straight to the new doc
+      const docName = created?.name || name;
+      // Server sets generating:true when it emits wicked.doc.created (brief-based creation).
+      // Flag it so the new page opens in working mode — the agent generates v1 or asks a
+      // clarifying question through the same Thread panel.
+      if (created?.generating) {
+        try { sessionStorage.setItem("wi-generating", docName); } catch { /* private mode */ }
+      }
+      navigateToDoc(docName);
     } catch (e) {
-      setNewDocError(e.message);
+      setWizardDocError(e.message);
     }
   }
 
   async function onCreateDemo(name, _html, meta) {
-    setNewDemoError(null);
+    setWizardDemoError(null);
     try {
       const created = await createDoc(name, "", meta);   // kind:"demo" — service seeds the storyboard placeholder
-      navigateToDoc(created?.name || name);              // straight to the new demo; the agent records v1
+      const docName = created?.name || name;
+      try { sessionStorage.setItem("wi-generating", docName); } catch { /* private mode */ }
+      navigateToDoc(docName);                            // new page opens in working state; agent records v1
     } catch (e) {
-      setNewDemoError(e.message);
+      setWizardDemoError(e.message);
     }
   }
 
@@ -383,9 +419,10 @@ export default function App() {
     // Launch state — no document to talk about yet. Rather than dead-end on "unknown doc",
     // carry the first message into a new document as its brief; the agent builds from it.
     if (!currentDoc) {
-      setNewDocError(null);
+      setWizardDocError(null);
       setNewDocBrief(text);
-      setShowNewDoc(true);
+      setWizardPath("interactive");
+      setShowWizard(true);
       return;
     }
     kickoff();   // expand the thread so the user sees the agent working + can nudge it
@@ -430,8 +467,21 @@ export default function App() {
   // whimsy filler (gated on `working`) plus the real wicked.status.posted messages — no separate
   // "working on it…" bubble, which used to double up with both of those.
 
-  const openNewDoc = () => { setNewDocError(null); setNewDocBrief(""); setShowNewDoc(true); };
-  const openNewDemo = () => { setNewDemoError(null); setShowNewDemo(true); };
+  const [wizardSources, setWizardSources] = useState([]);  // source paths selected during doc creation
+
+  const openNewDoc = () => { setWizardDocError(null); setWizardDemoError(null); setNewDocBrief(""); setWizardPath("interactive"); setWizardSources([]); setShowWizard(true); };
+  const openNewDemo = () => { setWizardDocError(null); setWizardDemoError(null); setWizardPath("demo"); setShowWizard(true); };
+  const closeWizard = () => { setShowWizard(false); setWizardPath(null); setNewDocBrief(""); setWizardSources([]); };
+
+  function openWizardSourcePicker() { setPickMode("sources"); setShowPicker(true); }
+  function addWizardSources(paths) {
+    setShowPicker(false);
+    setWizardSources((prev) => {
+      const known = new Set(prev);
+      return [...prev, ...paths.filter((p) => !known.has(p))];
+    });
+  }
+  function removeWizardSource(path) { setWizardSources((prev) => prev.filter((p) => p !== path)); }
   const openThemeUrl = () => { setThemeUrlError(null); setShowThemeUrl(true); };
 
   async function learnThemeFromUrl(url) {
@@ -560,7 +610,7 @@ export default function App() {
         <header className="wi-toolbar wi-toolbar--top">
           <div className="wi-toolbar__group">
             <span className={`wi-crumb wi-brandcrumb${(sideOpen || sideHover) ? " is-doconly" : ""}`}>
-              <span className="wi-brandcrumb__brand"><b>wicked</b><i>agile</i></span>
+              <span className="wi-brandcrumb__brand"><b>wicked</b><i>interactive</i></span>
               {currentDoc && <span className="wi-brandcrumb__doc"><span className="wi-brandcrumb__sep"> / </span><b>{currentDoc}</b></span>}
             </span>
           </div>
@@ -571,12 +621,6 @@ export default function App() {
           )}
         </div>
         <div className="wi-toolbar__group">
-          {currentDoc && !currentIsDemo && (
-            <div className="wi-modeswitch wi-modeswitch--nav" role="group" aria-label="Composer mode">
-              <button type="button" className={`wi-modeswitch__opt${!demoMode ? " is-on" : ""}`} aria-pressed={!demoMode} onClick={() => setDemoMode(false)}>Interactive</button>
-              <button type="button" className={`wi-modeswitch__opt${demoMode ? " is-on" : ""}`} aria-pressed={demoMode} onClick={() => setDemoMode(true)}>● Demo recording</button>
-            </div>
-          )}
           {status && currentDoc && <div className={`wi-status wi-status--${status.kind}`}>{status.text}</div>}
           {currentIsDemo && (
             <button className="wi-btn wi-btn--ghost" disabled={processing} onClick={recordDemoNow} title="Re-run the recorded walkthrough">
@@ -586,8 +630,8 @@ export default function App() {
           {currentIsDemo ? (
             <a
               className={`wi-btn wi-btn--primary wi-download${viewing == null ? " wi-download--disabled" : ""}`}
-              href={viewing == null ? undefined : apiPath(`/api/demo/recording/_v${viewing}.webm`)}
-              download={`${currentDoc}-v${viewing}.webm`}
+              href={viewing == null ? undefined : apiPath(`/api/demo/recording/_v${viewing}.mp4`)}
+              download={`${currentDoc}-v${viewing}.mp4`}
               aria-disabled={viewing == null}
               title="Download the recorded walkthrough"
             >
@@ -609,6 +653,24 @@ export default function App() {
               {gifBusy ? "Building GIF…" : "GIF"}
             </button>
           )}
+          {currentIsDemo && (
+            <button
+              className="wi-btn wi-btn--ghost wi-btn--convert"
+              onClick={() => { setWizardDocError(null); setNewDocBrief(currentDoc || ""); setWizardPath("interactive"); setShowWizard(true); }}
+              title="Create an interactive document from this demo"
+            >
+              → Interactive
+            </button>
+          )}
+          {currentDoc && !currentIsDemo && (
+            <button
+              className="wi-btn wi-btn--ghost wi-btn--convert"
+              onClick={() => { setWizardDemoError(null); setWizardPath("demo"); setShowWizard(true); }}
+              title="Create a demo video from this document"
+            >
+              → Demo
+            </button>
+          )}
           {!currentIsDemo && (
             <div className="wi-export" role="group" aria-label="Export">
               <span className="wi-export__icon" aria-hidden="true">
@@ -626,7 +688,7 @@ export default function App() {
       </header>
 
         <main className="wi-canvas" ref={canvasRef}>
-        {!currentDoc && (
+        {!currentDoc && !showWizard && (
           <div className="wi-blank">
             <span className="wi-blank__icon" aria-hidden="true">
               <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3v5h5M7 3h8l5 5v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /></svg>
@@ -636,26 +698,47 @@ export default function App() {
             <p className="wi-blank__hint">Describe what you want in the box below and I'll build it — or open a document from the sidebar. Once a document's open, the right-edge tool-rail lets you learn a style or run a review.</p>
           </div>
         )}
-        {currentDoc && (
+        {currentDoc && !currentIsDemo && (
           <div className={`wi-doc ${processing ? "wi-doc--busy" : ""}`}>
             <div className="wi-doc__chrome" aria-hidden="true">
               <span className="wi-doc__lights"><i /><i /><i /></span>
-              <span className="wi-doc__url">localhost · {currentDoc}{currentIsDemo ? "" : ".html"}{viewing != null ? ` · v${viewing}` : ""}</span>
+              <span className="wi-doc__url">localhost · {currentDoc}.html{viewing != null ? ` · v${viewing}` : ""}</span>
               <span className="wi-doc__live"><i /> live</span>
             </div>
             <div className="wi-doc__stage">
               <iframe ref={iframeRef} title="document" src={viewing == null ? "about:blank" : docUrl(viewing)} onLoad={onIframeLoad} />
-              {!currentIsDemo && (
-                <>
-                  <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
-                  <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
-                </>
-              )}
+              <Overlay rects={rects} pending={EMPTY} hovered={hovered} selected={selected?.selector} onRemove={removeBlock} />
+              <InlineComment selected={selected} rect={selected ? rects[selected.selector] : null} onSubmit={submitComment} onCancel={() => setSelected(null)} />
             </div>
           </div>
         )}
+        {currentDoc && currentIsDemo && !showWizard && (
+          <DemoStoryboard
+            currentDoc={currentDoc}
+            viewing={viewing}
+            storyboardUrl={viewing == null ? null : docUrl(viewing)}
+            videoSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}.webm`)}
+            processing={processing}
+            onRecord={recordDemoNow}
+          />
+        )}
+        {showWizard && (
+          <CreationWizard
+            open={showWizard}
+            initialPath={wizardPath}
+            initialBrief={newDocBrief}
+            sourcePaths={wizardSources}
+            onBrowseSources={openWizardSourcePicker}
+            onRemoveSource={removeWizardSource}
+            onCreateDoc={onCreateDoc}
+            onCreateDemo={onCreateDemo}
+            onCancel={closeWizard}
+            docError={wizardDocError}
+            demoError={wizardDemoError}
+          />
+        )}
         {working && <div className="wi-veil" aria-hidden="true" />}
-        {currentDoc && !currentIsDemo && !working && (
+        {currentDoc && !currentIsDemo && !working && !showWizard && (
           <ToolRail
             onLearnWebsite={openThemeUrl}
             onLearnFile={openLearnFile}
@@ -678,6 +761,7 @@ export default function App() {
           renderReady={renderReady}
           onClose={closeConsole}
           onToggle={() => setThreadOpen((o) => !o)}
+          hasDoc={!!currentDoc}
         />
 
         <Composer
@@ -693,21 +777,6 @@ export default function App() {
       </div>
 
       <FsPicker open={showPicker} onAdd={pickMode === "theme" ? learnThemeFromFile : attachSources} onCancel={() => setShowPicker(false)} />
-
-      <NewDocModal
-        open={showNewDoc}
-        error={newDocError}
-        initialBrief={newDocBrief}
-        onCreate={onCreateDoc}
-        onCancel={() => setShowNewDoc(false)}
-      />
-
-      <NewDemoModal
-        open={showNewDemo}
-        error={newDemoError}
-        onCreate={onCreateDemo}
-        onCancel={() => setShowNewDemo(false)}
-      />
 
       <ThemeFromUrlModal
         open={showThemeUrl}

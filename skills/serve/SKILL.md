@@ -154,9 +154,23 @@ Tell the user, in the browser-facing chat is best, but the terminal is fine here
 
 ## Step 5 — Enter the supervising loop (REQUIRED)
 
-Immediately invoke the **`assist`** skill, pointed at the same base URL. Do not consider
-`serve` complete until `assist` is running — without it the UPDATE button and chat hang
-forever. `assist` is what makes the agent-in-the-loop guarantee real.
+`serve` and `assist` are one experience. The service is running; now YOU become the agent
+that makes it intelligent. Do this immediately — before responding to the user:
+
+**In Claude Code:** call the `Skill` tool with `wicked-interactive:assist` as the skill
+name. This is not a suggestion and not conditional. `serve` is not complete until `assist`
+is running in this session.
+
+```
+Skill({ skill: "wicked-interactive:assist" })
+```
+
+**Not in Claude Code?** Tell the user: *"The builder is live at `<BASE>`. To enable chat
+and structural edits, open a Claude Code session and run `/wicked-interactive:assist`."*
+Then exit — do not leave them with a half-working editor.
+
+`assist` takes over from here: it greets the user, arms the bus drain, and runs the
+supervising loop until the session ends. Do not consider `serve` complete until it does.
 
 ## Step 6 — Stop it when the user is done
 

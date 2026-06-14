@@ -54,7 +54,7 @@ function Markdown({ text }) {
   });
 }
 
-export default function Thread({ log, open, forceOpen, lockOpen, working, realStatusAt, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle }) {
+export default function Thread({ log, open, forceOpen, lockOpen, working, realStatusAt, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle, hasDoc }) {
   const scrollRef = useRef(null);
   useEffect(() => {
     const el = scrollRef.current;
@@ -80,9 +80,40 @@ export default function Thread({ log, open, forceOpen, lockOpen, working, realSt
 
   const count = log.length;
   const hasContent = count > 0 || working || !!question || forceOpen;
-  if (!hasContent) return null;
-
   const isOpen = forceOpen || open;
+
+  // When no content yet: show the collapsed tab (if a doc is open), or the full panel
+  // if the user explicitly opened it (isOpen). Never return null when hasDoc is true.
+  if (!hasContent) {
+    if (!hasDoc) return null;
+    if (!isOpen) {
+      return (
+        <button className="wi-thread-tab" onClick={onToggle} title="Open conversation">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg>
+          <span className="wi-kicker">Conversation</span>
+        </button>
+      );
+    }
+    // Panel explicitly opened with no history — show empty-state prompt.
+    return (
+      <div className="wi-thread" role="log" aria-label="Conversation">
+        <div className="wi-thread__head">
+          <span className="wi-kicker">Conversation</span>
+          <button className="wi-thread__collapse" onClick={onToggle} title="Collapse">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            <span>Collapse</span>
+          </button>
+        </div>
+        <div className="wi-thread__log">
+          <div className="wi-thread__empty">
+            <p>What would you like this to be?</p>
+            <p className="wi-thread__empty-hint">Describe what you want in the box below and I'll build it.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!isOpen) {
     return (
       <button className="wi-thread-tab" onClick={onToggle} title="Show the conversation">

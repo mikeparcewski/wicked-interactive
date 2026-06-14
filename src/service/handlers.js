@@ -86,17 +86,25 @@ export async function materializeDraft(dir, payload, ctx) {
 
 /** Demo (re-)record trigger → run the authored spec with Playwright, land the storyboard. */
 export async function materializeDemo(dir, payload, ctx) {
-  const result = await recordDemo(dir, {
-    documentId: ctx.documentId,
-    headless: payload.headless !== false,
-    onStep: ({ index, total, label }) => ctx.emit("wicked.status.posted", {
-      state: "working", message: `Step ${index}${total ? `/${total}` : ""}: ${label}`,
-    }),
-  });
-  ctx.emit("wicked.version.created", {
-    version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
-  });
-  return result;
+  try {
+    const result = await recordDemo(dir, {
+      documentId: ctx.documentId,
+      headless: payload.headless !== false,
+      onStep: ({ index, total, label }) => ctx.emit("wicked.status.posted", {
+        state: "working", message: `Step ${index}${total ? `/${total}` : ""}: ${label}`,
+      }),
+    });
+    ctx.emit("wicked.version.created", {
+      version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
+    });
+    return result;
+  } catch (e) {
+    ctx.emit("wicked.status.posted", {
+      document_id: ctx.documentId, state: "error",
+      message: `Recording failed: ${e.message}`,
+    });
+    throw e;
+  }
 }
 
 // --- Learn-a-theme-from-a-URL (ADR-0010/ADR-0020): the deterministic service half.

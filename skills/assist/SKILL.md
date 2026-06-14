@@ -91,7 +91,7 @@ live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and ac
 
 | event_type | when | your action |
 |------------|------|-------------|
-| `wicked.doc.created` (kind `source`) | user built a doc "from my content" | generate the first draft (Step 5) |
+| `wicked.doc.created` (kind `source`) | user gave a brief and/or files in the wizard | generate the first draft (Step 5) |
 | `wicked.doc.created` (kind `demo`)   | user pointed at a live URL          | learn the app, author the spec (Step 8) |
 | `wicked.feedback.processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfil them (Step 3) |
 | `wicked.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
@@ -243,24 +243,41 @@ On a `wicked.chat.posted` event with `role: "user"`:
 - Always post a `processing` status when you start and `complete` when the version lands, so
   the document shows the loading state.
 
-## Step 5 — Build a document from the user's content ("From my content")
+## Step 5 — Build a document from the wizard brief and/or user content
 
-A `wicked.doc.created` event with `kind: "source"` means the user created a doc by pointing at
-material instead of typing. Its payload carries `source_paths` (files/folders — expand `~`) and
-an optional `brief`. The service is model-free, so building the draft is **yours**.
+A `wicked.doc.created` event with `kind: "source"` means the user spec'd the document in the
+creation wizard. Its payload carries:
+- `brief` — what the user described (may be present without source files)
+- `source_paths` — files/folders the user attached (may be empty if brief-only)
+- `style` — the output format: `"web"` (default), `"ppt"`, `"brochure"`, or `"doc"`
+
+The service is model-free, so building the draft is **yours**.
+
+**If the brief is too vague to generate confidently** (e.g. "make a doc", no context, conflicting
+instructions), do NOT guess — ask one focused clarifying question via:
+```bash
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"asking","question":"What'\''s this for and who'\''s the audience?","options":["Investor update","Customer pitch","Internal report","Something else"]}'
+```
+Then wait for `wicked.question.answered` before generating. This is the right path when intent
+is genuinely unclear — the Thread is open and the user is right there.
 
 ```bash
-wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","message":"Reading your files and drafting…"}'
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"processing","message":"Reading your brief and drafting…"}'
 ```
 
-- Read every entry in `source_paths` (each a file or a folder).
+- If `source_paths` is non-empty, read every entry (each a file or a folder, expand `~`).
+- If `source_paths` is empty, generate from the `brief` alone — that IS the spec.
+- **Honor the `style` field**:
+  - `web` → rich scrollable HTML with animations, interactivity, and vivid layout
+  - `ppt` → fixed landscape slide layout, no animations, export-safe for PPTX
+  - `brochure` → portrait multi-page PDF, stylized pages, print-ready
+  - `doc` → minimal formatting, readable prose, content-first (like a Word doc)
 - **Ground it in knowledge** — consult/ingest **wicked-brain** so the draft uses the user's real
   numbers and prior decisions (Step 6). Don't invent figures the source doesn't support.
 - **Generate the document** — work the craft references under `skills/assist/references/` as a
   pipeline: structure (outline-method) → narrative (story-arc) → visual design (design-principles)
   → export-safe HTML (html-craft). For a multi-discipline brief, route through a **wicked-garden
   crew** (Step 7) so design + copy + structure are reasoned about together.
-- Honor the `brief` (length, audience, tone, what to lead with).
 - **Self-check before you emit** — run the draft past `skills/assist/references/quality-checklist.md`
   (narrative, content, visual, export-safety). Fix structure and content before surface; keep it
   proportional.
@@ -325,10 +342,38 @@ service to execute + record it.
 wibus wicked.status.posted status '{"document_id":"<doc>","state":"working","message":"Exploring the app and working out the click-path…"}'
 ```
 
-### 8a. Explore the app, then author `demo.spec.mjs`
+### 8a. Decompose the brief into scenes, then author `demo.spec.mjs`
 
-Drive the live URL yourself (Playwright is installed — the install gate requires it before a
-demo can be created) to learn the selectors and the flow the `brief` describes. Then write
+**Do NOT copy the brief text into a single scene.** The brief is a prose description; your job
+is to reason about it and extract the logical beats — the distinct capabilities the user wants
+the demo to show. Each beat becomes one `step()`.
+
+**Scene decomposition — do this before touching Playwright:**
+
+1. Read the `brief` from the event payload (or from `wicked.chat.posted` if the user typed it).
+2. Ask: *What are the distinct things this demo should prove?* Look for:
+   - Setup / context steps ("sign in", "open a project", "navigate to X")
+   - The main value moments ("create a document", "generate a draft", "export to PDF")
+   - Payoff / outcome moments ("here's the result", "download the file")
+3. Name each scene as a **short capability label** — what the viewer should take away, not what
+   the user physically clicked. Good: `"Create a document"`. Bad: `"Click the New button"`.
+4. Aim for 3–6 scenes. One scene per brief sentence is usually right; merge trivial setup steps,
+   split compound flows. A demo that's one scene for a multi-step brief isn't a demo.
+5. **Post the scene plan and WAIT for confirmation — do NOT start recording yet.** This is an
+   editorial step. The user must approve the scene breakdown before you write the spec or trigger
+   the recording. Use `state: "asking"` so the UI shows the confirmation state:
+   ```bash
+   wibus wicked.status.posted status '{"document_id":"<doc>","state":"asking","question":"Does this scene breakdown look right?","options":["Looks good — record it","Let me adjust"]}'
+   wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"agent","text":"Here'\''s how I'\''m breaking this into scenes:\n- **Scene 1: ...**\n- **Scene 2: ...**\n\nDoes this look right? Say '\''looks good'\'' to start recording, or tell me what to change."}'
+   ```
+6. Wait for `wicked.question.answered` (button click) or `wicked.chat.posted` (typed reply)
+   confirming the plan. If they want changes, update the scene list and re-confirm. Only proceed
+   to Playwright and `wicked.demo.requested` after explicit approval.
+
+**Do NOT emit `wicked.demo.requested` before the user confirms the scene plan.** Jumping
+straight to recording without editorial sign-off is the mistake to avoid.
+
+Then drive the live URL yourself (Playwright is installed) to learn the selectors. Write
 `<DOCS>/<doc>/demo.spec.mjs` — a plain ES module exporting `meta` and an async `run`. You express
 **only** the click-path; the service supplies `page` and the `step` annotator and owns the
 browser/recording lifecycle.
@@ -482,32 +527,50 @@ standing part of the loop.
 Brain choice: index into the source's natural project brain when one exists; otherwise this doc's
 project brain.
 
-## Step 10 — Recover a stale cursor (rare)
+## Step 10 — Recover a stale cursor (WB-003)
 
 If you were away long enough that the bus swept events past your cursor, `wicked-bus subscribe`
 reports `WB-003` (cursor behind the retention window). The bus is transport, not storage
-(ADR-0021) — recover from the **state plane**, which is authoritative: reset the cursor
-(`wicked-bus replay --cursor-id <id> --from-event-id <oldest>`) and reconcile from files —
-`GET <BASE>/d/<doc>/api/sources` for any `pending` sources, `GET …/api/versions` for where each
-doc actually is. Then resume the loop.
+(ADR-0021) — events are gone; recover from the **state plane**, which is authoritative.
+
+**Recovery procedure:**
+
+1. **Bump the cursor name** — the stale cursor cannot be reset with `replay`; a fresh name is
+   the fix. Use a versioned suffix: `wi-agent-v2`, `wi-agent-v3`, etc. The new cursor starts at
+   `--cursor-init latest` so you don't replay old events.
+2. **Reconcile from the state plane** — check what actually needs handling:
+   - `GET <BASE>/d/<doc>/api/versions` — any doc still at v0 (`head: 0`)? That means a
+     `wicked.doc.created (kind source)` event was missed; generate its draft now (Step 5).
+   - `GET <BASE>/d/<doc>/api/sources` — any sources with `status: "pending"`? Process them (Step 9).
+   - `GET <BASE>/d/<doc>/api/conversation` — any unanswered user messages? Reply (Step 4).
+3. **Resume the loop** with the new cursor name.
 
 ## Step 11 — Loop (re-arm the drain)
 
-Return to watching by **re-running the Step 1 drain** — that's the whole loop. There's no durable
-background subscriber to babysit and no baseline to track: each drain advances the durable cursor
-as it delivers, so the next drain picks up exactly the events that arrived since (including any
-that landed while you were handling the last batch — the bus held them).
+In Claude Code, arm the drain once with a **self-re-arming Monitor** so idle timeouts never kill
+the loop. Do this at the end of Step 1 (or immediately on re-entry after handling a batch):
 
-1. Re-run the Step 1 `subscribe … --drain --idle-timeout` command (under your per-line watcher for
-   real-time wake, or as a plain completion-wake task — either way it self-exits and returns).
-2. On wake, act on the delivered lines: ignore your own `wi-agent` emissions and the service facts
-   (`wicked.version.created`, `wicked.export.requested`), handle the rest (Steps 3–9), come back.
-3. If a drain reports **WB-003** (cursor behind the retention window), you've been away longer than
-   the bus retains — recover from the authoritative state plane (Step 10), then resume.
+```bash
+# In Claude Code — arm via Monitor tool with this command:
+export WICKED_BUS_PRODUCER_ID=wi-agent
+while true; do
+  wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --drain --idle-timeout 120000
+  echo "[re-armed]"
+done
+```
 
-> **Never swap the self-exiting `--drain` for a never-exiting `subscribe` on a fire-and-forget
-> background task** — that wakes you only on completion, which never comes, so events pile up
-> unread (the #11 bug). The drain *returns*; that's what keeps the loop live.
+Pass `persistent: true` to Monitor so it survives indefinitely. The `while true` restarts the
+drain the instant it exits (idle timeout or batch delivery) — no manual re-arm needed. A
+`[re-armed]` notification is the idle-cycle heartbeat; ignore it and keep working.
+
+On each wake:
+1. Act on delivered lines: ignore your own `wi-agent` emissions and service facts
+   (`wicked.version.created`, `wicked.export.requested`), handle the rest (Steps 3–9).
+2. If the drain reports **WB-003**, bump the cursor name (Step 10) and re-start the Monitor
+   with the new `--plugin` name.
+
+> **Never swap `--drain` for a never-exiting `subscribe`** — that wakes you only on completion,
+> which never comes (the #11 bug). The drain *exits*; that's what keeps the loop alive.
 
 Keep going until the user says to stop. The session staying alive IS the product guarantee —
 `serve` + `assist` together are why a non-technical user can click a block and watch it change

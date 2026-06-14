@@ -147,7 +147,8 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     const filePath = join(dir, RECORDINGS_DIR, name);
     if (!existsSync(filePath)) return res.status(404).send("not found");
     const lower = name.toLowerCase();
-    const type = lower.endsWith(".webm") ? "video/webm"
+    const type = lower.endsWith(".mp4") ? "video/mp4"
+      : lower.endsWith(".webm") ? "video/webm"
       : lower.endsWith(".gif") ? "image/gif"
       : lower.endsWith(".png") ? "image/png"
       : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
@@ -399,6 +400,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
       .map((s) => String(s).trim()).filter(Boolean);
     const brief = String(req.body?.brief ?? "").trim();
     const demoUrl = String(req.body?.url ?? "").trim();
+    const style = ["web", "ppt", "brochure", "doc"].includes(req.body?.style) ? req.body.style : null;
     const name = DOC_NAME.test(raw) ? raw : slugify(raw);
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
@@ -437,7 +439,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
       if (brief) appendConversation(dir, { role: "user", text: brief });
       const docKind = fromSource ? "source" : (kind || "html");
       await emitEvent("wicked.doc.created",
-        { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}) },
+        { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}), ...(style ? { style } : {}) },
         { producer: PRODUCERS.SERVICE });
       res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}) });
     } catch (e) {

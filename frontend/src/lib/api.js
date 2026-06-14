@@ -102,17 +102,20 @@ export async function getPreflight() {
   return r.json();
 }
 
-// meta: { kind: "blank"|"html"|"source"|"demo", sourcePaths?, brief?, url? }.
+// meta: { kind: "blank"|"html"|"source"|"demo", sourcePaths?, brief?, url?, style? }.
 export async function createDoc(name, html, meta = {}) {
   const body = { name, html };
   if (meta.kind === "source") {
     body.kind = "source";
     body.source_paths = Array.isArray(meta.sourcePaths) ? meta.sourcePaths : [];
     body.brief = meta.brief || "";
+    if (meta.style) body.style = meta.style;
   } else if (meta.kind === "demo") {
     body.kind = "demo";
     body.url = meta.url || "";
     body.brief = meta.brief || "";
+  } else if (meta.style) {
+    body.style = meta.style;
   }
   const r = await fetch("/api/docs", {
     method: "POST", headers: { "Content-Type": "application/json" },

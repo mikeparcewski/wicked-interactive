@@ -262,6 +262,19 @@ export async function recordDemo(dir, opts = {}) {
     await browser.close();
   }
 
+  // Auto-convert to H.264 mp4 so Safari and mobile browsers can play the recording inline.
+  // Best-effort: a missing ffmpeg or encode failure does not abort the version landing.
+  const webmPath = join(recDir, videoFile);
+  const mp4Path = join(recDir, videoFile.replace(/\.webm$/, ".mp4"));
+  try {
+    const ffmpeg = findFfmpeg();
+    if (ffmpeg && existsSync(webmPath) && !existsSync(mp4Path)) {
+      spawnSync(ffmpeg, [
+        "-i", webmPath, "-vcodec", "libx264", "-acodec", "aac", "-pix_fmt", "yuv420p", mp4Path, "-y",
+      ], { timeout: 120_000 });
+    }
+  } catch { /* conversion is best-effort */ }
+
   const html = storyboard({
     documentId,
     title: meta.title || documentId,
