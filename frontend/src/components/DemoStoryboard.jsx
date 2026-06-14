@@ -7,8 +7,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export default function DemoStoryboard({
   currentDoc,
   viewing,
-  storyboardUrl,  // URL to fetch storyboard HTML (for chapter extraction)
-  playerSrc,      // URL to the /api/demo/player/:version HTML page (iframe)
+  storyboardUrl,
+  videoSrc,    // webm URL; mp4 derived by replacing extension
+  posterSrc,   // poster thumbnail URL
   processing,
   onRecord,
 }) {
@@ -17,7 +18,16 @@ export default function DemoStoryboard({
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const videoRef = useRef(null);
   const editTitleRef = useRef(null);
+
+  useEffect(() => { setPlaying(false); }, [videoSrc]);
+
+  function handlePlayBtn() {
+    videoRef.current?.play();
+    setPlaying(true);
+  }
 
   // Parse chapter data from the storyboard HTML.
   useEffect(() => {
@@ -64,7 +74,7 @@ export default function DemoStoryboard({
     setChapters((prev) => prev.length > 1 ? prev.filter((ch) => ch.id !== id) : prev);
   }
 
-  const hasVideo = !!playerSrc;
+  const hasVideo = !!videoSrc;
 
   return (
     <div className={`wi-storyboard${processing ? " wi-storyboard--busy" : ""}`}>
@@ -132,13 +142,27 @@ export default function DemoStoryboard({
       <div className="wi-sb-main">
         {hasVideo ? (
           <div className="wi-sb-player">
-            <iframe
-              key={playerSrc}
-              src={playerSrc}
-              className="wi-sb-player-frame"
-              title="Demo recording"
-              allowFullScreen
-            />
+            <div className="wi-sb-video-wrap">
+              <video
+                ref={videoRef}
+                key={videoSrc}
+                controls
+                className="wi-sb-video"
+                poster={posterSrc}
+                preload="metadata"
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+                onEnded={() => setPlaying(false)}
+              >
+                <source src={videoSrc.replace(/\.webm$/, ".mp4")} type="video/mp4" />
+                <source src={videoSrc} type="video/webm" />
+              </video>
+              {!playing && (
+                <button className="wi-sb-playbtn" onClick={handlePlayBtn} aria-label="Play recording">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+              )}
+            </div>
             <div className="wi-sb-player__meta">
               <span className="wi-kicker">{currentDoc}{viewing != null ? ` · v${viewing}` : ""}</span>
             </div>
