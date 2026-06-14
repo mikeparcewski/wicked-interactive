@@ -1,9 +1,10 @@
 // DemoStoryboard.jsx — video-player view for demo docs.
 //
 // Layout (3-zone):
-//   LEFT:   vertical chapter list (click to seek)
+//   LEFT:   vertical chapter list (click to seek) + "Add scene" button
 //   RIGHT:  flex column — full-width video (top) + real-screenshot filmstrip (bottom)
 import { useEffect, useRef, useState } from "react";
+import AddSceneModal from "./AddSceneModal.jsx";
 
 export default function DemoStoryboard({
   currentDoc,
@@ -13,10 +14,12 @@ export default function DemoStoryboard({
   posterSrc,
   processing,
   onRecord,
+  onAddScene,
 }) {
   const [chapters, setChapters] = useState([]);
   const [activeIdx, setActiveIdx] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [showAddScene, setShowAddScene] = useState(false);
   const videoRef = useRef(null);
   const filmstripRef = useRef(null);
 
@@ -54,15 +57,29 @@ export default function DemoStoryboard({
     return () => { cancelled = true; };
   }, [storyboardUrl, currentDoc]);
 
+  function handleAddScene(req) {
+    setShowAddScene(false);
+    onAddScene?.(req);
+  }
+
   const hasVideo = !!videoSrc;
 
   return (
     <div className={`wi-storyboard${processing ? " wi-storyboard--busy" : ""}`}>
+      <AddSceneModal
+        open={showAddScene}
+        onSubmit={handleAddScene}
+        onCancel={() => setShowAddScene(false)}
+      />
 
       {/* Left: chapter list */}
       <aside className="wi-sb-chapters">
         <div className="wi-sb-chapters__head">
           <span className="wi-kicker">Scenes</span>
+          <button className="wi-sb-add-scene" onClick={() => setShowAddScene(true)}>
+            <i className="wi-sb-add-scene__icon">+</i>
+            Add a scene
+          </button>
         </div>
         <div className="wi-sb-chapters__list">
           {chapters.length === 0 && (

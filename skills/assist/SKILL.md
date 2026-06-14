@@ -425,6 +425,48 @@ it arrives as a `wicked.feedback.processed` (Step 3) or `wicked.chat.posted` (St
 "make the change" means **edit `demo.spec.mjs`** and emit `wicked.demo.requested` again — same spec
 ⇒ same click-path ⇒ a new version. Deterministic replay.
 
+### 8d. Handle "Add a scene" requests from the storyboard UI
+
+The storyboard left-sidebar has an **Add a scene** button that opens a modal. When the user
+submits it, a `wicked.chat.posted` arrives with this format:
+
+```
+Add a scene: <what the user described>
+
+Mode: add it as a new scene
+  — OR —
+Mode: re-record from the beginning
+```
+
+**Immediately reply in chat** to tell the user what you're about to do (even one sentence is
+enough — they see the thread open). Then post `processing` status and get to work.
+
+#### Mode: add it as a new scene
+
+1. Read `<DOCS>/<doc>/demo.spec.mjs`.
+2. Append a new `step()` block that implements what the user described. Keep the existing steps
+   untouched — the new scene goes at the end of `run()` and into `meta.steps`.
+3. Emit `wicked.demo.requested` — the service re-runs the full spec but the new step is the
+   only new footage; the browser hot-reloads the storyboard with the extra scene card.
+
+#### Mode: re-record from the beginning
+
+1. Read `<DOCS>/<doc>/demo.spec.mjs`.
+2. **Rewrite** the full spec: plan where the new scene fits best in the narrative, insert it at
+   the right position in `run()`, update `meta.steps`, and tighten any surrounding steps that
+   now flow differently.
+3. Emit `wicked.demo.requested`. The service records a clean take from start to finish.
+
+Either way, post a `complete` status with the scene count when the new version lands.
+
+```bash
+wibus wicked.status.posted status '{"document_id":"<doc>","state":"complete","message":"Done — added \"<scene title>\" (now <N> scenes).","version":<v>}'
+```
+
+If you have a question before starting — unclear flow, missing credentials, ambiguous
+scope — **ask via `wicked.status.posted` with `state: "asking"`** (Step 3d). The question
+renders as buttons in the UI lock; the user's answer arrives as `wicked.question.answered`.
+
 ## Step 8.5 — Learn a theme from a URL (ADR-0010/ADR-0020)
 
 The user pointed at a page whose look they like ("Theme from URL"). The split is the same as a

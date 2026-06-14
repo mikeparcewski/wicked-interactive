@@ -569,6 +569,13 @@ export default function App() {
     catch (e) { setStatus({ kind: "error", text: e.message }); }
   }
 
+  async function handleAddScene({ description, mode }) {
+    const modeLabel = mode === "rerecord" ? "re-record from the beginning" : "add it as a new scene";
+    const msg = `Add a scene: ${description}\n\nMode: ${modeLabel}`;
+    try { await emitChat(msg); } catch { /* bus down — message still shows */ }
+    setThreadOpen(true);
+  }
+
   const [gifBusy, setGifBusy] = useState(false);
   async function downloadGif() {
     if (viewing == null) return;
@@ -726,6 +733,7 @@ export default function App() {
             posterSrc={viewing == null ? null : apiPath(`/api/demo/recording/_v${viewing}-poster.jpg`)}
             processing={processing}
             onRecord={recordDemoNow}
+            onAddScene={handleAddScene}
           />
         )}
         {showWizard && (
