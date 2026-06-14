@@ -167,12 +167,35 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     const webm = `${base}/api/demo/recording/_v${version}.webm`;
     const poster = `${base}/api/demo/recording/_v${version}-poster.jpg`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#0b1020}video{width:100%;height:100%;display:block;object-fit:contain}</style>
-</head><body><video controls poster="${poster}">
-  <source src="${mp4}" type="video/mp4">
-  <source src="${webm}" type="video/webm">
-</video></body></html>`);
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0b1020;overflow:hidden}
+.c{position:relative;width:100%;height:100%}
+video{width:100%;height:100%;display:block;object-fit:contain}
+#btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:72px;height:72px;border-radius:50%;
+  background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:background .15s;pointer-events:all}
+#btn:hover{background:rgba(255,255,255,.3)}
+#btn svg{margin-left:5px}
+#btn.gone{display:none}
+</style></head><body>
+<div class="c">
+  <video id="v" controls poster="${poster}">
+    <source src="${mp4}" type="video/mp4">
+    <source src="${webm}" type="video/webm">
+  </video>
+  <div id="btn" onclick="go()"><svg width="30" height="30" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg></div>
+</div>
+<script>
+const v=document.getElementById('v'),btn=document.getElementById('btn');
+function go(){v.play();btn.classList.add('gone');}
+v.addEventListener('play',()=>btn.classList.add('gone'));
+v.addEventListener('pause',()=>{if(v.currentTime>0&&!v.ended)btn.classList.remove('gone');});
+v.addEventListener('ended',()=>btn.classList.remove('gone'));
+</script>
+</body></html>`);
   });
 
   // Conversation transcript (ADR-0014): written by the bus bridge (chat/status), read here.
