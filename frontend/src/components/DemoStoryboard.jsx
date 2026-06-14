@@ -21,7 +21,6 @@ export default function DemoStoryboard({
   const [playing, setPlaying] = useState(false);
   const [showAddScene, setShowAddScene] = useState(false);
   const videoRef = useRef(null);
-  const filmstripRef = useRef(null);
 
   useEffect(() => { setPlaying(false); setActiveIdx(null); }, [videoSrc]);
 
@@ -37,9 +36,6 @@ export default function DemoStoryboard({
       videoRef.current.play().catch(() => {});
       setPlaying(true);
     }
-    // scroll the matching filmstrip card into view
-    const card = filmstripRef.current?.querySelector(`[data-idx="${i}"]`);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }
 
   useEffect(() => {
@@ -91,9 +87,17 @@ export default function DemoStoryboard({
               className={`wi-sb-chitem${activeIdx === i ? " is-active" : ""}`}
               onClick={() => seekTo(ch, i)}
             >
-              <span className="wi-sb-chitem__n">{String(i + 1).padStart(2, "0")}</span>
-              <span className="wi-sb-chitem__title">{ch.title || `Scene ${i + 1}`}</span>
-              {ch.badge && <span className="wi-sb-chitem__time">{ch.badge}</span>}
+              <div className="wi-sb-chitem__thumb">
+                {ch.thumb
+                  ? <img src={ch.thumb} alt="" className="wi-sb-chitem__img" />
+                  : <SceneThumb index={i} />
+                }
+                {ch.badge && <span className="wi-sb-chitem__badge">{ch.badge}</span>}
+              </div>
+              <div className="wi-sb-chitem__info">
+                <span className="wi-sb-chitem__n">{String(i + 1).padStart(2, "0")}</span>
+                <span className="wi-sb-chitem__title">{ch.title || `Scene ${i + 1}`}</span>
+              </div>
             </button>
           ))}
         </div>
@@ -146,35 +150,6 @@ export default function DemoStoryboard({
           )}
         </div>
 
-        {/* Filmstrip: real screenshots */}
-        {chapters.length > 0 && (
-          <div className="wi-sb-filmstrip">
-            <div className="wi-sb-filmstrip__scroll" ref={filmstripRef}>
-              {chapters.map((ch, i) => (
-                <button
-                  key={ch.id}
-                  data-idx={i}
-                  className={`wi-sb-fcard${activeIdx === i ? " is-active" : ""}`}
-                  onClick={() => seekTo(ch, i)}
-                  title={`${ch.title}${ch.badge ? ` — ${ch.badge}` : ""}`}
-                >
-                  <div className="wi-sb-fcard__thumb">
-                    {ch.thumb ? (
-                      <img src={ch.thumb} alt={ch.title} className="wi-sb-fcard__img" />
-                    ) : (
-                      <SceneThumb index={i} />
-                    )}
-                    <span className="wi-sb-fcard__badge">{ch.badge || String(i + 1).padStart(2, "0")}</span>
-                  </div>
-                  <span className="wi-sb-fcard__title">{ch.title || `Scene ${i + 1}`}</span>
-                </button>
-              ))}
-            </div>
-            <div className="wi-sb-filmstrip__meta">
-              {currentDoc}{viewing != null ? ` · v${viewing}` : ""}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
