@@ -165,10 +165,11 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     const base = `/d/${documentId}`;
     const mp4 = `${base}/api/demo/recording/_v${version}.mp4`;
     const webm = `${base}/api/demo/recording/_v${version}.webm`;
+    const poster = `${base}/api/demo/recording/_v${version}-poster.jpg`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(`<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#0b1020}video{width:100%;height:100%;display:block;object-fit:contain}</style>
-</head><body><video controls autoplay="false">
+</head><body><video controls poster="${poster}">
   <source src="${mp4}" type="video/mp4">
   <source src="${webm}" type="video/webm">
 </video></body></html>`);

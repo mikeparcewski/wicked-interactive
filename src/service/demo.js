@@ -273,6 +273,11 @@ export async function recordDemo(dir, opts = {}) {
         "-i", webmPath, "-vcodec", "libx264", "-acodec", "aac", "-pix_fmt", "yuv420p", mp4Path, "-y",
       ], { timeout: 120_000 });
     }
+    // Generate a poster thumbnail from the mp4 at 2 seconds for the video player preview frame.
+    const posterPath = join(recDir, videoFile.replace(/\.webm$/, "-poster.jpg"));
+    if (ffmpeg && existsSync(mp4Path) && !existsSync(posterPath)) {
+      spawnSync(ffmpeg, ["-i", mp4Path, "-ss", "00:00:02", "-vframes", "1", "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
+    }
   } catch { /* conversion is best-effort */ }
 
   const html = storyboard({
