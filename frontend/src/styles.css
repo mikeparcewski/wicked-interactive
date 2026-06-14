@@ -1245,7 +1245,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
    ========================================================================== */
 .wi-storyboard {
   position: absolute; top: 0; left: 0; right: 0; bottom: 130px;
-  display: grid; grid-template-columns: 230px 1fr;
+  display: grid; grid-template-columns: 300px 1fr;
   overflow: hidden;
 }
 .wi-storyboard--busy { pointer-events: none; opacity: .8; }
@@ -1326,7 +1326,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 /* Thumbnail on the left */
 .wi-sb-chitem__thumb {
   flex: 0 0 auto; position: relative;
-  width: 90px; height: 56px; border-radius: 6px;
+  width: 128px; height: 72px; border-radius: 6px;
   overflow: hidden; background: var(--wi-surface-2);
 }
 .wi-sb-chitem__img {
