@@ -138,19 +138,22 @@ it has a hard 2.5s shutdown cap so a held-open SSE connection can't wedge it.)
 ## Step 4 — Open the browser
 
 Open the printed base URL. If documents already exist, open `/?doc=<name>`; otherwise
-open `/` so the user lands on the document picker and the "New document" modal.
+open `/` so the user lands on the empty screen.
 
 ```bash
 # macOS: open   | Linux: xdg-open   | Windows: start
 open "http://localhost:<PORT>/" 2>/dev/null || xdg-open "http://localhost:<PORT>/" 2>/dev/null || true
 ```
 
-Tell the user, in the browser-facing chat is best, but the terminal is fine here:
-- New documents: click **New document**, name it, then either brainstorm in chat from a
-  blank doc OR choose **Build from my files** to point at content you already have — the
-  agent indexes it and drafts the document for you.
-- Existing documents: click a block to comment, "Change text" for exact edits, or type
-  in the assistant chat for anything bigger.
+**If this session was spawned from an idea** (the user gave you a topic or brief), **always open
+`/`** — not `/?doc=<name>` — even if other docs exist. The `assist` skill's Step 0.5 will create
+the new document immediately after and the browser will auto-navigate there in working mode
+(locked chat + generation veil). Opening an existing doc instead would block that auto-navigation.
+
+Tell the user what's happening only if they need orientation:
+- Spawned from an idea: `assist` handles this — no user instruction needed.
+- No idea / returning user: click a doc in the sidebar, or type a brief in the chat box to start
+  a new one.
 
 ## Step 5 — Enter the supervising loop (REQUIRED)
 

@@ -54,6 +54,47 @@ wibus() {  # wibus <event_type> <subdomain> <json-payload>
 }
 ```
 
+## Step 0.5 — Auto-create the document when launched with an idea
+
+**Run this step only when** both conditions hold:
+1. The conversation context contains a specific topic, idea, or brief the user wants turned into
+   a document (they said something like "build a presentation about X" or "make a page on Y").
+2. No existing document was opened by `serve` — i.e., the browser is on the empty screen
+   (no `?doc=` param in context, or `serve` opened `/` because the docs folder was empty).
+
+**Skip this step** if the user just said "start wicked-interactive" with no content idea, or if
+`serve` already opened to an existing document.
+
+Derive a URL-safe slug from the brief, then create the document via the REST API:
+
+```bash
+# Write the creation payload to a temp file — avoids any shell JSON-escaping issues with the brief
+python3 -c "
+import json, sys, re
+brief = '''<the full brief from context>'''
+words = re.sub(r'[^a-z0-9 ]+', '', brief.lower()).split()
+slug = '-'.join(words[:6])[:40] or 'new-document'
+sys.stdout.write(json.dumps({'name': slug, 'kind': 'source', 'brief': brief}))
+" > /tmp/wi-newdoc.json
+
+DOC_RESPONSE="$(curl -sX POST "$BASE/api/docs" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/wi-newdoc.json)"
+
+DOC_NAME="$(python3 -c "import json,sys; print(json.loads(sys.argv[1])['name'])" "$DOC_RESPONSE")"
+echo "Created doc: $DOC_NAME"
+rm -f /tmp/wi-newdoc.json
+```
+
+`$BASE` is the URL `serve` printed (e.g. `http://localhost:4400`).
+
+The service emits `wicked.doc.created` which the browser receives via SSE and **automatically
+navigates** to `?doc=<name>` in working mode — the chat opens locked and the generation veil
+shows. You do NOT need to re-open or redirect the browser.
+
+Use `$DOC_NAME` as `document_id` in the Step 1 greeting below, and proceed straight to
+Step 5 (generate first draft) after greeting — this is a `source` kind doc.
+
 ## Step 1 — Go live: greet, then arm the watch
 
 Two actions, in order. **No version checks, no choosing between approaches** — do exactly this:

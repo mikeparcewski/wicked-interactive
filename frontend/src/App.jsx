@@ -373,6 +373,17 @@ export default function App() {
       setAgentBusy(false);
       setStatus({ kind: "error", text: payload.error || "something went wrong" });
     },
+    // When the agent creates a doc externally (spawned-from-idea flow) and the browser is on the
+    // empty screen, auto-navigate to the new doc. Generation-kind docs land in working mode via
+    // the wi-generating sessionStorage flag (same path as the wizard's onCreateDoc).
+    "wicked.doc.created": (payload) => {
+      if (!currentDoc && payload.document_id) {
+        if (payload.kind === "source" || payload.kind === "demo") {
+          try { sessionStorage.setItem("wi-generating", payload.document_id); } catch { /* private mode */ }
+        }
+        navigateToDoc(payload.document_id);
+      }
+    },
   }, { docId: currentDoc });
 
   // ---- actions ----
