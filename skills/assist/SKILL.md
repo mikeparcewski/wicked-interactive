@@ -26,13 +26,17 @@ architecture assumes is present. There is no second embedded model; do not add o
 *emit* to make changes and narrate progress. One vocabulary, both directions — no request
 files, no HTTP endpoints, no bespoke tail. Run this as a continuous loop until the user stops.
 
-> **Do NOT rely on a passive background tail to wake you.** Most agent harnesses (Claude Code
-> included) only re-invoke the agent when a backgrounded process **completes** — a
-> `wicked-bus subscribe` tail that never exits will never wake you, so `wicked.doc.created`,
-> `wicked.chat.posted`, and `wicked.feedback.processed` pile up unread and the in-browser loop
-> silently hangs. The fix (Step 1) is `wicked-bus subscribe --drain`: it delivers pending events
-> and **exits**, so process-completion wakes you — then you re-arm (Step 11). (`--drain` is always
-> available — wicked-bus is a pinned dependency; don't check its version.)
+> **Two subscribe patterns — pick the right one for your harness:**
+>
+> - **Claude Code + Monitor tool** (Step 1): run a *persistent* subscribe (no `--drain`) wrapped in
+>   Monitor. Monitor fires a notification on **each stdout line**, so every event wakes you the
+>   instant it arrives — no drain needed, zero noise between events. The `while true` in Step 11
+>   silently restarts after idle-timeout; nothing echoes.
+>
+> - **Any other harness** (non-Monitor background process): use `--drain` instead. Standard
+>   background processes only notify on *completion*; a never-exiting subscribe would silently
+>   swallow all events. `--drain` delivers pending events and exits, process-completion wakes you,
+>   then you re-arm. (`--drain` is always available — wicked-bus is a pinned dep.)
 
 ## Step 0 — Set your bus identity
 
@@ -106,25 +110,26 @@ only if none is open yet):
 wibus wicked.chat.posted chat '{"document_id":"<doc>","role":"agent","text":"I'\''m here — describe a change or click any block and I'\''ll get to work."}'
 ```
 
-**2. Arm the watch.** In Claude Code, run this self-exiting drain **with the Monitor tool** so each
-delivered line wakes you the instant it arrives. This is THE way — not a background tail (that only
-wakes you on completion → events pile up unread, the #11 bug), and not a decision to weigh:
+**2. Arm the watch.** In Claude Code, run a **persistent subscribe with the Monitor tool** — Monitor
+fires on each stdout line, so every event wakes you the instant it arrives, with zero noise between
+events. This is THE way — not a drain loop, not a decision to weigh:
 
 ```bash
 wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
-  --cursor-init latest --drain --idle-timeout 120000
+  --cursor-init latest --idle-timeout 120000
 ```
 
-`--drain` delivers every event past your **durable cursor** (one JSON envelope per line —
-`{ "event_type", "payload": { "document_id", … }, "producer_id", … }`) then **exits**, which is
-what wakes you. Anything that arrives while you're working is held by the durable cursor and
-delivered on your next drain (nothing lost, nothing redelivered). When it exits, re-arm (Step 11).
+Each event arrives as one JSON envelope on stdout — `{ "event_type", "payload": { "document_id", … },
+"producer_id", … }` — and Monitor delivers it to you immediately. Anything that arrives while you're
+working is held by the durable cursor and delivered on the next Monitor notification (nothing lost,
+nothing redelivered). When the process exits after idle-timeout, Step 11 restarts it silently.
 
-*(Not in Claude Code? Run the exact same command without Monitor — take the batch when it exits,
-then re-arm. Same command either way.)*
+*(Not in Claude Code? Use `--drain` instead — standard background processes only notify on
+completion; a persistent subscribe would swallow events. Add `--drain`, take the batch when it
+exits, then re-arm.)*
 
 `<BASE>` is the URL `serve` printed (e.g. `http://localhost:4400`); per-doc state-plane reads
-live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and act on the rest**:
+live under `<BASE>/d/<doc>/…`. From each delivered line, **skip the noise and act on the rest**:
 
 - **Ignore your own emissions** (`producer_id: "wi-agent"`) and the service's facts
   (`wicked.version.created`, `wicked.export.requested`) — the browser handles those.
@@ -142,9 +147,11 @@ live under `<BASE>/d/<doc>/…`. From the drained lines, **skip the noise and ac
 | `wicked.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
 | `wicked.status.requested`            | UI heartbeat — you've been quiet while working | post a real `working` status now, naming the current step (Step 3d) |
 
-After you've handled the drained batch, **re-run the drain** (Step 11). The durable cursor has
-already advanced past what you drained, so the next drain returns only new events — including
-anything that arrived while you were working (the bus held it; nothing is lost or redelivered).
+After you've handled an event, the Monitor stays armed — no re-arm needed mid-batch. When all
+pending notifications are processed, the persistent subscribe continues listening. The durable
+cursor tracks your position; anything that arrived while you were working is queued and delivered
+as the next Monitor notification (nothing is lost or redelivered). Re-arm only after an
+idle-timeout exit (Step 11).
 
 ## Step 2 — The one rule that must never break: preserve every `data-wid`
 
@@ -656,30 +663,31 @@ For any doc where `head === 0`:
 > The bus drain only delivers events the cursor hasn't seen; orphaned docs never surface again
 > via the bus alone.
 
-In Claude Code, arm the drain once with a **self-re-arming Monitor** so idle timeouts never kill
-the loop. Do this at the end of Step 1 (or immediately on re-entry after handling a batch):
+In Claude Code, arm a **persistent subscribe via Monitor** so the loop survives idle timeouts
+without generating noise. Do this at the end of Step 1 (or immediately on re-entry):
 
 ```bash
 # In Claude Code — arm via Monitor tool with this command:
 export WICKED_BUS_PRODUCER_ID=wi-agent
 while true; do
-  wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --drain --idle-timeout 120000
-  echo "[re-armed]"
+  wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --idle-timeout 120000
 done
 ```
 
-Pass `persistent: true` to Monitor so it survives indefinitely. The `while true` restarts the
-drain the instant it exits (idle timeout or batch delivery) — no manual re-arm needed. A
-`[re-armed]` notification is the idle-cycle heartbeat; ignore it and keep working.
+Pass `persistent: true` to Monitor. The subscribe process blocks silently until an event arrives,
+outputting exactly one JSON line per event — Monitor fires only then. When the process exits after
+120s of no activity, the `while true` restarts it immediately and silently (no echo). The result:
+zero chat noise between events; only real bus events ever reach you.
 
-On each wake:
-1. Act on delivered lines: ignore your own `wi-agent` emissions and service facts
+On each Monitor notification:
+1. Act on the delivered line: ignore your own `wi-agent` emissions and service facts
    (`wicked.version.created`, `wicked.export.requested`), handle the rest (Steps 3–9).
-2. If the drain reports **WB-003**, bump the cursor name (Step 10) and re-start the Monitor
+2. If subscribe reports **WB-003**, bump the cursor name (Step 10) and re-start the Monitor
    with the new `--plugin` name.
 
-> **Never swap `--drain` for a never-exiting `subscribe`** — that wakes you only on completion,
-> which never comes (the #11 bug). The drain *exits*; that's what keeps the loop alive.
+*(Not in Claude Code? Use `--drain` in the loop instead — standard harnesses only wake on process
+exit, so you need the drain to exit cleanly. Replace the subscribe line above with:
+`wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --drain --idle-timeout 120000`)*
 
 Keep going until the user says to stop. The session staying alive IS the product guarantee —
 `serve` + `assist` together are why a non-technical user can click a block and watch it change
