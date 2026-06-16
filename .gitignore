@@ -27,3 +27,7 @@ frontend/.vite/
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# wickedagile.com is its own repo — it only lives here transiently while the
+# umbrella site is being worked on. Never commit it into wicked-interactive.
+site/wickedagile/
