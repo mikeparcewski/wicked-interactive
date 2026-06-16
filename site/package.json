@@ -10,7 +10,7 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^4.16.18",
+    "astro": "^6.4.7",
     "wicked-web": "github:mikeparcewski/wicked-web"
   }
 }
