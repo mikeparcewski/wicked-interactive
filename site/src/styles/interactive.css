@@ -776,9 +776,11 @@ body::after {
 
 /* closing band */
 /* Finale snap: closer + footer fill one viewport */
-.finale { min-height: 75vh; display: flex; flex-direction: column;
+.finale { display: flex; flex-direction: column;
   padding-top: var(--topbar-h); box-sizing: border-box; }
-.closer { flex: 1; display: flex; align-items: center; padding: 44px 0 32px; position: relative; }
+/* "That's the loop" stretches to ~75% of the available (below-topbar) viewport,
+   theme-independent. The footer follows in natural flow; the finale does not snap. */
+.closer { flex: 1; min-height: calc((100svh - var(--topbar-h)) * 0.75); display: flex; align-items: center; padding: 44px 0 32px; position: relative; }
 .closer > .wrap { width: 100%; }
 .closer-grid { display: flex; flex-wrap: wrap; gap: 32px 56px; justify-content: center; align-items: center; }
 .closer-intro { flex: 0 0 100%; }
