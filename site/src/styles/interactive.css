@@ -16,62 +16,30 @@ body { padding-top: var(--topbar-h); }
 ============================================================================ */
 
 /* ---- Tokens (canonical wicked-garden brand) -------------------------------- */
+/* Family palette (canvas / ink / accent / accent-ink / link / hairline /
+   --topbar-h / display+mono fonts + the harbor light & family dark themes) is
+   inherited from the shared wicked-web tokens.css. Only interactive-specific
+   tokens live here, per theme — so interactive matches the family. */
 :root {
-  /* light warm paper ground */
-  --canvas: #faf7ec;
-  --canvas-2: #fffdf5;
-  --surface: #fffdf5;
-  --ink: #232324;
-  --muted: #6f6c5f;
-  --faint: #a8a496;
-  --hairline: rgba(35, 35, 36, 0.16);
-  --hairline-strong: rgba(35, 35, 36, 0.30);
-  --link: #2a566e;       /* harbor */
-  --link-2: #60acc6;     /* sky */
-  --shadow-rgb: 60, 56, 40;
-
-  --accent: #ffda19;     /* signal yellow — the only accent */
   --accent-bright: #ffe45c;
-  --accent-ink: #8a6d05; /* AA mustard — accent AS TEXT on light paper (yellow is illegible here) */
-  --on-accent: #232324;
+  --on-accent: #1c2c36;
   --redline: #9d4f56;    /* wine — pointer redline only */
-
+  --link-2: #60acc6;     /* sky */
+  --shadow-rgb: 14, 38, 52;
   --grain-opacity: 0.05;
   --grain-blend: soft-light;
-
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-
-  --font-display: "Archivo", ui-sans-serif, sans-serif;
   --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
-
   color-scheme: light;
-  --topbar-h: 59px;
 }
 
 [data-theme="dark"] {
-  /* dark charcoal ground */
-  --canvas: #232324;
-  --canvas-2: #2c2c2d;
-  --surface: #313132;
-  --ink: #eae5b6;        /* butter */
-  --muted: #b7b3a4;
-  --faint: #6e6b60;
-  --hairline: rgba(234, 229, 182, 0.13);
-  --hairline-strong: rgba(234, 229, 182, 0.26);
-  --link: #60acc6;
+  --accent-bright: #ffe45c;
+  --on-accent: #0d1117;
+  --redline: #c67079;
   --link-2: #8fcbe0;
   --shadow-rgb: 0, 0, 0;
-
-  --accent: #ffda19;
-  --accent-bright: #ffe45c;
-  --accent-ink: var(--accent); /* on charcoal the bright yellow passes as text — keep the pop */
-  --on-accent: #1e1e1f;
-  --redline: #c67079;
-
   --grain-opacity: 0.07;
   --grain-blend: overlay;
-
   color-scheme: dark;
 }
 
