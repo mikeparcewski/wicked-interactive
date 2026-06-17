@@ -48,7 +48,7 @@ html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; 
 
 body {
   margin: 0;
-  background-color: var(--canvas);
+  background-color: transparent; /* let the shared fixed grid + glow (on html) show through */
   color: var(--ink);
   font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv01";
@@ -438,7 +438,7 @@ body::after {
 .vid-scroll { position: relative; height: 400vh; scroll-snap-align: start; }
 .vid-sentinels { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; }
 .vid-sent { flex: 1; }
-.vid-sticky { position: sticky; top: 0; height: 100vh; display: flex; align-items: center; padding-top: var(--topbar-h); box-sizing: border-box; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); background: var(--canvas); }
+.vid-sticky { position: sticky; top: 0; height: 100vh; display: flex; align-items: center; padding-top: var(--topbar-h); box-sizing: border-box; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
 .vid-sticky > .wrap { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto 1fr; column-gap: 44px; row-gap: 10px; width: 100%; height: calc(100vh - 120px); }
 /* ---- Intro row: spans both columns --------------------------------------- */
 .vid-intro-row { grid-column: 1 / -1; }
@@ -458,7 +458,7 @@ body::after {
   color: var(--muted); margin-top: 3px; transition: color 0.3s var(--ease); line-height: 1.2; }
 .vs-hint { font-size: 0.78rem; color: var(--faint); margin-top: 4px; max-width: 22ch; opacity: 0; transition: opacity 0.3s var(--ease); line-height: 1.4; }
 /* ---- Video player interactive -------------------------------------------- */
-.vid-player { grid-column: 2; align-self: stretch; min-height: 0; border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
+.vid-player { grid-column: 2; align-self: center; justify-self: center; width: 90%; height: 90%; min-height: 0; border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; background: var(--surface); display: flex; flex-direction: column; }
 .vid-chrome { background: color-mix(in oklab, var(--canvas) 60%, var(--surface)); border-bottom: 1px solid var(--hairline); padding: 6px 12px; display: flex; align-items: center; gap: 7px; }
 .vid-tl { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .vid-tl:nth-child(1) { background: #ff5f57; }
