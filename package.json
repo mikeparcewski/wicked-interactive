@@ -38,7 +38,8 @@
     "express": "^4.21.0",
     "js-yaml": "^4.1.0",
     "playwright": "^1.60.0",
-    "wicked-bus": "^2.0.0"
+    "wicked-bus": "^2.0.0",
+    "wicked-web": "github:mikeparcewski/wicked-web"
   },
   "engines": {
     "node": ">=20.0.0"

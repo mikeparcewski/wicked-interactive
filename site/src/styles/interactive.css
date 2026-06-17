@@ -191,10 +191,11 @@ body::after {
 .dochead .where .arrow { color: var(--faint); }
 
 /* ---- The ONE shared artifact ---------------------------------------------- */
-.artifact-cell { grid-column: 2; grid-row: 2; position: relative; min-height: 0; }
+.artifact-cell { grid-column: 2; grid-row: 2; position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }
 .artifact {
   position: relative;
-  height: 100%;
+  height: 90%;   /* browser ~10% smaller than its cell */
+  width: 90%;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 14px;
@@ -780,7 +781,7 @@ body::after {
   padding-top: var(--topbar-h); box-sizing: border-box; }
 /* "That's the loop" stretches to ~75% of the available (below-topbar) viewport,
    theme-independent. The footer follows in natural flow; the finale does not snap. */
-.closer { flex: 1; min-height: calc((100svh - var(--topbar-h)) * 0.75); display: flex; align-items: center; padding: 44px 0 32px; position: relative; }
+.closer { flex: 1; min-height: calc(100svh - var(--topbar-h)); display: flex; align-items: center; padding: 44px 0 32px; position: relative; }
 .closer > .wrap { width: 100%; }
 .closer-grid { display: flex; flex-wrap: wrap; gap: 32px 56px; justify-content: center; align-items: center; }
 .closer-intro { flex: 0 0 100%; }
