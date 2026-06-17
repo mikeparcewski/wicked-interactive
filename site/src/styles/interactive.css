@@ -137,7 +137,17 @@ body::after {
   height: 100vh; min-height: 640px;
   display: flex; align-items: center;
   padding-top: var(--topbar-h); box-sizing: border-box;
+  /* alternating section panel — clearly-tinted so it reads as a distinct band
+     between the transparent (grid-bearing) hero and video sections */
+  background: color-mix(in oklab, var(--canvas-2) 88%, transparent);
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
 }
+/* SameGarden is the page's other alternating panel. The shared component ships
+   a lighter 60% tint; match it to .stage's 88% here so interactive's band
+   pattern reads consistently. Double class = higher specificity than the
+   component's is:global `.same-garden`, so it wins regardless of load order. */
+.same-garden.same-garden { background: color-mix(in oklab, var(--canvas-2) 88%, transparent); }
 .stage-inner { max-width: 1180px; margin: 0 auto; padding: 0 28px; width: 100%;
   display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto 1fr; row-gap: 10px; column-gap: 44px; height: calc(100vh - 120px); }
 
@@ -776,12 +786,15 @@ body::after {
 .vid-sb-ch:hover { opacity: 0.8; }
 
 /* closing band */
-/* Finale snap: closer + footer fill one viewport */
-.finale { display: flex; flex-direction: column;
-  padding-top: var(--topbar-h); box-sizing: border-box; }
-/* "That's the loop" stretches to ~75% of the available (below-topbar) viewport,
-   theme-independent. The footer follows in natural flow; the finale does not snap. */
-.closer { flex: 1; min-height: calc(100svh - var(--topbar-h)); display: flex; align-items: center; padding: 44px 0 32px; position: relative; }
+.finale { display: flex; flex-direction: column; box-sizing: border-box; }
+/* "That's the loop" is the page's final resting view: a full-viewport snap-start
+   section whose content centers on the page (padding-top clears the fixed topbar
+   so align-items:center lands the heading at the visible centre). Making it a
+   snap point is the fix — previously the closer had NO snap-align, so scrolling
+   down from SameGarden ran straight at the footer's (unreachable) snap and
+   clamped to the document bottom, shoving "That's the loop" off the top. Now the
+   closer intercepts that scroll and rests centred; the footer follows. */
+.closer { flex: 1; min-height: 100svh; display: flex; align-items: center; padding: var(--topbar-h) 0 0; position: relative; scroll-snap-align: start; }
 .closer > .wrap { width: 100%; }
 .closer-grid { display: flex; flex-wrap: wrap; gap: 32px 56px; justify-content: center; align-items: center; }
 .closer-intro { flex: 0 0 100%; }
@@ -859,7 +872,7 @@ body::after {
 }
 @media (max-width: 760px){
   .finale { min-height: auto; padding-top: 0; scroll-snap-align: none; }
-  .closer { flex: none; padding: 56px 0 40px; display: block; }
+  .closer { flex: none; min-height: auto; padding: 56px 0 40px; display: block; scroll-snap-align: none; }
   .closer-grid { gap: 20px; }
   .closer-grid .install { max-width: 100%; }
   .closer .cta { margin-top: 0; }
