@@ -22,3 +22,11 @@ Read them as a pipeline — each stage builds on the last:
 These are guidance, not gates. The one hard rule lives in the skill (preserve every `data-wid`;
 ground claims in wicked-brain). Use judgment, and keep it proportional — a quick chat tweak
 doesn't need the full sweep; a first draft or whole-document change does.
+
+## Operating policy
+
+- **[edit-routing.md](edit-routing.md)** — *the deterministic-vs-AI ladder, on one screen.* Which
+  edit/request kinds the model-free service handles deterministically vs which climb to the agent
+  (and to a crew), in rank order with the GATE for each rung. Consolidates the ADR-0010 / ADR-0003
+  doctrine that is otherwise scattered across `feedback-schema.js`, `regenerate.js`, and the assist
+  steps. Read it when you're unsure whether something is yours to author or the service's to apply.
