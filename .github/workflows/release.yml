@@ -1,76 +1,44 @@
 name: Release
 
+# Tag-driven release, aligned with the rest of the wicked ecosystem
+# (testing/loom/vault/bus/brain). A `vX.Y.Z` tag push is the ONLY trigger:
+# the shared reusable workflow SETS the version from the tag
+# (`npm version <X.Y.Z> --no-git-tag-version --allow-same-version`, which runs
+# this repo's `version` lifecycle hook in package.json — syncing
+# .claude-plugin/plugin.json + marketplace.json), then publishes. So a
+# tag-only release works with NO manual manifest pre-bump.
+#
+# Notes:
+# - version_dirs is left at its default (".") so `npm version` runs in the repo
+#   root only — that is where the `version` hook lives and where the published
+#   package's version must land. frontend/ and site/ are `private: true` and
+#   are NOT published from here (site/ deploys via pages.yml); frontend/dist is
+#   committed and shipped via package.json "files", so no build/install is
+#   needed at publish time (no prepublishOnly hook) — hence no
+#   pre_publish_install_dirs.
+# - No setup_python: the unit tests (`node --test test/*.test.js`) are pure Node
+#   and mock playwright/puppeteer; they never download or launch a browser.
+# - enable_sync_pr: true opens a catchup PR so package.json + the plugin
+#   manifests on `main` are bumped to the released version after publish — main
+#   never lags. This is also why `check:version` (the old drift guard) is no
+#   longer needed in the release path; it remains available as
+#   `npm run check:version` for local / PR-time consistency checks.
+
 on:
   push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-  workflow_dispatch:        # manual publish of the current main (e.g. the first release, whose
-                            # tag predates this workflow). Publishes whatever version is in package.json.
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
+  id-token: write
+  pull-requests: write
 
 jobs:
-  # Runs on every push/PR/tag. Proves the package is correct AND that it works on a machine
-  # that is NOT this repo: it packs the npm tarball, installs it into a throwaway consumer
-  # dir, and serves it via npx from there — exactly what an end user gets.
-  verify:
-    runs-on: ubuntu-latest
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'   # playwright is a dep; demos gate the browser separately
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: '20'
-          cache: npm
-      - name: Install (clean, from lockfile)
-        run: npm ci
-      - name: Unit tests
-        run: npm test
-      - name: Plugin version is consistent (and matches the tag, if tagged)
-        run: npm run check:version
-      - name: Cross-machine smoke — packaged tarball installs & serves from a foreign dir
-        run: |
-          set -euo pipefail
-          TGZ="$(npm pack | tail -1)"
-          echo "packed $TGZ"
-          mkdir -p /tmp/consumer && cd /tmp/consumer
-          npm init -y >/dev/null 2>&1
-          npm install "$GITHUB_WORKSPACE/$TGZ" >/dev/null
-          mkdir -p /tmp/wi-docs
-          npx --no-install wicked-interactive serve --root /tmp/wi-docs --port 4411 &
-          SVC=$!
-          up=
-          for _ in $(seq 1 30); do curl -fsS -o /dev/null "http://127.0.0.1:4411/api/docs" && { up=1; break; }; sleep 1; done
-          [ -n "$up" ] || { echo "::error::service did not come up from the packaged install"; kill "$SVC" 2>/dev/null || true; exit 1; }
-          curl -fsS -o /dev/null -w "GET /api/docs   -> HTTP %{http_code}\n" "http://127.0.0.1:4411/api/docs"
-          curl -fsS -o /dev/null -w "GET / (built UI) -> HTTP %{http_code}\n" "http://127.0.0.1:4411/"
-          kill "$SVC" 2>/dev/null || true
-
-  # Publishes to npm on a vX.Y.Z tag using npm Trusted Publishing (OIDC) — no NPM_TOKEN secret,
-  # provenance attached automatically. Requires a one-time trusted-publisher config on the npm
-  # package (Settings -> Publishing access) naming this repo + this workflow file.
-  publish:
-    needs: verify
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write          # OIDC token for npm trusted publishing + provenance
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: '20'
-      # No registry-url / NODE_AUTH_TOKEN: trusted publishing authenticates via the OIDC token
-      # (id-token: write). setup-node's registry-url would inject an empty-token .npmrc that can
-      # shadow OIDC, so we leave npm pointed at the default public registry.
-      - name: Upgrade npm (trusted publishing needs >= 11.5.1)
-        run: npm install -g npm@latest
-      - run: npm ci
-      - name: Publish (trusted publishing — OIDC, no token)
-        run: npm publish
+  release:
+    uses: mikeparcewski/wicked-ci/.github/workflows/node-release.yml@d8c9b0a14fb91c2d13f5da0468eeeff983c27e5a # v1.1.2
+    with:
+      package_name: wicked-interactive
+      enable_sync_pr: true
+    secrets: inherit
