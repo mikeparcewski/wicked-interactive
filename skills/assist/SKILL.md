@@ -164,6 +164,11 @@ rejected fragment means the user's edit silently does nothing. So:
   instrumented automatically), never remove an existing anchor.
 - Verify before you emit (Step 3c).
 
+> **Unsure whether a request is yours or the service's?** See
+> [`references/edit-routing.md`](references/edit-routing.md) — the deterministic-vs-AI ladder on one
+> screen (which edit kinds the model-free service applies instantly vs which climb to you, to a
+> crew, with the GATE for each rung). The rule: the lowest rung that fully covers the task.
+
 ## Step 3 — Fulfil a structural request
 
 ### 3a. Read the event
