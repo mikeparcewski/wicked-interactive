@@ -71,13 +71,35 @@ h1, h2, h3, h4 {
 a { color: var(--link); text-decoration: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
 
-/* fixed film grain over BOTH grounds */
-body::after {
+/* fixed film grain over BOTH grounds (html::after, so it never clobbers the burst) */
+html::after {
   content: "";
   position: fixed; inset: 0; z-index: 90; pointer-events: none;
   opacity: var(--grain-opacity);
   mix-blend-mode: var(--grain-blend);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Background motif = STORYBOARD → editor → outputs (say it, make it).
+   One fixed, palette-recoloured masked layer spanning the page (family engine).
+   Overrides the shared grid (body::before); burst on body::after below. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: none;          /* drop the shared line-grid */
+  background-color: var(--ink);
+  opacity: 0.10;
+  -webkit-mask-image: url("/motifs/storyboard.svg");
+          mask-image: url("/motifs/storyboard.svg");
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: center;  mask-position: center;
+  -webkit-mask-size: cover;       mask-size: cover;
+}
+/* bursts of light — accent top-left + link bottom-right, like the family */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(ellipse 48% 55% at 6% 4%,   rgba(255, 218, 25, 0.16), transparent 60%),
+    radial-gradient(ellipse 52% 52% at 94% 98%, rgba(121, 192, 255, 0.14), transparent 62%);
 }
 
 .kicker {
@@ -137,17 +159,17 @@ body::after {
   height: 100vh; min-height: 640px;
   display: flex; align-items: center;
   padding-top: var(--topbar-h); box-sizing: border-box;
-  /* alternating section panel — clearly-tinted so it reads as a distinct band
-     between the transparent (grid-bearing) hero and video sections */
-  background: color-mix(in oklab, var(--canvas-2) 88%, transparent);
+  /* alternating section panel — translucent tint: reads as a distinct band but
+     lets the fixed storyboard motif show through (vs the clear hero/video) */
+  background: color-mix(in oklab, var(--canvas-2) 50%, transparent);
   border-top: 1px solid var(--hairline);
   border-bottom: 1px solid var(--hairline);
 }
-/* SameGarden is the page's other alternating panel. The shared component ships
-   a lighter 60% tint; match it to .stage's 88% here so interactive's band
+/* SameGarden is the page's other alternating panel — matched to .stage's
+   translucent tint so the storyboard motif shows through both and the band
    pattern reads consistently. Double class = higher specificity than the
    component's is:global `.same-garden`, so it wins regardless of load order. */
-.same-garden.same-garden { background: color-mix(in oklab, var(--canvas-2) 88%, transparent); }
+.same-garden.same-garden { background: color-mix(in oklab, var(--canvas-2) 50%, transparent); }
 .stage-inner { max-width: 1180px; margin: 0 auto; padding: 0 28px; width: 100%;
   display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto 1fr; row-gap: 10px; column-gap: 44px; height: calc(100vh - 120px); }
 
