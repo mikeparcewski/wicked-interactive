@@ -7,25 +7,41 @@
 // (wicked-bus is a hard npm dependency opened fail-fast at serve time — ADR-0021 — so it isn't
 //  a preflight gate here; if it can't open, the service refuses to start.)
 //
-// The plugin-cache list is overrideable via env (`WI_PLUGIN_PATHS`, colon-separated) so
-// non-default installations and tests can be picked up.
+// The plugin-cache list is overrideable via env (`WI_PLUGIN_PATHS`) so non-default
+// installations and tests can be picked up. It is a PATH-style list, so it MUST be split on
+// the platform's `path.delimiter` (':' on POSIX, ';' on Windows) — NOT a hardcoded ':'. On
+// Windows a single absolute path already contains a colon ("C:\Users\..."), so splitting on
+// ':' would shred each entry into garbage. (Cross-platform mandate — see CLAUDE.md.)
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
+// Resolve the user's home directory in a way that is overridable on EVERY platform.
+//
+// `os.homedir()` is the source of truth, but it does NOT honor process.env.HOME on Windows —
+// there it reads USERPROFILE / the OS user profile. Tests (and any caller that needs to
+// redirect home) set process.env.HOME, so we must consult the env explicitly or the seam is a
+// no-op on Windows. We accept HOME or USERPROFILE so the same override works POSIX + Windows,
+// and fall back to os.homedir() when neither is set (production default — unchanged on POSIX).
+function resolveHome() {
+  return process.env.HOME || process.env.USERPROFILE || homedir();
+}
+
 // Exported so service-level plugin-cache lookups (e.g. theme-source) reuse the same paths.
 export function pluginSearchPaths() {
-  const env = (process.env.WI_PLUGIN_PATHS || "").split(":").filter(Boolean);
-  const home = homedir();
+  // PATH-style env list → split on path.delimiter, never a literal ':' (would split "C:\..." on Windows).
+  const env = (process.env.WI_PLUGIN_PATHS || "").split(delimiter).filter(Boolean);
+  const home = resolveHome();
   return [
     ...env,
-    join(home, ".claude/plugins/cache"),
-    join(home, "alt-configs/.claude/plugins/cache"),
-    join(home, ".claude-code/plugins/cache"),
+    // Build with path.join segment-by-segment so separators are correct on every OS.
+    join(home, ".claude", "plugins", "cache"),
+    join(home, "alt-configs", ".claude", "plugins", "cache"),
+    join(home, ".claude-code", "plugins", "cache"),
   ];
 }
 
@@ -38,9 +54,9 @@ function inPluginCache(name) {
 
 function brainInstalled() {
   // npm package: the durable signal is the brain directory (created by `wicked-brain:init`).
-  // The env override doubles as a test seam — WI_PLUGIN_PATHS sets HOME in tests, so the
-  // joined path lands inside the temp dir and detection is deterministic.
-  return existsSync(join(homedir(), ".wicked-brain")) || inPluginCache("wicked-brain");
+  // resolveHome() honors a HOME/USERPROFILE override on every platform, so this is a reliable
+  // test seam (the redirected temp dir is consulted) AND correct in production.
+  return existsSync(join(resolveHome(), ".wicked-brain")) || inPluginCache("wicked-brain");
 }
 
 const DETECTORS = {
