@@ -808,6 +808,8 @@ body::after {
   .vid-step .vs-num { grid-column: 1; grid-row: 1 / span 2; align-self: center; font-family: var(--font-mono); font-size: 1rem; font-weight: 700; color: var(--accent); }
   .vid-step .vs-lab { grid-column: 2; grid-row: 1; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--ink); }
   .vid-step .vs-hint { grid-column: 2; grid-row: 2; opacity: 1 !important; max-width: none; margin-top: 2px; font-size: 0.82rem; line-height: 1.45; color: var(--muted); }
+  /* static stack has no "current" step — neutralize the leaked is-active accent border */
+  .vid-step.is-active { border-color: var(--hairline); }
 }
 /* ---- Video chapter seek ----------------------------------------------------- */
 .vid-sb-ch { cursor: pointer; transition: opacity 0.15s; }
@@ -907,7 +909,7 @@ body::after {
   .closer-grid .install { max-width: 100%; }
   .closer .cta { margin-top: 0; }
   /* wrap the install commands instead of clipping them in a side-scroller */
-  .install__code { white-space: pre-wrap; word-break: break-word; }
+  .install__code { white-space: pre-wrap; overflow-wrap: break-word; }
 }
 
 
