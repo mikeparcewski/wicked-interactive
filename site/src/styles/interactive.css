@@ -45,6 +45,8 @@ body { padding-top: var(--topbar-h); }
 
 * { box-sizing: border-box; border-color: var(--hairline); }
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; scroll-behavior: smooth; scroll-snap-type: y proximity; }
+/* Phones: scroll-snap locks feel janky on mobile — let scrolling run free. */
+@media (max-width: 900px) { html { scroll-snap-type: none; } }
 
 body {
   margin: 0;
@@ -125,9 +127,12 @@ body::after {
   -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 28%, transparent 76%);
           mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 28%, transparent 76%);
 }
-.hero .wrap { position: relative; z-index: 1; }
+/* min-width:0 lets this flex item shrink below its content's min-width.
+   Without it the nowrap demo-prompt forced .wrap to ~463px and the whole
+   hero spilled off the right edge on phones. */
+.hero .wrap { position: relative; z-index: 1; min-width: 0; }
 .hero h1 {
-  font-size: clamp(2.2rem, 5.2vw, 4.2rem);
+  font-size: clamp(1.7rem, 6.5vw, 4.2rem);
   margin: 22px 0 0;
 }
 .hero h1 .y { color: var(--accent); }
@@ -791,17 +796,18 @@ body::after {
   .vid-scroll { height: auto !important; }
   .vid-sentinels { display: none !important; }
   .vid-sticky { position: static !important; height: auto !important; border: none; background: transparent; padding: 40px 0 48px; border-top: 1px solid var(--hairline); }
-  .vid-sticky > .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto; gap: 16px; height: auto; }
+  .vid-sticky > .wrap { grid-template-columns: 1fr; grid-template-rows: auto; gap: 18px; height: auto; }
   .vid-intro-row { grid-column: 1; }
-  .vid-step-ledger { display: none !important; }
-  .vid-player { grid-column: 1; align-self: start; display: block; }
-  .vid-screen { flex: none; min-height: 148px; overflow: visible; }
-  .vid-screen { display: flex !important; flex-direction: column; min-height: 0 !important; gap: 0; }
-  .vid-state { grid-area: unset !important; opacity: 1 !important; pointer-events: auto !important; border-top: 1px solid var(--hairline); }
-  .vid-state:first-child { border-top: none; }
-  .vid-controls { display: none !important; }
-  .vid-player { border-radius: 14px; overflow: hidden; }
-  .vid-chrome .vid-rec { display: none; }
+
+  /* Mobile: the faux video player + storyboard didn't translate — a cramped synthetic
+     UI that reads as a dead interactive. Drop it and present the flow as a clean 4-step
+     stack (same pattern as the conveyor's mobile stack, which works well). */
+  .vid-player { display: none !important; }
+  .vid-step-ledger { display: flex !important; flex-direction: column; grid-column: 1; gap: 10px; }
+  .vid-step { opacity: 1 !important; display: grid; grid-template-columns: auto 1fr; column-gap: 13px; align-items: baseline; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
+  .vid-step .vs-num { grid-column: 1; grid-row: 1 / span 2; align-self: center; font-family: var(--font-mono); font-size: 1rem; font-weight: 700; color: var(--accent); }
+  .vid-step .vs-lab { grid-column: 2; grid-row: 1; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 700; color: var(--ink); }
+  .vid-step .vs-hint { grid-column: 2; grid-row: 2; opacity: 1 !important; max-width: none; margin-top: 2px; font-size: 0.82rem; line-height: 1.45; color: var(--muted); }
 }
 /* ---- Video chapter seek ----------------------------------------------------- */
 .vid-sb-ch { cursor: pointer; transition: opacity 0.15s; }
@@ -890,7 +896,9 @@ body::after {
 
 @media (max-width: 560px){
   .stack-step { grid-template-columns: 1fr; gap: 14px; }
-  .hero { height: auto; padding: 48px 0 36px; scroll-snap-align: none; }
+  /* min-height:0 kills the 100vh fill so the hero is content-height — no dead
+     space between the playground and "01 Describe". */
+  .hero { height: auto; min-height: 0; padding: 48px 0 32px; scroll-snap-align: none; }
 }
 @media (max-width: 760px){
   .finale { min-height: auto; padding-top: 0; scroll-snap-align: none; }
@@ -898,6 +906,8 @@ body::after {
   .closer-grid { gap: 20px; }
   .closer-grid .install { max-width: 100%; }
   .closer .cta { margin-top: 0; }
+  /* wrap the install commands instead of clipping them in a side-scroller */
+  .install__code { white-space: pre-wrap; word-break: break-word; }
 }
 
 
