@@ -13,11 +13,25 @@ export default function Composer({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const taRef = useRef(null);
+  const wrapRef = useRef(null);
 
   useEffect(() => {
     const ta = taRef.current;
     if (ta) { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 160) + "px"; }
   }, [text]);
+
+  // Keep --wi-composer-h in sync so the thread pill rises with the composer.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const main = wrap.closest(".wi-main");
+    if (!main) return;
+    const ro = new ResizeObserver(() => {
+      main.style.setProperty("--wi-composer-h", `${wrap.offsetHeight}px`);
+    });
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
 
   // Clear the optimistic "sending" flag once the transcript grows (server echoed the message).
   useEffect(() => { setSending(false); }, [logLen]);
@@ -35,7 +49,7 @@ export default function Composer({
   }
 
   return (
-    <div className="wi-composer-wrap">
+    <div className="wi-composer-wrap" ref={wrapRef}>
       <div className="wi-composer">
         <form className={`wi-bar${demoMode ? " wi-bar--demo" : ""}`} onSubmit={send}>
           <textarea

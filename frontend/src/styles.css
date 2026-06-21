@@ -842,7 +842,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
    z-index 55 sits ABOVE the composer dock (z 50) so the conversation HISTORY overlays the
    composer where they overlap (Change-3 fix: previously z 40 < composer 50, so the opaque
    composer dock rendered in front of and clipped the thread). */
-.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: 112px; width: min(820px, calc(100% - 64px)); z-index: 55;
+.wi-thread { position: absolute; left: 50%; transform: translateX(-50%); bottom: var(--wi-composer-h, 112px); width: min(820px, calc(100% - 64px)); z-index: 55;
   display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: color-mix(in oklab, var(--wi-surface) 92%, transparent); backdrop-filter: blur(10px);
   border: 1px solid var(--wi-line); border-radius: 16px; box-shadow: 0 22px 60px -30px rgba(0,0,0,.45); }
@@ -859,7 +859,7 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-thread__collapse:hover { background: var(--wi-accent-soft); color: var(--wi-accent-ink); border-color: color-mix(in oklab, var(--wi-accent) 50%, transparent); }
 .wi-thread__collapse svg { display: block; }
 .wi-thread__log { flex: 1 1 auto; overflow-y: auto; padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 12px; }
-.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: 108px; z-index: 55;
+.wi-thread-tab { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--wi-composer-h, 112px) - 4px); z-index: 55;
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
   border: 1px solid var(--wi-line); background: var(--wi-surface); color: var(--wi-ink-soft); cursor: pointer; font: inherit;
   box-shadow: 0 8px 22px -14px rgba(0,0,0,.4); }
