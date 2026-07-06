@@ -103,6 +103,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       const file = basename(result.path);
       const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
       emit("wicked.export.requested", { version, format });
+      // Export gate: announce the freshly-rendered artifact + its on-disk path so the supervising
+      // agent can vision-review it before the user trusts it (the agent replies wicked.export.reviewed).
+      emit("wicked.export.generated", { version, format, path: result.path, file, download });
       res.json({ format, ...result, file, download });
     } catch (e) {
       res.status(400).json({ error: e.message });

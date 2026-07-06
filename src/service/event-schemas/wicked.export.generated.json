@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Export generated",
+  "type": "object",
+  "required": [
+    "document_id",
+    "version",
+    "format",
+    "path",
+    "file"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer"
+    },
+    "format": {
+      "enum": [
+        "html",
+        "pdf",
+        "pptx"
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "file": {
+      "type": "string"
+    },
+    "download": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}
