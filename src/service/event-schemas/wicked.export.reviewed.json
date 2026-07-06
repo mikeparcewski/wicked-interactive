@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Export reviewed",
+  "type": "object",
+  "required": [
+    "document_id",
+    "version",
+    "verdict"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer"
+    },
+    "verdict": {
+      "enum": ["approved", "rejected", "needs_revision"]
+    },
+    "notes": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -146,8 +146,28 @@ async function daemonize(root, requested, restart = false) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args._[0] !== "serve") {
-    console.error("usage: wicked-interactive serve [--root <docs-dir>] [--port N] [--daemon] [--restart]");
+  const cmd = args._[0];
+
+  // Artifact subcommands — dynamically imported so serve-specific modules are not loaded.
+  if (cmd === "create") {
+    const { runCreate } = await import("../src/artifact/create.js");
+    process.exit((await runCreate(args)) ?? 0);
+  }
+  if (cmd === "publish") {
+    const { runPublish } = await import("../src/artifact/publish.js");
+    process.exit((await runPublish(args)) ?? 0);
+  }
+  if (cmd === "validate") {
+    const { runValidate } = await import("../src/artifact/validate.js");
+    process.exit((await runValidate(args)) ?? 0);
+  }
+
+  if (cmd !== "serve") {
+    console.error("usage: wicked-interactive <create|publish|validate|serve> [options]");
+    console.error("  create   --from-crew <id> | --from-signal <id> | --from-file <path>  [--output <path>]");
+    console.error("  publish  <artifact-path> [--api-key <key>]");
+    console.error("  validate <artifact-path>");
+    console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart]");
     process.exit(1);
   }
   // ONE shared instance by default (ADR-0022 amended): every session converges on the canonical

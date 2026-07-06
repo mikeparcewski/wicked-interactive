@@ -46,6 +46,19 @@ const PRINT_BASELINE_CSS = [
   "@media print {",
   "  * { box-shadow: none !important; text-shadow: none !important; }",
   "  * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }",
+  // COMPLETED-STATE (issue: blank/partial PDFs). Decks animate content in on the SCREEN —
+  // scroll-reveals and step-builds hide elements with opacity/visibility/transform until
+  // shown, and looping animations spin forever. In PRINT there is no scroll and no
+  // keyframe clock, so that content renders INVISIBLE or frozen mid-spin. Force every
+  // animation/transition off (settle to its base) and force the common reveal/step
+  // patterns to their COMPLETED, visible state so the whole deck prints as authored.
+  // This is universally safe: a static doc has nothing matching these selectors.
+  "  *, *::before, *::after { animation: none !important; transition: none !important; }",
+  "  [data-step], [data-reveal], [data-animate], [data-anim], [data-aos],",
+  "  [class*=\"reveal\"], [class*=\"animate\"], [class*=\"fade\"], [class*=\"-rv\"],",
+  "  [class*=\"slide-in\"], [class*=\"build\"], .is-hidden, .is-out {",
+  "    opacity: 1 !important; visibility: visible !important; transform: none !important;",
+  "  }",
   // Any run that clipped a gradient to its glyphs: paint it solid instead.
   "  [style*=\"-webkit-background-clip\"], [style*=\"background-clip\"],",
   "  [style*=\"text-fill-color\"] {",

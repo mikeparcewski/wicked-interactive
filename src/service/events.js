@@ -46,6 +46,11 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.review.completed":    { subdomain: "review",     owners: [AGENT],         uiEmittable: false },
   "wicked.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
   "wicked.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
+  // Export gate (ADR-0009 follow-up): the service announces a freshly-rendered artifact with its
+  // path so the supervising agent can vision-review it BEFORE the user is told it's good; the
+  // agent posts its verdict back as wicked.export.reviewed.
+  "wicked.export.generated":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
+  "wicked.export.reviewed":     { subdomain: "export",     owners: [AGENT],         uiEmittable: false },
   "wicked.error.raised":        { subdomain: "error",      owners: [SERVICE],       uiEmittable: false },
 });
 
