@@ -1,7 +1,7 @@
 {
   "name": "wicked-interactive",
   "version": "0.5.30",
-  "description": "Interactive HTML & presentation builder with an in-browser feedback loop for non-technical business users. Build a draft, review it in the browser, highlight any block, attach plain-language feedback, and watch it regenerate live — with the supervising Claude session as the intelligence in the loop. Versioned, forkable, and exportable to self-contained HTML or PDF.",
+  "description": "Interactive HTML & presentation builder with an in-browser feedback loop for non-technical business users. Build a draft, review it in the browser, highlight any block, attach plain-language feedback, and watch it regenerate live — with the supervising Claude session as the intelligence in the loop. Versioned, forkable, and exportable to self-contained HTML, PDF, native PowerPoint (PPTX), or video.",
   "author": {
     "name": "Mike Parcewski",
     "url": "https://github.com/mikeparcewski"
@@ -18,7 +18,8 @@
     "structural-editing",
     "agent-in-the-loop",
     "self-contained-export",
-    "html-to-pdf",
+    "pptx",
+    "video",
     "business-users",
     "wicked-bus",
     "event-driven"
