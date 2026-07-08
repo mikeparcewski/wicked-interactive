@@ -830,7 +830,7 @@ body::after {
 .closer-intro { flex: 0 0 100%; }
 .closer h2 { font-size: clamp(1.9rem, 4vw, 3rem); }
 .closer p { color: var(--muted); max-width: 72ch; margin: 16px 0 0; font-size: 1.08rem; }
-.closer-grid .install { margin: 0; flex: 0 0 auto; }
+.closer-grid .install-group { margin: 0; flex: 0 0 auto; }
 .gh-pill { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   text-decoration: none; color: var(--ink); align-self: center; justify-self: center;
   background: var(--surface); border: 1px solid var(--hairline-strong);
@@ -844,9 +844,16 @@ body::after {
   padding: 8px 20px; border-radius: 999px; white-space: nowrap;
   transition: opacity 0.2s var(--ease); }
 .gh-pill:hover span { opacity: 0.78; }
-/* install box — the two Claude Code commands, copy-able, on the page itself */
-.install { margin: 30px auto 22px; max-width: 560px; text-align: left; border: 1px solid var(--hairline);
+/* install group — family installer (primary) + this product's direct install (secondary) */
+.install-group { margin: 30px auto 22px; max-width: 560px; display: flex; flex-direction: column; gap: 14px; }
+.install { margin: 0; text-align: left; border: 1px solid var(--hairline);
   border-radius: 12px; background: var(--surface); overflow: hidden; }
+.install--primary { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent); }
+.install--secondary { opacity: 0.94; }
+.install__tag { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: 5px; margin-left: 8px; vertical-align: middle; }
+.install__note { margin: 0; padding: 0 16px 13px; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+.install__note code { font-family: var(--font-mono); color: var(--ink); font-size: 0.92em; }
 .install__bar { display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 9px 14px; border-bottom: 1px solid var(--hairline); }
 .install__label { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
@@ -906,7 +913,7 @@ body::after {
   .finale { min-height: auto; padding-top: 0; scroll-snap-align: none; }
   .closer { flex: none; min-height: auto; padding: 56px 0 40px; display: block; scroll-snap-align: none; }
   .closer-grid { gap: 20px; }
-  .closer-grid .install { max-width: 100%; }
+  .closer-grid .install-group { max-width: 100%; }
   .closer .cta { margin-top: 0; }
   /* wrap the install commands instead of clipping them in a side-scroller */
   .install__code { white-space: pre-wrap; overflow-wrap: break-word; }
