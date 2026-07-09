@@ -1,12 +1,16 @@
 ---
 /**
- * index.astro — the wicked-interactive landing page (wi.wickedagile.com).
- * Converted from the original single-file site/index.html to consume the shared
- * wicked-web chrome (Base + Topbar + Footer). Content, the prompt-playground,
- * the scroll-pinned "Conveyor", the demo-video scroller, and the mobile authored
- * stack are all preserved. The page's own topbar/footer markup + CSS and its
- * .dark-class theme system were removed: the shared chrome owns the chrome and
- * drives theming via [data-theme] (no-flash init in Base, toggle in Topbar).
+ * index.astro — wicked-interactive landing page (wi.wickedagile.com).
+ *
+ * The hero IS the demo: the "Talkback Canvas" — a real, hands-on point-and-say
+ * editor the visitor drives. describe -> build (block-by-block shimmer) ->
+ * click a block, say the change (highlighter + "only this block touched" halo)
+ * -> rewind via version pips. A canned engine, but it genuinely reacts to
+ * clicks and typed input. The old scroll-pinned Conveyor, the demo-video
+ * scroll-jack, and the preset-cycling playground are gone.
+ *
+ * Shared wicked-web chrome (Base + Topbar + Footer + SameGarden) owns the
+ * chrome and drives theming via [data-theme]; this page only styles the canvas.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -14,731 +18,525 @@ import Footer from 'wicked-web/components/Footer.astro';
 import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/interactive.css';
 
-const title = 'wicked-interactive \u2014 Describe it, watch it build in your browser, ship it';
-const description = 'wicked-interactive turns plain language into living documents: describe a deck, doc, landing page, or demo in your own words, watch it build in the browser, then point at any block and say what to change \u2014 it reworks just that block and keeps everything else. Export self-contained HTML, PDF, native PowerPoint, or video. Local-first; runs on the agent already in your session \u2014 no extra setup.';
+const title = 'wicked-interactive — Point at the page. Say the change. Ship it tonight.';
+const description = 'wicked-interactive turns plain language into living documents: describe a deck, doc, landing page, or demo, watch it build in the browser, then click any block and say the change — only that block reworks, everything else holds. Export self-contained HTML, PDF, PowerPoint, or video. Local-first; runs on the agent already in your session — no extra setup.';
 const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 ---
 
 <Base title={title} description={description}>
   <Topbar pkg="wicked-interactive" repo={repo} />
 
+  <!-- ── Hero = the demo ──────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="kicker">Interactive document builder · point-and-say editing</div>
+      <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
+      <p class="lede">Describe a doc and watch it build, live. Then click any block and say what to change &mdash; <b>only that block reworks</b>, everything else holds perfectly still. Try it right here.</p>
 
-<!-- ── Hero ────────────────────────────────────────────────────────────── -->
-<section class="hero">
-  <div class="grid-floor"></div>
-  <div class="wrap">
-    <div class="kicker">Interactive HTML &amp; presentation builder · in-browser feedback loop</div>
-    <h1>Describe it. Watch it build in your browser.<br>Point, say the change — <span class="y">ship it tonight.</span></h1>
-    <p class="lede">No blank page. No screen recorder. Describe a document — a live themed draft renders instantly. Highlight any block and say the change, <b>it reworks just that block</b>. Or point it at any running app and get back a narrated interactive storyboard. One agent, both loops.</p>
-
-    <div class="playground" role="group" aria-label="Try a different document type">
-      <div class="pg-label">Try a different document type</div>
-      <div class="pg-chips" id="pgChips">
-        <button class="pg-chip is-active" data-preset="0" type="button">Launch brief</button>
-        <button class="pg-chip" data-preset="1" type="button">Investor deck</button>
-        <button class="pg-chip" data-preset="2" type="button">Onboarding guide</button>
-        <button class="pg-chip" data-preset="3" type="button">Release notes</button>
-      </div>
-      <div class="pg-input" aria-live="polite">
-        <span class="pg-user">You</span>
-        <span class="pg-prompt" id="pgPrompt">Make me a one-page Q3 launch brief for the team.</span>
-        <span class="pg-caret" aria-hidden="true"></span>
-      </div>
-      <p class="pg-hint">↕ updates the demo below</p>
-    </div>
-
-  </div>
-</section>
-
-<!-- ── THE CONVEYOR (scroll-pinned) ────────────────────────────────────── -->
-<div class="conveyor" id="conveyor">
-
-  <!-- invisible sentinels drive the station state -->
-  <div class="sentinels" aria-hidden="true">
-    <div class="sentinel" data-s="1"></div>
-    <div class="sentinel" data-s="2"></div>
-    <div class="sentinel" data-s="3"></div>
-    <div class="sentinel" data-s="4"></div>
-  </div>
-
-  <!-- ONE sticky stage; ONE shared artifact element -->
-  <div class="stage" id="stage" data-station="1"
-       style="--y1: 23px; --y2: 30%; --y3: 55%; --y4: 80%;">
-    <div class="stage-inner">
-
-      <!-- intro copy — spans both columns -->
-      <div class="conv-intro-row">
-        <div class="kicker">The loop, on a belt</div>
-        <h2>One artifact. Four stations. It becomes the thing you asked for.</h2>
-        <p>The headline you read as a prompt at the first station is the exact same element that gets re-set and stamped at the last. Nothing else on the page is touched — that is the whole promise, shown rather than said.</p>
-      </div>
-
-      <!-- left rail station ledger -->
-      <aside class="ledger">
-        <div class="belt-label">Station ledger</div>
-        <div class="track">
-          <span class="tick" aria-hidden="true"></span>
-          <div class="station" data-s="1">
-            <div class="num">01</div>
-            <div class="label">Describe</div>
-            <div class="hint">Plain language, or point at your files / a URL.</div>
-          </div>
-          <div class="station" data-s="2">
-            <div class="num">02</div>
-            <div class="label">Watch&nbsp;it&nbsp;build</div>
-            <div class="hint">A themed first draft renders live, instantly.</div>
-          </div>
-          <div class="station" data-s="3">
-            <div class="num">03</div>
-            <div class="label">Point&nbsp;&amp;&nbsp;say</div>
-            <div class="hint">Highlight a block, say the change in English.</div>
-          </div>
-          <div class="station" data-s="4">
-            <div class="num">04</div>
-            <div class="label">Ship</div>
-            <div class="hint">Regenerates in place, hot-reloads, exports.</div>
-          </div>
+      <div class="tc" id="tc">
+        <!-- Point at anything: reloads the SAME canvas with a new format -->
+        <div class="tc-switch" role="group" aria-label="Point at any format">
+          <span class="tc-switch__lbl">Point at anything</span>
+          <button class="tc-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
+          <button class="tc-fmt" type="button" data-fmt="deck">Investor deck</button>
+          <button class="tc-fmt" type="button" data-fmt="page">Landing page</button>
+          <button class="tc-fmt" type="button" data-fmt="video">Demo video</button>
         </div>
-      </aside>
 
-      <!-- doc head breadcrumb -->
-      <div class="dochead">
-        <span class="where">
-          <span class="seg" data-s="1">DESCRIBE</span><span class="arrow">→</span><span class="seg" data-s="2">BUILD</span><span class="arrow">→</span><span class="seg" data-s="3">POINT</span><span class="arrow">→</span><span class="seg" data-s="4">SHIP</span>
-        </span>
-      </div>
-
-      <!-- the ONE artifact -->
-      <div class="artifact-cell">
-        <article class="artifact">
-          <div class="chrome">
-            <div class="lights"><i></i><i></i><i></i></div>
-            <div class="url">localhost:4400 · q3-launch-brief.html</div>
-            <div class="live"><span class="pulse"></span>Live</div>
-          </div>
-          <div class="doc">
-            <div class="doc-kicker">Q3 Launch · One-page brief</div>
-
-            <!-- THE headline = the object that travels the whole loop -->
-            <h2 class="headline">
-              <span class="swap-old" data-dyn="title-old">Our Q3 launch, explained for the whole team</span>
-              <span class="swap-new" data-dyn="title-new">Ship Q3 with confidence — the plan, in one read</span>
-            </h2>
-
-            <p class="doc-sub">A single page leadership and the floor can both act on — no decks, no doc sprawl.</p>
-
-            <div class="rows">
-              <div class="row"><span class="tickmark"></span><span class="rtext"><b>What ships:</b> the new onboarding flow and the pricing refresh, together.</span></div>
-              <div class="row"><span class="tickmark"></span><span class="rtext"><b>Why now:</b> renewals open in August — we want the story landed first.</span></div>
-              <div class="row"><span class="tickmark"></span><span class="rtext"><b>Who owns what:</b> one accountable name per workstream, listed below.</span></div>
+        <div class="tc-stage">
+          <!-- the browser-framed paper document -->
+          <div class="tc-frame" id="tcFrame">
+            <div class="tc-chrome">
+              <span class="tc-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="tc-url" id="tcUrl">localhost:4400 · q3-launch-brief.html</span>
+              <span class="tc-live"><span class="tc-pulse" aria-hidden="true"></span>Live</span>
             </div>
 
-            <!-- station 4 exports (in-flow, below list) -->
-            <div class="exports">
-              <span class="ex-lbl">Export</span>
-              <span class="chip"><span class="lock"></span>HTML</span>
-              <span class="chip"><span class="lock"></span>PDF</span>
-              <span class="chip"><span class="lock"></span>PPTX</span>
-              <span class="chip"><span class="lock"></span>Video</span>
-            </div>
+            <form class="tc-prompt" id="tcPromptForm">
+              <span class="tc-you">You</span>
+              <input class="tc-input" id="tcInput" type="text" autocomplete="off"
+                     aria-label="Describe the document to build"
+                     value="One-page Q3 launch brief for the whole team." />
+              <button class="tc-build" type="submit">Build &crarr;</button>
+            </form>
 
-            <!-- station 1 prompt -->
-            <div class="prompt-strip">
-              <span class="lbl">You</span>
-              <span><span data-dyn="prompt">"Make me a one-page Q3 launch brief for the team"</span><span class="caret"></span></span>
-            </div>
+            <div class="tc-doc" id="tcDoc" aria-live="polite"></div>
 
-            <!-- station 3 docked instruction card -->
-            <div class="point-card">
-              <div class="pc-lbl">You pointed here</div>
-              <div class="pc-body" data-dyn="change">"Make the headline punchier — lead with <em>shipping with confidence</em>, not explaining."</div>
-              <div class="pc-meta"><span class="gear"></span> Reworking this block only…</div>
-            </div>
-            <div class="redline" aria-hidden="true"></div>
-
-            <!-- station 4 stamp -->
-            <div class="stamp">Locked ✓</div>
-          </div>
-          <div class="art-controls">
-            <div class="art-timeline">
-              <div class="art-bar"><div class="art-fill"></div></div>
-              <div class="art-chs">
-                <span class="art-ch" data-s="1">Describe</span>
-                <span class="art-ch" data-s="2">Build</span>
-                <span class="art-ch" data-s="3">Point</span>
-                <span class="art-ch" data-s="4">Ship</span>
-              </div>
+            <div class="tc-export" id="tcExport">
+              <span class="tc-export__lbl">Ship it</span>
+              <button class="tc-ex" type="button" data-ex="HTML">HTML</button>
+              <button class="tc-ex" type="button" data-ex="PDF">PDF</button>
+              <button class="tc-ex" type="button" data-ex="PPTX">PPTX</button>
+              <button class="tc-ex" type="button" data-ex="Video">Video</button>
+              <span class="tc-export__status" id="tcExStatus"></span>
             </div>
           </div>
-        </article>
-      </div>
 
-    </div>
-  </div>
-</div>
-
-<!-- ── Reduced-motion / mobile authored stack ──────────────────────────── -->
-<div class="stack-only">
-  <section class="wrap">
-    <div class="stack">
-
-      <div class="stack-step">
-        <div class="stack-rail"><span class="dot"></span><div class="num">01</div><div class="lab">Describe</div></div>
-        <div class="stack-card">
-          <div class="sk">You — plain language</div>
-          <div class="sh" data-dyn="title-old">Our Q3 launch, explained for the whole team</div>
-          <p class="sp"><span class="mut" data-dyn="prompt">”Make me a one-page Q3 launch brief for the team.”</span> No blank page, no terminal — say it, or point at your files and a URL.</p>
+          <!-- version rail: real edit history, click to rewind -->
+          <aside class="tc-versions" aria-label="Version history">
+            <div class="tc-versions__head">Versions <span>click to rewind</span></div>
+            <div class="tc-pips" id="tcPips"></div>
+          </aside>
         </div>
-      </div>
 
-      <div class="stack-step">
-        <div class="stack-rail"><span class="dot"></span><div class="num">02</div><div class="lab">Watch it build</div></div>
-        <div class="stack-card">
-          <div class="sk">Rendered live · localhost:4400</div>
-          <div class="sh" data-dyn="title-old">Our Q3 launch, explained for the whole team</div>
-          <p class="sp">A real, themed first draft appears in the browser instantly — what ships, why now, who owns what, and the one risk, all on one page.</p>
-        </div>
+        <p class="tc-hint" id="tcHint">Click any line in the page above, then say the change.</p>
       </div>
-
-      <div class="stack-step">
-        <div class="stack-rail"><span class="dot"></span><div class="num">03</div><div class="lab">Point &amp; say</div></div>
-        <div class="stack-card">
-          <div class="sk">You pointed at the headline</div>
-          <div class="sh" data-dyn="title-old">Our Q3 launch, explained for the whole team</div>
-          <p class="sp"><span data-dyn="change">”Make the headline punchier — lead with <em>shipping with confidence</em>.”</span> The supervising agent reworks <em>just that block</em>, preserving everything else.</p>
-        </div>
-      </div>
-
-      <div class="stack-step">
-        <div class="stack-rail"><span class="dot"></span><div class="num">04</div><div class="lab">Ship</div></div>
-        <div class="stack-card">
-          <span class="badge">Re-set ✓</span>
-          <div class="sk">Regenerated in place · hot-reloaded</div>
-          <div class="sh" data-dyn="title-new">Ship Q3 with confidence — the plan, in one read</div>
-          <p class="sp">Only the headline changed. Export a self-contained file and you're done by tonight.</p>
-          <div class="schips"><span class="c">HTML</span><span class="c">PDF</span><span class="c">PPTX</span><span class="c">Video</span></div>
-        </div>
-      </div>
-
     </div>
   </section>
-</div>
 
-<!-- ── Demo video section ──────────────────────────────────────────────── -->
-<div class="vid-scroll" id="vidScroll">
-  <div class="vid-sentinels" aria-hidden="true">
-    <div class="vid-sent" data-vs="1"></div>
-    <div class="vid-sent" data-vs="2"></div>
-    <div class="vid-sent" data-vs="3"></div>
-    <div class="vid-sent" data-vs="4"></div>
-  </div>
-  <div class="vid-sticky">
-    <div class="wrap">
-      <div class="vid-intro-row">
-        <div class="kicker">Demo video</div>
-        <h2>Point it at any running app. Get a narrated walkthrough.</h2>
-        <p class="lede">Give it a URL and a brief. wicked-interactive explores your app, scripts a Playwright spec, records it with narration captions, and hands back an interactive storyboard. <b>No screen recording tools. No editing.</b></p>
-      </div>
-      <div class="vid-step-ledger" aria-hidden="true">
-        <div class="vid-step is-active" data-ledger="1">
-          <div class="vs-num">01</div>
-          <div class="vs-lab">Aim</div>
-          <div class="vs-hint">Your app URL + brief.</div>
+  <!-- ── Closer → From the same garden → Footer ───────────────────────── -->
+  <div class="finale">
+    <section class="closer">
+      <div class="wrap closer-grid">
+        <div class="closer-intro">
+          <div class="kicker">That's the whole product</div>
+          <h2>One block changed. Everything else held.</h2>
+          <p>No round-trip, no design ticket, no rewriting the whole thing to fix one line. You point at what's wrong, say it in plain English, and <em>only that block</em> reworks &mdash; then export a self-contained file and you're done tonight.</p>
         </div>
-        <div class="vid-step" data-ledger="2">
-          <div class="vs-num">02</div>
-          <div class="vs-lab">Explore</div>
-          <div class="vs-hint">Agent maps the app.</div>
-        </div>
-        <div class="vid-step" data-ledger="3">
-          <div class="vs-num">03</div>
-          <div class="vs-lab">Record</div>
-          <div class="vs-hint">Playwright captures it.</div>
-        </div>
-        <div class="vid-step" data-ledger="4">
-          <div class="vs-num">04</div>
-          <div class="vs-lab">Storyboard</div>
-          <div class="vs-hint">Interactive output.</div>
-        </div>
-      </div>
-      <div class="vid-player" id="vidPlayer">
-        <div class="vid-chrome">
-          <span class="vid-tl"></span><span class="vid-tl"></span><span class="vid-tl"></span>
-          <span class="vid-urlbar" id="vUrl">localhost:4400 · new demo</span>
-          <span class="vid-rec"><span class="vid-rec-dot" id="vDot"></span><span id="vRecTime"></span></span>
-        </div>
-        <div class="vid-screen">
-      <div class="vid-state is-on" id="vS1">
-        <div class="vid-slabel">Step 1 — aim</div>
-        <div class="vid-form">
-          <div class="vid-field">
-            <span class="vid-flabel">Your app URL</span>
-            <div class="vid-finput">http://localhost:3000<span class="vc"></span></div>
-          </div>
-          <div class="vid-field">
-            <span class="vid-flabel">What to demo</span>
-            <div class="vid-ftext">Walk through creating a new project, then export as PDF.</div>
-          </div>
-          <button class="vid-gobtn" tabindex="-1">Record demo →</button>
-        </div>
-      </div>
-      <div class="vid-state" id="vS2">
-        <div class="vid-slabel">Agent · mapping localhost:3000</div>
-        <div class="vid-term">
-          <div class="vid-log">
-            <div class="vid-log-line"><span class="vid-log-arr">→</span>Visiting http://localhost:3000</div>
-            <div class="vid-log-line"><span class="vid-log-arr">→</span>Crawling routes &amp; interactions…</div>
-            <div class="vid-log-line"><span class="vid-log-arr">→</span>Found: /dashboard, /projects/new, /export</div>
-            <div class="vid-log-line vid-log-hi"><span class="vid-log-arr">→</span>Authoring demo.spec.mjs · 4 chapters planned</div>
-            <div class="vid-log-line vid-log-dim"><span class="vid-log-arr">→</span>Ready to record<span class="vc-sm"></span></div>
-          </div>
-        </div>
-        <div class="vid-routebar">
-          <span class="vid-routetag">/dashboard</span>
-          <span class="vid-routetag">/projects/new</span>
-          <span class="vid-routetag">/export</span>
-        </div>
-      </div>
-      <div class="vid-state" id="vS3">
-        <div class="vid-slabel">Playwright · recording localhost:3000</div>
-        <div class="vid-target">
-          <div class="vid-target-bar">
-            <span class="vid-tl" style="background:#ff5f57;width:8px;height:8px"></span>
-            <span class="vid-tl" style="background:#febc2e;width:8px;height:8px"></span>
-            <span class="vid-tl" style="background:#28c840;width:8px;height:8px"></span>
-            <span class="vid-target-url">localhost:3000 · projects / new</span>
-          </div>
-          <div class="vid-target-content">
-            <div class="vid-target-h">New project</div>
-            <div class="vid-target-r" style="width:42%"></div>
-            <div class="vid-target-r sel"></div>
-            <div class="vid-target-r" style="width:70%"></div>
-            <div class="vid-target-r" style="width:88%"></div>
-            <div class="vid-target-r" style="width:55%"></div>
-            <div class="vid-target-rbtn"></div>
-          </div>
-          <div class="vid-cursor" aria-hidden="true"></div>
-          <div class="vid-caption">Filling in the project name field…</div>
-        </div>
-      </div>
-      <div class="vid-state" id="vS4">
-        <div class="vid-slabel">Output · storyboard.html</div>
-        <div class="vid-storyboard">
-          <div class="vid-sb-preview">
-            <div class="vid-preview-ui" aria-hidden="true">
-              <div class="vpu-chrome">
-                <span class="vpu-win"></span><span class="vpu-win"></span><span class="vpu-win"></span>
-                <div class="vpu-url"></div>
-              </div>
-              <div class="vpu-appnav">
-                <div class="vpu-logo"></div>
-                <div class="vpu-navlinks"><div></div><div class="hi"></div><div></div><div></div></div>
-                <div class="vpu-btn"></div>
-              </div>
-              <div class="vpu-layout">
-                <div class="vpu-sidebar">
-                  <div class="vpu-si hi"></div>
-                  <div class="vpu-si"></div>
-                  <div class="vpu-si"></div>
-                  <div class="vpu-si"></div>
-                  <div class="vpu-si"></div>
-                </div>
-                <div class="vpu-main">
-                  <div class="vpu-heading"></div>
-                  <div class="vpu-sub"></div>
-                  <div class="vpu-cards"><div></div><div></div><div></div></div>
-                </div>
-              </div>
-              <div class="vpu-cursor"></div>
+
+        <div class="install-group" role="group" aria-label="Install wicked-interactive">
+          <div class="install install--primary">
+            <div class="install__bar">
+              <span class="install__label">Install the family <span class="install__tag">recommended</span></span>
+              <button class="install__copy" type="button" aria-label="Copy installer command"
+                onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-installer').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
-            <div class="vid-sb-play">▶</div>
-            <div class="vid-sb-duration">1:34</div>
+            <pre class="install__code"><code><span class="p">npx</span> wicked-installer</code></pre>
+            <p class="install__note">Interactive picker &mdash; choose your products, wire them across CLIs, and get the <code>wicked</code> command. Installs wicked-interactive and anything else you want in one pass.</p>
           </div>
-          <div class="vid-sb-chapters">
-            <div class="vid-sb-ch active">
-              <div class="vid-sb-thumb">
-                <div class="vsbt-nav"></div>
-                <div class="vsbt-page">
-                  <div class="vsbt-side"><div class="hi"></div><div></div><div></div><div></div></div>
-                  <div class="vsbt-main">
-                    <div class="vsbt-head"></div>
-                    <div class="vsbt-row w80"></div>
-                    <div class="vsbt-cards"><div></div><div></div><div></div></div>
-                  </div>
-                </div>
-              </div>
-              <span>01 · Dashboard</span>
+          <div class="install install--secondary">
+            <div class="install__bar">
+              <span class="install__label">or install just this directly</span>
+              <button class="install__copy" type="button" aria-label="Copy direct install commands"
+                onclick="navigator.clipboard&&navigator.clipboard.writeText('/plugin marketplace add mikeparcewski/wicked-interactive\n/plugin install wicked-interactive').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
-            <div class="vid-sb-ch">
-              <div class="vid-sb-thumb">
-                <div class="vsbt-nav"></div>
-                <div class="vsbt-page">
-                  <div class="vsbt-side"><div></div><div class="hi"></div><div></div><div></div></div>
-                  <div class="vsbt-main">
-                    <div class="vsbt-head"></div>
-                    <div class="vsbt-row w80"></div>
-                    <div class="vsbt-cards"><div></div><div></div></div>
-                  </div>
-                </div>
-              </div>
-              <span>02 · New project</span>
-            </div>
-            <div class="vid-sb-ch">
-              <div class="vid-sb-thumb">
-                <div class="vsbt-nav"></div>
-                <div class="vsbt-page">
-                  <div class="vsbt-side"><div></div><div class="hi"></div><div></div><div></div></div>
-                  <div class="vsbt-main">
-                    <div class="vsbt-head"></div>
-                    <div class="vsbt-row hi"></div>
-                    <div class="vsbt-cards"><div></div><div></div></div>
-                  </div>
-                </div>
-              </div>
-              <span>03 · Fill in</span>
-            </div>
-            <div class="vid-sb-ch">
-              <div class="vid-sb-thumb">
-                <div class="vsbt-nav"></div>
-                <div class="vsbt-page">
-                  <div class="vsbt-main">
-                    <div class="vsbt-head"></div>
-                    <div class="vsbt-row w55"></div>
-                    <div class="vsbt-row w40"></div>
-                    <div class="vsbt-cards"><div></div><div></div><div></div></div>
-                  </div>
-                </div>
-              </div>
-              <span>04 · Export PDF</span>
-            </div>
-          </div>
-        </div>
-      </div>
-        </div>
-        <div class="vid-controls">
-          <div class="vid-timeline">
-            <div class="vid-bar"><div class="vid-fill" id="vFill"></div></div>
-            <div class="vid-chs">
-              <span class="vid-ch now" id="vC1">Aim</span>
-              <span class="vid-ch" id="vC2">Explore</span>
-              <span class="vid-ch" id="vC3">Record</span>
-              <span class="vid-ch" id="vC4">Storyboard</span>
-            </div>
-          </div>
-          <button class="vid-dl" id="vDl">View →</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script is:inline>
-(function(){
-  var states = ['vS1','vS2','vS3','vS4'].map(function(id){ return document.getElementById(id); });
-  var chs = ['vC1','vC2','vC3','vC4'].map(function(id){ return document.getElementById(id); });
-  var ledger = Array.prototype.slice.call(document.querySelectorAll('.vid-step'));
-  var fill = document.getElementById('vFill');
-  var dot = document.getElementById('vDot');
-  var recEl = document.getElementById('vRecTime');
-  var dl = document.getElementById('vDl');
-  var urlEl = document.getElementById('vUrl');
-
-  var URL_LABELS = [
-    'localhost:4400 · new demo',
-    'localhost:4400 · exploring…',
-    'localhost:3000 · projects / new',
-    'storyboard.html · 4 chapters',
-  ];
-
-  var thumbTimer = null;
-  var sbChs = Array.prototype.slice.call(document.querySelectorAll('.vid-sb-ch'));
-  function startThumbCycle(){
-    var i = 0;
-    thumbTimer = setInterval(function(){
-      i = (i + 1) % sbChs.length;
-      sbChs.forEach(function(c, idx){ c.classList.toggle('active', idx === i); });
-    }, 1200);
-  }
-  function stopThumbCycle(){
-    clearInterval(thumbTimer);
-    thumbTimer = null;
-    sbChs.forEach(function(c, idx){ c.classList.toggle('active', idx === 0); });
-  }
-
-  function setStation(s){
-    states.forEach(function(el,i){ el.classList.toggle('is-on', i===s); });
-    chs.forEach(function(el,i){ el.className = 'vid-ch'+(i===s?' now':i<s?' past':''); });
-    ledger.forEach(function(el,i){ el.classList.toggle('is-active', i===s); });
-    if(fill) fill.style.width = ((s+1)/4*100)+'%';
-    if(dot) dot.classList.toggle('is-on', s===2);
-    if(recEl) recEl.textContent = s===2 ? 'REC' : '';
-    if(urlEl) urlEl.textContent = URL_LABELS[s];
-    if(dl) dl.classList.toggle('done', s===3);
-    if(s === 3 && !thumbTimer) startThumbCycle();
-    else if(s !== 3 && thumbTimer) stopThumbCycle();
-  }
-
-  var sentinels = Array.prototype.slice.call(document.querySelectorAll('.vid-sent'));
-  var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var narrow = window.matchMedia('(max-width: 900px)').matches;
-
-  if(!prefersReduced && !narrow && sentinels.length && 'IntersectionObserver' in window){
-    var visible = {};
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){
-        visible[e.target.getAttribute('data-vs')] = e.intersectionRatio;
-      });
-      var best='1', bestR=-1;
-      Object.keys(visible).forEach(function(k){
-        if(visible[k] > bestR){ bestR=visible[k]; best=k; }
-      });
-      setStation(parseInt(best,10)-1);
-    },{rootMargin:'-49% 0px -49% 0px', threshold:[0,1]});
-    sentinels.forEach(function(s){ io.observe(s); });
-    setStation(0);
-  } else {
-    states.forEach(function(el){ el.classList.add('is-on'); });
-  }
-})();
-</script>
-
-<!-- ── Closer → From the same garden → Footer ─────────────────────────── -->
-<div class="finale">
-<section class="closer">
-  <div class="wrap closer-grid">
-    <div class="closer-intro">
-      <div class="kicker">That's the loop</div>
-      <h2>One block changed. Everything else held.</h2>
-      <p>That is the entire product: describe, watch it build, point and say the change, ship. The same headline you read as a prompt is the one that got re-set and stamped — proof by layout, not by claim.</p>
-    </div>
-    <div class="install-group" role="group" aria-label="Install wicked-interactive">
-      <div class="install install--primary">
-        <div class="install__bar">
-          <span class="install__label">Install the family <span class="install__tag">recommended</span></span>
-          <button class="install__copy" type="button" aria-label="Copy installer command"
-            onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-installer').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
-        </div>
-        <pre class="install__code"><code><span class="p">npx</span> wicked-installer</code></pre>
-        <p class="install__note">Interactive picker — choose your products, wire them across CLIs, and get the <code>wicked</code> command. Installs wicked-interactive and anything else you want in one pass.</p>
-      </div>
-      <div class="install install--secondary">
-        <div class="install__bar">
-          <span class="install__label">or install just this directly</span>
-          <button class="install__copy" type="button" aria-label="Copy direct install commands"
-            onclick="navigator.clipboard&&navigator.clipboard.writeText('/plugin marketplace add mikeparcewski/wicked-interactive\n/plugin install wicked-interactive').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
-        </div>
-        <pre class="install__code"><code><span class="p">/plugin</span> marketplace add mikeparcewski/wicked-interactive
+            <pre class="install__code"><code><span class="p">/plugin</span> marketplace add mikeparcewski/wicked-interactive
 <span class="p">/plugin</span> install wicked-interactive</code></pre>
+          </div>
+        </div>
+
+        <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener" aria-label="View on GitHub">
+          <svg viewBox="0 0 16 16" width="44" height="44" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>View on Github</span>
+        </a>
       </div>
-    </div>
-    <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener" aria-label="View on GitHub">
-      <svg viewBox="0 0 16 16" width="44" height="44" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-      <span>View on Github</span>
-    </a>
+    </section>
+
+    <SameGarden current="wicked-interactive" />
+
+    <Footer repo={repo} />
   </div>
-</section>
 
-<SameGarden current="wicked-interactive" />
+  <!-- ── Talkback Canvas engine (real, driven, canned data) ───────────── -->
+  <script is:inline>
+  (function () {
+    "use strict";
 
-  <Footer repo={repo} />
-</div>
+    // instruction -> label
+    var INSTR = { punchier: "Punchier", warmer: "Warmer", stat: "Add a stat", tighten: "Tighten" };
+    var ORDER = ["punchier", "warmer", "stat", "tighten"];
 
-<!-- Conveyor: one IntersectionObserver on four sentinels drives [data-station]. -->
-<script is:inline>
-(function () {
-  "use strict";
-  var stage = document.getElementById("stage");
-  var sentinels = Array.prototype.slice.call(document.querySelectorAll(".sentinel"));
-
-  // honour reduced-motion / narrow: the CSS hides the pin; skip the observer.
-  var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var narrow = window.matchMedia("(max-width: 900px)").matches;
-
-  if (!prefersReduced && !narrow && "IntersectionObserver" in window) {
-    var visible = {};
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        visible[e.target.getAttribute("data-s")] = e.intersectionRatio;
-      });
-      // pick the sentinel with the greatest coverage of the midline band
-      var best = "1", bestRatio = -1;
-      Object.keys(visible).forEach(function (k) {
-        if (visible[k] > bestRatio) { bestRatio = visible[k]; best = k; }
-      });
-      if (stage.getAttribute("data-station") !== best) {
-        stage.setAttribute("data-station", best);
+    // each format: prompt + url + ordered blocks. Every block carries a base
+    // text and four rewrites — so a click OR a typed instruction genuinely
+    // produces different, sensible copy for THAT block only.
+    var DOCS = {
+      brief: {
+        prompt: "One-page Q3 launch brief for the whole team.",
+        url: "localhost:4400 · q3-launch-brief.html",
+        kicker: "Q3 Launch · One-page brief",
+        blocks: [
+          { id: "h", kind: "h", text: "Our Q3 launch, explained for the whole team", v: {
+            punchier: "Ship Q3 with confidence — the whole plan, one read",
+            warmer: "Here's how we land Q3 together",
+            stat: "Q3 launch: 3 workstreams, 1 page, 0 surprises",
+            tighten: "The Q3 launch plan" } },
+          { id: "s", kind: "sub", text: "A single page leadership and the floor can both act on.", v: {
+            punchier: "One page. Everyone aligned. No deck sprawl.",
+            warmer: "So everyone knows the plan — and feels part of it.",
+            stat: "One page replacing four decks and a 30-slide readout.",
+            tighten: "One page everyone can act on." } },
+          { id: "r1", kind: "row", text: "What ships: the new onboarding flow and the pricing refresh, together.", v: {
+            punchier: "What ships: onboarding + pricing — shipped as one story.",
+            warmer: "What we're shipping: a smoother welcome and fairer pricing.",
+            stat: "What ships: two launches, one window, 40% faster onboarding.",
+            tighten: "Ships: onboarding + pricing refresh." } },
+          { id: "r2", kind: "row", text: "Why now: renewals open in August — we want the story landed first.", v: {
+            punchier: "Why now: August renewals. The story lands first, or not at all.",
+            warmer: "Why now: renewals are coming, and we want folks ready.",
+            stat: "Why now: $2.4M in renewals open August 1.",
+            tighten: "Why now: renewals open August." } }
+        ]
+      },
+      deck: {
+        prompt: "Five-slide seed deck for demo day.",
+        url: "localhost:4400 · seed-deck.html · slide 1/5",
+        kicker: "Seed round · Slide 1",
+        blocks: [
+          { id: "h", kind: "h", text: "Why we exist — the case for backing us now", v: {
+            punchier: "The market already chose us. Back us to scale it.",
+            warmer: "We're building the tool teams keep asking us for",
+            stat: "4,000 teams. 3 months. Backed by usage, not hope.",
+            tighten: "The case to back us now" } },
+          { id: "s", kind: "sub", text: "The problem, the wedge, and why this team wins it.", v: {
+            punchier: "A broken workflow, a sharp wedge, a team that ships.",
+            warmer: "Here's the problem we love — and why it's ours to win.",
+            stat: "A $12B market, 92% of it still done by hand.",
+            tighten: "Problem, wedge, team." } },
+          { id: "r1", kind: "row", text: "Traction: 4,000 teams onboarded in the first quarter.", v: {
+            punchier: "Traction: 0 to 4,000 teams in one quarter — no paid spend.",
+            warmer: "Traction: 4,000 teams already trust us day to day.",
+            stat: "Traction: 4,000 teams · 38% WoW growth · $0 CAC.",
+            tighten: "Traction: 4,000 teams in Q1." } },
+          { id: "r2", kind: "row", text: "Ask: $3M to turn demand into a category.", v: {
+            punchier: "Ask: $3M to own the category before anyone else moves.",
+            warmer: "Ask: $3M to bring this to every team that needs it.",
+            stat: "Ask: $3M · 24-month runway · 5x pipeline coverage.",
+            tighten: "Ask: $3M seed." } }
+        ]
+      },
+      page: {
+        prompt: "Landing page hero for our new pricing tool.",
+        url: "localhost:4400 · pricing-tool.html",
+        kicker: "Landing page · Hero",
+        blocks: [
+          { id: "h", kind: "h", text: "Pricing that finally makes sense for your team", v: {
+            punchier: "Stop guessing at pricing. Ship the right number today.",
+            warmer: "Pricing your whole team can actually understand",
+            stat: "Set prices 10x faster — no spreadsheet gymnastics",
+            tighten: "Pricing that makes sense" } },
+          { id: "s", kind: "sub", text: "Model, compare, and publish pricing without a spreadsheet.", v: {
+            punchier: "Model it, compare it, ship it — before the meeting ends.",
+            warmer: "We'll help you find a price that feels fair to everyone.",
+            stat: "Used by 1,200 teams to price in minutes, not weeks.",
+            tighten: "Model, compare, publish — no spreadsheet." } },
+          { id: "r1", kind: "row", text: "See every plan side by side in one clean view.", v: {
+            punchier: "Every plan, side by side, decided in one glance.",
+            warmer: "See all your options together, so the choice feels easy.",
+            stat: "Compare up to 8 plans across 20 metrics instantly.",
+            tighten: "All plans, one view." } },
+          { id: "r2", kind: "row", text: "Publish to your site with one click — no engineer needed.", v: {
+            punchier: "One click to publish. No ticket, no engineer, no wait.",
+            warmer: "Publish whenever you're ready — we handle the rest.",
+            stat: "Publish in one click · live in under 30 seconds.",
+            tighten: "Publish in one click." } }
+        ]
+      },
+      video: {
+        prompt: "Narrated demo of our onboarding flow.",
+        url: "localhost:4400 · onboarding-demo.mp4 · 4 chapters",
+        kicker: "Demo video · Storyboard",
+        blocks: [
+          { id: "h", kind: "h", text: "A guided tour of your first five minutes", v: {
+            punchier: "Your first five minutes — and why they'll hook you",
+            warmer: "Let's walk through your first five minutes together",
+            stat: "First 5 minutes · 4 chapters · 1:34 runtime",
+            tighten: "Your first five minutes" } },
+          { id: "s", kind: "sub", text: "We record the flow, narrate each step, and hand back a storyboard.", v: {
+            punchier: "Recorded, narrated, storyboarded — zero editing from you.",
+            warmer: "We'll capture it and talk you through every step.",
+            stat: "4 chapters auto-captured from 12 clicks.",
+            tighten: "Recorded, narrated, storyboarded." } },
+          { id: "r1", kind: "row", text: "Chapter 1: create your first project in three clicks.", v: {
+            punchier: "Chapter 1: first project, three clicks, done.",
+            warmer: "Chapter 1: we'll set up your first project together.",
+            stat: "Chapter 1: first project in 3 clicks · 18 seconds.",
+            tighten: "Ch. 1: first project, 3 clicks." } },
+          { id: "r2", kind: "row", text: "Chapter 4: export your work and share the link.", v: {
+            punchier: "Chapter 4: export, share, ship — the loop closes.",
+            warmer: "Chapter 4: export your work and send it to whoever needs it.",
+            stat: "Chapter 4: export in one click · 6 formats.",
+            tighten: "Ch. 4: export and share." } }
+        ]
       }
-    }, {
-      // a thin band centred on the viewport so the active station flips
-      // cleanly at each quartile of the 400vh scroll
-      rootMargin: "-49% 0px -49% 0px",
-      threshold: [0, 1]
-    });
-    sentinels.forEach(function (s) { io.observe(s); });
-  } else {
-    // fallback: ensure stage shows the shipped end-state if ever visible
-    stage.setAttribute("data-station", "4");
-  }
-})();
-</script>
+    };
 
-<!-- Prompt Playground -->
-<script is:inline>
-(function(){
-  var PRESETS = [
-    {
-      label: 'Launch brief',
-      prompt: 'Make me a one-page Q3 launch brief for the team.',
-      titleOld: 'Our Q3 launch, explained for the whole team',
-      titleNew: 'Ship Q3 with confidence — the plan, in one read',
-      change: '"Make the headline punchier — lead with <em>shipping with confidence</em>."',
-      changePlain: '"Make the headline punchier — lead with shipping with confidence."',
-      conveyorChange: '"Make the headline punchier — lead with <em>shipping with confidence</em>, not explaining."',
-    },
-    {
-      label: 'Investor deck',
-      prompt: 'Build me a five-slide seed deck for our demo day.',
-      titleOld: 'Why we exist — the case for backing us now',
-      titleNew: 'The market chose us — back us to scale it',
-      change: '"The traction slide feels too modest — lead with the numbers that matter."',
-      changePlain: '"The traction slide feels too modest — lead with the numbers that matter."',
-      conveyorChange: '"The traction slide feels too modest — make it land harder."',
-    },
-    {
-      label: 'Onboarding guide',
-      prompt: 'Write a first-week guide for new product team hires.',
-      titleOld: 'Your first week: everything you need to know',
-      titleNew: 'Your first week: welcome to the team',
-      change: '"The opening reads like HR copy — make it warmer, more personal."',
-      changePlain: '"The opening reads like HR copy — make it warmer, more personal."',
-      conveyorChange: '"The opening reads like HR copy — make it warmer."',
-    },
-    {
-      label: 'Release notes',
-      prompt: 'Release notes for v2.1 — faster exports and new dashboard.',
-      titleOld: "What's new in v2.1",
-      titleNew: 'Dashboard-first: what changed in v2.1',
-      change: '"Lead with the dashboard — it\'s the bigger feature, put it first."',
-      changePlain: '"Lead with the dashboard — it\'s the bigger feature, put it first."',
-      conveyorChange: '"Lead with the dashboard — it\'s the bigger feature, first."',
-    },
-  ];
+    var KIND_NAME = { h: "Headline", sub: "Subhead", row: "Body line" };
 
-  var current = 0;
-  var pgPrompt = document.getElementById('pgPrompt');
-  var chips = Array.prototype.slice.call(document.querySelectorAll('.pg-chip'));
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function getAllDyn(attr) {
-    return Array.prototype.slice.call(document.querySelectorAll('[data-dyn="' + attr + '"]'));
-  }
+    var doc = document.getElementById("tcDoc");
+    var urlEl = document.getElementById("tcUrl");
+    var input = document.getElementById("tcInput");
+    var promptForm = document.getElementById("tcPromptForm");
+    var pipsEl = document.getElementById("tcPips");
+    var frame = document.getElementById("tcFrame");
+    var exStatus = document.getElementById("tcExStatus");
+    var fmtBtns = Array.prototype.slice.call(document.querySelectorAll(".tc-fmt"));
+    var exBtns = Array.prototype.slice.call(document.querySelectorAll(".tc-ex"));
 
-  function fadeOut(els, cb) {
-    els.forEach(function(el){ el.classList.add('dyn-out'); });
-    setTimeout(cb, 150);
-  }
+    // live state
+    var fmt = "brief";
+    var live = {};          // id -> { key, text }
+    var history = [];       // [{ vlabel, whatHTML, blocks:{id:{key,text}} }]
+    var active = 0;
+    var selected = null;    // block id currently selected
+    var building = false;
 
-  function fadeIn(els) {
-    els.forEach(function(el){ el.classList.remove('dyn-out'); });
-  }
+    // the docked "say the change" bar (built once, reparented under a block)
+    var sayBar = buildSayBar();
 
-  function typewriter(el, text, onDone) {
-    el.classList.add('fading');
-    setTimeout(function(){
-      el.textContent = '';
-      el.classList.remove('fading');
-      var i = 0;
-      var speed = Math.max(18, Math.min(38, Math.floor(900 / text.length)));
-      function tick() {
-        if (i < text.length) {
-          el.textContent += text[i++];
-          setTimeout(tick, speed);
-        } else if (onDone) {
-          onDone();
-        }
-      }
-      tick();
-    }, 120);
-  }
+    function clone(o) { return JSON.parse(JSON.stringify(o)); }
+    function defFor(id) { return DOCS[fmt].blocks.filter(function (b) { return b.id === id; })[0]; }
 
-  function applyPreset(idx) {
-    var p = PRESETS[idx];
-
-    // 1. Typewriter the prompt box
-    typewriter(pgPrompt, p.prompt);
-
-    // 2. Fade out all data-dyn elements
-    var oldEls = getAllDyn('title-old').concat(getAllDyn('title-new'));
-    var promptEls = getAllDyn('prompt');
-    var changeEls = getAllDyn('change');
-    var allUpdating = oldEls.concat(promptEls).concat(changeEls);
-
-    fadeOut(allUpdating, function(){
-      // 3. Update text/html
-      getAllDyn('title-old').forEach(function(el){ el.textContent = p.titleOld; });
-      getAllDyn('title-new').forEach(function(el){ el.textContent = p.titleNew; });
-      getAllDyn('prompt').forEach(function(el){ el.textContent = '"' + p.prompt + '"'; });
-      // change: some have innerHTML (em tags), use appropriate method per context
-      getAllDyn('change').forEach(function(el){
-        var isConveyor = el.classList.contains('pc-body');
-        el.innerHTML = isConveyor ? p.conveyorChange : p.change;
-      });
-
-      // 4. Fade back in
-      setTimeout(function(){ fadeIn(allUpdating); }, 20);
-    });
-
-    // 5. Update chip active state
-    chips.forEach(function(c, i){
-      c.classList.toggle('is-active', i === idx);
-    });
-
-    current = idx;
-  }
-
-  // Wire chip clicks
-  chips.forEach(function(chip){
-    chip.addEventListener('click', function(){
-      var idx = parseInt(chip.getAttribute('data-preset'), 10);
-      if (idx !== current) applyPreset(idx);
-    });
-  });
-
-  // Keyboard nav on chips
-  document.getElementById('pgChips').addEventListener('keydown', function(e){
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-      var next = e.key === 'ArrowRight' ? (current + 1) % PRESETS.length : (current - 1 + PRESETS.length) % PRESETS.length;
-      applyPreset(next);
-      chips[next].focus();
-      e.preventDefault();
+    // classify a free-typed instruction; null if we can't tell -> we rotate
+    function classify(t) {
+      t = (t || "").toLowerCase();
+      if (/punch|bold|strong|sharp|snapp|confiden|impact|assertive|louder|energ/.test(t)) return "punchier";
+      if (/warm|friend|human|kind|personal|approach|soft|gentl|welcom/.test(t)) return "warmer";
+      if (/stat|number|metric|data|proof|%|percent|figure|quantif|hard evidence|numeric/.test(t)) return "stat";
+      if (/tight|short|trim|cut|concise|brief|less|snip|condens|crisp/.test(t)) return "tighten";
+      return null;
     }
-  });
-})();
-</script>
 
-<!-- Video chapter seek -->
-<script is:inline>
-(function(){
-  var DUR = 12000;
-  var chs = document.querySelectorAll('.vid-sb-ch');
-  chs.forEach(function(ch, i){
-    ch.addEventListener('click', function(){
-      var fill = document.getElementById('vFill');
-      if (!fill) return;
-      // Roughly map chapter i to its start time (4 equal quarters)
-      var pct = i / 4;
-      var elapsed = pct * DUR;
-      // Dispatch a synthetic scrub via the bar's own click rect mapping is complex,
-      // so instead we set elapsed directly and call render via the play button flow.
-      // We do this by simulating a click on the bar at the right position.
-      var bar = document.getElementById('vBar');
-      if (!bar) return;
-      var rect = bar.getBoundingClientRect();
-      var x = rect.left + rect.width * pct + 1;
-      bar.dispatchEvent(new MouseEvent('click', { clientX: x, bubbles: true }));
-      // Activate the right chapter visually immediately
-      chs.forEach(function(c, j){ c.classList.toggle('active', j === i); });
+    // choose a variant key that actually changes the text
+    function pickKey(id, prefer) {
+      var def = defFor(id), cur = live[id];
+      if (prefer && def.v[prefer] && def.v[prefer] !== cur.text) return prefer;
+      var start = ORDER.indexOf(cur.key); // -1 for "base"
+      for (var n = 1; n <= ORDER.length; n++) {
+        var k = ORDER[(Math.max(start, 0) + n) % ORDER.length];
+        if (def.v[k] && def.v[k] !== cur.text) return k;
+      }
+      return prefer || ORDER[0];
+    }
+
+    // ---- render the document from `live` -----------------------------------
+    function render(build) {
+      closeSay();
+      doc.innerHTML = "";
+      var kick = document.createElement("div");
+      kick.className = "tc-doc__kicker";
+      kick.textContent = DOCS[fmt].kicker;
+      doc.appendChild(kick);
+
+      var rowGroup = null;
+      DOCS[fmt].blocks.forEach(function (bd) {
+        var st = live[bd.id];
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tc-block tc-block--" + bd.kind;
+        btn.setAttribute("data-id", bd.id);
+        var shim = document.createElement("span");
+        shim.className = "tc-block__shim";
+        shim.setAttribute("aria-hidden", "true");
+        var t = document.createElement("span");
+        t.className = "tc-block__t";
+        t.textContent = st.text;
+        btn.appendChild(shim);
+        btn.appendChild(t);
+        btn.addEventListener("click", function () { selectBlock(bd.id, btn); });
+
+        // group the body rows so they sit together with tick marks
+        if (bd.kind === "row") {
+          if (!rowGroup) { rowGroup = document.createElement("div"); rowGroup.className = "tc-rowgroup"; doc.appendChild(rowGroup); }
+          rowGroup.appendChild(btn);
+        } else {
+          rowGroup = null;
+          doc.appendChild(btn);
+        }
+        if (build) btn.classList.add("tc-block--building");
+      });
+
+      if (build) assemble();
+    }
+
+    // block-by-block shimmer reveal
+    function assemble() {
+      building = true;
+      var blocks = Array.prototype.slice.call(doc.querySelectorAll(".tc-block--building"));
+      var step = reduced ? 40 : 260;
+      blocks.forEach(function (b, i) {
+        setTimeout(function () {
+          b.classList.remove("tc-block--building");
+          if (i === blocks.length - 1) building = false;
+        }, (i + 1) * step);
+      });
+      if (!blocks.length) building = false;
+    }
+
+    // ---- selection: highlighter sweep + dock the say bar -------------------
+    function selectBlock(id, btn) {
+      if (building) return;
+      if (selected === id) { closeSay(); return; }
+      Array.prototype.slice.call(doc.querySelectorAll(".tc-block")).forEach(function (b) {
+        b.classList.remove("is-target");
+      });
+      // retrigger the sweep animation
+      btn.classList.remove("is-target"); void btn.offsetWidth; btn.classList.add("is-target");
+      selected = id;
+      // reference the label through sayBar — it lives detached until inserted,
+      // so getElementById would be null on the first-ever selection.
+      sayBar.querySelector(".tc-say__what").textContent = KIND_NAME[defFor(id).kind];
+      sayBar.querySelector(".tc-say__input").value = "";
+      btn.insertAdjacentElement("afterend", sayBar);
+      sayBar.classList.add("is-open");
+    }
+
+    function closeSay() {
+      sayBar.classList.remove("is-open");
+      if (sayBar.parentNode) sayBar.parentNode.removeChild(sayBar);
+      Array.prototype.slice.call(doc.querySelectorAll(".is-target")).forEach(function (b) {
+        b.classList.remove("is-target");
+      });
+      selected = null;
+    }
+
+    // ---- apply a change to ONE block --------------------------------------
+    function applyChange(id, prefer) {
+      var key = pickKey(id, prefer);
+      var def = defFor(id);
+      var newText = def.v[key];
+      var btn = doc.querySelector('.tc-block[data-id="' + id + '"]');
+      if (!btn) return;
+
+      // if we rewound into the past, a new edit forks the timeline
+      if (active < history.length - 1) history = history.slice(0, active + 1);
+
+      closeSay();
+      doc.classList.add("is-focusing");
+      btn.classList.add("is-target", "tc-block--reworking");
+      var t = btn.querySelector(".tc-block__t");
+
+      var wait = reduced ? 60 : 560;
+      setTimeout(function () {
+        live[id] = { key: key, text: newText };
+        t.textContent = newText;
+        btn.classList.remove("tc-block--reworking", "is-target");
+        void btn.offsetWidth;
+        btn.classList.add("tc-block--changed");
+        setTimeout(function () {
+          btn.classList.remove("tc-block--changed");
+          doc.classList.remove("is-focusing");
+        }, reduced ? 400 : 1500);
+
+        // log the version
+        pushVersion(KIND_NAME[def.kind], INSTR[key]);
+      }, wait);
+    }
+
+    // ---- version rail ------------------------------------------------------
+    function pushVersion(what, instr) {
+      history.push({
+        vlabel: "v" + history.length,
+        whatHTML: what + ' &rarr; <em>' + instr + '</em>',
+        blocks: clone(live)
+      });
+      active = history.length - 1;
+      renderPips();
+    }
+
+    function renderPips() {
+      pipsEl.innerHTML = "";
+      history.forEach(function (h, i) {
+        var pip = document.createElement("button");
+        pip.type = "button";
+        pip.className = "tc-pip" + (i === active ? " is-active" : "");
+        pip.innerHTML =
+          '<span class="tc-pip__dot" aria-hidden="true"></span>' +
+          '<span class="tc-pip__body"><span class="tc-pip__v">' + h.vlabel + '</span>' +
+          '<span class="tc-pip__what">' + h.whatHTML + '</span></span>';
+        pip.addEventListener("click", function () { rewind(i); });
+        pipsEl.appendChild(pip);
+      });
+    }
+
+    // rewind restores a snapshot; editing from here forks (handled in applyChange)
+    function rewind(i) {
+      if (building) return;
+      active = i;
+      live = clone(history[i].blocks);
+      render(false);
+      renderPips();
+      // brief flash to show the doc reset to that version
+      if (!reduced) {
+        Array.prototype.slice.call(doc.querySelectorAll(".tc-block")).forEach(function (b, n) {
+          b.classList.add("tc-block--changed");
+          setTimeout(function () { b.classList.remove("tc-block--changed"); }, 700);
+        });
+      }
+    }
+
+    // ---- build/rebuild for a format ---------------------------------------
+    function loadFormat(f, fromPrompt) {
+      fmt = f;
+      selected = null;
+      live = {};
+      DOCS[f].blocks.forEach(function (b) { live[b.id] = { key: "base", text: b.text }; });
+      history = [{ vlabel: "v0", whatHTML: "First draft", blocks: clone(live) }];
+      active = 0;
+      urlEl.textContent = DOCS[f].url;
+      if (!fromPrompt) input.value = DOCS[f].prompt;
+      resetExport();
+      render(true);
+      renderPips();
+      fmtBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-fmt") === f); });
+    }
+
+    // ---- export: the click IS the pitch -----------------------------------
+    function resetExport() {
+      exBtns.forEach(function (b) { b.classList.remove("is-locked"); });
+      frame.classList.remove("is-shipped");
+      exStatus.textContent = "";
+    }
+    var exTimer = null;
+    exBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var f = b.getAttribute("data-ex");
+        clearTimeout(exTimer);
+        exBtns.forEach(function (x) { x.classList.remove("is-locked"); });
+        b.classList.add("is-locked");
+        frame.classList.remove("is-shipped");
+        exStatus.innerHTML = "Packaging " + f + "…";
+        exTimer = setTimeout(function () {
+          frame.classList.add("is-shipped");
+          exStatus.innerHTML = "<b>" + f + "</b> · one self-contained file ✓";
+        }, reduced ? 120 : 680);
+      });
     });
-  });
-})();
-</script>
+
+    // ---- the "say the change" bar (built once) ----------------------------
+    function buildSayBar() {
+      var bar = document.createElement("div");
+      bar.className = "tc-say";
+      bar.innerHTML =
+        '<div class="tc-say__head">' +
+          '<span class="tc-say__tag">Editing</span>' +
+          '<span class="tc-say__what" id="tcSayWhat">Headline</span>' +
+          '<button class="tc-say__x" type="button">Done</button>' +
+        '</div>' +
+        '<div class="tc-say__chips">' +
+          '<button class="tc-instr" type="button" data-instr="punchier">Punchier</button>' +
+          '<button class="tc-instr" type="button" data-instr="warmer">Warmer</button>' +
+          '<button class="tc-instr" type="button" data-instr="stat">Add a stat</button>' +
+          '<button class="tc-instr" type="button" data-instr="tighten">Tighten</button>' +
+        '</div>' +
+        '<form class="tc-say__form">' +
+          '<input class="tc-say__input" type="text" autocomplete="off" placeholder="…or say your own change" aria-label="Say your own change" />' +
+          '<button class="tc-say__go" type="submit">Go →</button>' +
+        '</form>';
+      bar.querySelector(".tc-say__x").addEventListener("click", closeSay);
+      Array.prototype.slice.call(bar.querySelectorAll(".tc-instr")).forEach(function (chip) {
+        chip.addEventListener("click", function () {
+          if (selected) applyChange(selected, chip.getAttribute("data-instr"));
+        });
+      });
+      bar.querySelector(".tc-say__form").addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (!selected) return;
+        var typed = bar.querySelector(".tc-say__input").value;
+        applyChange(selected, classify(typed)); // matched intent, or null -> rotate
+      });
+      return bar;
+    }
+
+    // ---- wire the header prompt + format switcher -------------------------
+    promptForm.addEventListener("submit", function (e) { e.preventDefault(); loadFormat(fmt, true); });
+    fmtBtns.forEach(function (b) {
+      b.addEventListener("click", function () { loadFormat(b.getAttribute("data-fmt"), false); });
+    });
+
+    // boot
+    loadFormat("brief", false);
+  })();
+  </script>
 </Base>
