@@ -9,13 +9,12 @@
  * clicks and typed input. The old scroll-pinned Conveyor, the demo-video
  * scroll-jack, and the preset-cycling playground are gone.
  *
- * Shared wicked-web chrome (Base + Topbar + Footer + SameGarden) owns the
- * chrome and drives theming via [data-theme]; this page only styles the canvas.
+ * Shared wicked-web chrome (Base + Topbar + Footer) owns the chrome and drives
+ * theming via [data-theme]; this page styles the canvas + the how-it-works beat.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
 import Footer from 'wicked-web/components/Footer.astro';
-import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/interactive.css';
 
 const title = 'wicked-interactive — Point at the page. Say the change. Ship it tonight.';
@@ -84,6 +83,56 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
+  <!-- ── How it works: three moves + the format/export beat ───────────── -->
+  <section class="how">
+    <div class="wrap">
+      <div class="how-head">
+        <div class="kicker">How it works</div>
+        <h2>Three moves, <span class="y">one canvas.</span></h2>
+        <p class="how-lede">No round-trips, no design tickets, no rebuilding the whole thing to fix one line. Describe it, point at what's wrong, ship a self-contained file.</p>
+      </div>
+
+      <ol class="how-steps">
+        <li class="step">
+          <span class="step__n">1</span>
+          <h3>Describe it</h3>
+          <p>Say what you want in plain language. It builds in the browser, block by block &mdash; you watch the page appear as you talk.</p>
+        </li>
+        <li class="step">
+          <span class="step__n">2</span>
+          <h3>Point and say</h3>
+          <p>Click any block and say the change. <em>Only that block</em> reworks &mdash; every other block holds perfectly still.</p>
+        </li>
+        <li class="step">
+          <span class="step__n">3</span>
+          <h3>Ship it</h3>
+          <p>Rewind any edit through the version rail, then export one self-contained file. Nothing to host, nothing to wire up.</p>
+        </li>
+      </ol>
+
+      <div class="beat">
+        <div class="beat__col beat__col--fmt">
+          <span class="beat__lbl">Point at any format</span>
+          <ul class="beat__chips">
+            <li>Launch brief</li>
+            <li>Investor deck</li>
+            <li>Landing page</li>
+            <li>Demo video</li>
+          </ul>
+        </div>
+        <div class="beat__col beat__col--out">
+          <span class="beat__lbl">Export, self-contained</span>
+          <ul class="beat__chips">
+            <li>HTML</li>
+            <li>PDF</li>
+            <li>PowerPoint</li>
+            <li>Video</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Closer → From the same garden → Footer ───────────────────────── -->
   <div class="finale">
     <section class="closer">
@@ -122,7 +171,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       </div>
     </section>
 
-    <SameGarden current="wicked-interactive" />
 
     <Footer repo={repo} />
   </div>
