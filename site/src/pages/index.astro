@@ -2,17 +2,23 @@
 /**
  * index.astro — wicked-interactive landing (wi.wickedagile.com).
  *
- * CONCEPT: "The Studio." This page IS the product. The hero is a real, driven
- * point-and-say editor the visitor operates: describe → build (block-by-block
- * shimmer) → click a block, say the change (highlighter sweep + "only this
- * block touched" halo) → rewind via the version timeline → export. Beneath it,
- * three DISTINCT framed rooms — the loop, make-anything/send-anything, and the
- * closer — so the page reads as separated sections, not a content scroll.
+ * A HYBRID of the two builds, on the family DARK ground:
+ *   1. Hero              — the clean statement hero from the LIVE (f26d5fd) build.
+ *   2. Point at anything — the live editor + style import + the four judges (NEW
+ *                          build), moved into its own section; the "Demo video"
+ *                          chip is gone from its selector — it's a section now.
+ *   3. Demo video        — the interactive aim→explore→record→storyboard player
+ *                          revived from the original LIVE build, rebuilt as an
+ *                          auto-advancing + clickable stepper (no scroll-jack) so
+ *                          it lives in one snapped viewport.
+ *   4. Make anything / Send anything                              (NEW build).
+ *   5. Under the hood    — the real feature surface                (NEW build).
+ *   6. Closer "That's the whole product"                          (NEW build).
  *
- * The demo engine is canned (repeatable, honest — see the note under it); the
- * real product runs on the Claude Code session already in the visitor's
+ * Both demo engines are canned (repeatable, honest — see the notes under them);
+ * the real product runs on the Claude Code session already in the visitor's
  * terminal over wicked-bus. Shared wicked-web chrome (Base/Topbar/Footer) owns
- * the header, footer, and theming; this page styles + drives the studio.
+ * the header, footer, and fonts; this page styles + drives the studio, dark.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -27,13 +33,23 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 <Base title={title} description={description}>
   <Topbar pkg="wicked-interactive" repo={repo} />
 
-  <!-- ════ ROOM 1 — THE STUDIO (hero = the live demo) ════════════════════ -->
-  <section class="studio" id="top">
+  <!-- ════ ROOM 1 — HERO (from the LIVE build) ═══════════════════════════ -->
+  <section class="hero" id="top">
     <div class="wrap">
-      <div class="hero-head">
-        <div class="kicker">Interactive builder · point-and-say editing</div>
-        <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
-        <p class="lede">Describe a deck, doc, page, or demo &mdash; watch it build in your browser. Then point at any block and say the change: <b>only that block reworks.</b> <span class="down">It's live below &darr;</span></p>
+      <div class="kicker">Interactive builder · point-and-say editing</div>
+      <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
+      <p class="lede">Describe a doc and watch it build, live. Then click any block and say what to change &mdash; <b>only that block reworks</b>, everything else holds perfectly still.</p>
+      <a class="down" href="#point">It's live just below</a>
+    </div>
+  </section>
+
+  <!-- ════ ROOM 2 — POINT AT ANYTHING (the live editor) ══════════════════ -->
+  <section class="band point" id="point">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-eyebrow"><b>01</b> Point at anything</span>
+        <h2 class="sec-title">Describe it. Point at a block. <span class="y">Say the change.</span></h2>
+        <p class="sec-intro">A real, driven editor &mdash; not a screenshot. Describe a document, watch it build block by block, then click any block and say the change. <b>Only that block reworks;</b> steal a brand's look from a URL and send it to the judges before you ship.</p>
       </div>
 
       <div class="editor" id="editor">
@@ -42,7 +58,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           <button class="ed-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
           <button class="ed-fmt" type="button" data-fmt="deck">Investor deck</button>
           <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
-          <button class="ed-fmt" type="button" data-fmt="video">Demo video</button>
         </div>
 
         <div class="ed-frame" id="edFrame">
@@ -114,45 +129,206 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
-  <!-- ════ ROOM 2 — THE LOOP ═════════════════════════════════════════════ -->
-  <section class="band band--solid loop">
+  <!-- ════ ROOM 3 — DEMO VIDEO (revived from the LIVE build) ═════════════ -->
+  <section class="band demo" id="demo">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>01</b> The loop</span>
-        <h2 class="sec-title">Three moves. <span class="y">One canvas.</span></h2>
-        <p class="sec-intro">No round-trips. No design tickets. No rebuilding the whole thing to fix one line. You describe it, point at what's wrong, and ship a file &mdash; all in the browser.</p>
+        <span class="sec-eyebrow"><b>02</b> Demo video</span>
+        <h2 class="sec-title">Point it at your app. <span class="y">Get a narrated walkthrough.</span></h2>
+        <p class="sec-intro">Give it a URL and a brief. wicked-interactive explores your app, scripts a Playwright spec, records it with narration captions, and hands back an interactive storyboard. <b>No screen-recording tools. No editing.</b></p>
       </div>
 
-      <ol class="loop-steps">
-        <li class="step step--1">
-          <span class="step__n">1</span>
-          <h3>Describe it</h3>
-          <p>Say what you want in plain language. A themed first draft renders in the browser, block by block &mdash; <em>no blank page, ever.</em></p>
-          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i></span>
-        </li>
-        <li class="step step--2">
-          <span class="step__n">2</span>
-          <h3>Point and say</h3>
-          <p>Highlight any block, say the change in plain English. Only that block regenerates &mdash; <code>data-wid</code> anchoring holds everything else exactly where it was.</p>
-          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i></span>
-        </li>
-        <li class="step step--3">
-          <span class="step__n">3</span>
-          <h3>Ship it</h3>
-          <p>Rewind any version or <em>fork</em> to chase two ideas at once, then export one self-contained file. Nothing to host, nothing to wire up.</p>
-          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        </li>
-      </ol>
+      <div class="demo-grid">
+        <div class="vid-step-ledger" role="group" aria-label="Jump to a step">
+          <button class="vid-step is-active" type="button" data-ledger="1">
+            <div class="vs-num">01</div><div class="vs-lab">Aim</div><div class="vs-hint">Your app URL + brief.</div>
+          </button>
+          <button class="vid-step" type="button" data-ledger="2">
+            <div class="vs-num">02</div><div class="vs-lab">Explore</div><div class="vs-hint">Agent maps the app.</div>
+          </button>
+          <button class="vid-step" type="button" data-ledger="3">
+            <div class="vs-num">03</div><div class="vs-lab">Record</div><div class="vs-hint">Playwright captures it.</div>
+          </button>
+          <button class="vid-step" type="button" data-ledger="4">
+            <div class="vs-num">04</div><div class="vs-lab">Storyboard</div><div class="vs-hint">Interactive output.</div>
+          </button>
+        </div>
+
+        <div class="vid-player" id="vidPlayer">
+          <div class="vid-chrome">
+            <span class="vid-tl"></span><span class="vid-tl"></span><span class="vid-tl"></span>
+            <span class="vid-urlbar" id="vUrl">localhost:4400 · new demo</span>
+            <span class="vid-rec"><span class="vid-rec-dot" id="vDot"></span><span id="vRecTime"></span></span>
+          </div>
+          <div class="vid-screen">
+            <div class="vid-state is-on" id="vS1">
+              <div class="vid-slabel">Step 1 — aim</div>
+              <div class="vid-form">
+                <div class="vid-field">
+                  <span class="vid-flabel">Your app URL</span>
+                  <div class="vid-finput">http://localhost:3000<span class="vc"></span></div>
+                </div>
+                <div class="vid-field">
+                  <span class="vid-flabel">What to demo</span>
+                  <div class="vid-ftext">Walk through creating a new project, then export as PDF.</div>
+                </div>
+                <button class="vid-gobtn" type="button" tabindex="-1">Record demo →</button>
+              </div>
+            </div>
+            <div class="vid-state" id="vS2">
+              <div class="vid-slabel">Agent · mapping localhost:3000</div>
+              <div class="vid-term">
+                <div class="vid-log">
+                  <div class="vid-log-line"><span class="vid-log-arr">→</span>Visiting http://localhost:3000</div>
+                  <div class="vid-log-line"><span class="vid-log-arr">→</span>Crawling routes &amp; interactions…</div>
+                  <div class="vid-log-line"><span class="vid-log-arr">→</span>Found: /dashboard, /projects/new, /export</div>
+                  <div class="vid-log-line vid-log-hi"><span class="vid-log-arr">→</span>Authoring demo.spec.mjs · 4 chapters planned</div>
+                  <div class="vid-log-line vid-log-dim"><span class="vid-log-arr">→</span>Ready to record<span class="vc-sm"></span></div>
+                </div>
+              </div>
+              <div class="vid-routebar">
+                <span class="vid-routetag">/dashboard</span>
+                <span class="vid-routetag">/projects/new</span>
+                <span class="vid-routetag">/export</span>
+              </div>
+            </div>
+            <div class="vid-state" id="vS3">
+              <div class="vid-slabel">Playwright · recording localhost:3000</div>
+              <div class="vid-target">
+                <div class="vid-target-bar">
+                  <span class="vid-tl" style="background:#ff5f57;width:8px;height:8px"></span>
+                  <span class="vid-tl" style="background:#febc2e;width:8px;height:8px"></span>
+                  <span class="vid-tl" style="background:#28c840;width:8px;height:8px"></span>
+                  <span class="vid-target-url">localhost:3000 · projects / new</span>
+                </div>
+                <div class="vid-target-content">
+                  <div class="vid-target-h">New project</div>
+                  <div class="vid-target-r" style="width:42%"></div>
+                  <div class="vid-target-r sel"></div>
+                  <div class="vid-target-r" style="width:70%"></div>
+                  <div class="vid-target-r" style="width:88%"></div>
+                  <div class="vid-target-r" style="width:55%"></div>
+                  <div class="vid-target-rbtn"></div>
+                </div>
+                <div class="vid-cursor" aria-hidden="true"></div>
+                <div class="vid-caption">Filling in the project name field…</div>
+              </div>
+            </div>
+            <div class="vid-state" id="vS4">
+              <div class="vid-slabel">Output · storyboard.html</div>
+              <div class="vid-storyboard">
+                <div class="vid-sb-preview">
+                  <div class="vid-preview-ui" aria-hidden="true">
+                    <div class="vpu-chrome">
+                      <span class="vpu-win"></span><span class="vpu-win"></span><span class="vpu-win"></span>
+                      <div class="vpu-url"></div>
+                    </div>
+                    <div class="vpu-appnav">
+                      <div class="vpu-logo"></div>
+                      <div class="vpu-navlinks"><div></div><div class="hi"></div><div></div><div></div></div>
+                      <div class="vpu-btn"></div>
+                    </div>
+                    <div class="vpu-layout">
+                      <div class="vpu-sidebar">
+                        <div class="vpu-si hi"></div>
+                        <div class="vpu-si"></div>
+                        <div class="vpu-si"></div>
+                        <div class="vpu-si"></div>
+                        <div class="vpu-si"></div>
+                      </div>
+                      <div class="vpu-main">
+                        <div class="vpu-heading"></div>
+                        <div class="vpu-sub"></div>
+                        <div class="vpu-cards"><div></div><div></div><div></div></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="vpu-cursor"></div>
+                  <div class="vid-sb-play">▶</div>
+                  <div class="vid-sb-duration">1:34</div>
+                </div>
+                <div class="vid-sb-chapters">
+                  <div class="vid-sb-ch active">
+                    <div class="vid-sb-thumb">
+                      <div class="vsbt-nav"></div>
+                      <div class="vsbt-page">
+                        <div class="vsbt-side"><div class="hi"></div><div></div><div></div><div></div></div>
+                        <div class="vsbt-main">
+                          <div class="vsbt-head"></div><div class="vsbt-row w80"></div>
+                          <div class="vsbt-cards"><div></div><div></div><div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                    <span>01 · Dashboard</span>
+                  </div>
+                  <div class="vid-sb-ch">
+                    <div class="vid-sb-thumb">
+                      <div class="vsbt-nav"></div>
+                      <div class="vsbt-page">
+                        <div class="vsbt-side"><div></div><div class="hi"></div><div></div><div></div></div>
+                        <div class="vsbt-main">
+                          <div class="vsbt-head"></div><div class="vsbt-row w80"></div>
+                          <div class="vsbt-cards"><div></div><div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                    <span>02 · New project</span>
+                  </div>
+                  <div class="vid-sb-ch">
+                    <div class="vid-sb-thumb">
+                      <div class="vsbt-nav"></div>
+                      <div class="vsbt-page">
+                        <div class="vsbt-side"><div></div><div class="hi"></div><div></div><div></div></div>
+                        <div class="vsbt-main">
+                          <div class="vsbt-head"></div><div class="vsbt-row hi"></div>
+                          <div class="vsbt-cards"><div></div><div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                    <span>03 · Fill in</span>
+                  </div>
+                  <div class="vid-sb-ch">
+                    <div class="vid-sb-thumb">
+                      <div class="vsbt-nav"></div>
+                      <div class="vsbt-page">
+                        <div class="vsbt-main">
+                          <div class="vsbt-head"></div><div class="vsbt-row w55"></div><div class="vsbt-row w40"></div>
+                          <div class="vsbt-cards"><div></div><div></div><div></div></div>
+                        </div>
+                      </div>
+                    </div>
+                    <span>04 · Export PDF</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="vid-controls">
+            <div class="vid-timeline">
+              <div class="vid-bar"><div class="vid-fill" id="vFill"></div></div>
+              <div class="vid-chs">
+                <button class="vid-ch now" type="button" id="vC1">Aim</button>
+                <button class="vid-ch" type="button" id="vC2">Explore</button>
+                <button class="vid-ch" type="button" id="vC3">Record</button>
+                <button class="vid-ch" type="button" id="vC4">Storyboard</button>
+              </div>
+            </div>
+            <button class="vid-dl" type="button" id="vDl">View →</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="vid-demo-note"><b>The four steps auto-play &mdash; or click any step to jump.</b> This on-page walkthrough is canned; the real recorder drives a live Playwright session against your own running app and hands back a self-contained storyboard.</p>
     </div>
   </section>
 
-  <!-- ════ ROOM 3 — MAKE ANYTHING / SEND ANYTHING ════════════════════════ -->
-  <section class="band band--tint io">
+  <!-- ════ ROOM 4 — MAKE ANYTHING / SEND ANYTHING (NEW build) ════════════ -->
+  <section class="band io">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>02</b> One canvas, every format</span>
+        <span class="sec-eyebrow"><b>03</b> One canvas, every format</span>
         <h2 class="sec-title">Make anything. <span class="y">Send anything.</span></h2>
-        <p class="sec-intro">The stuff you'd normally dread &mdash; built as real, interactive HTML, then handed off as one file anyone can open. Pick a format on the left; it loads in the studio above.</p>
+        <p class="sec-intro">The stuff you'd normally dread &mdash; built as real, interactive HTML, then handed off as one file anyone can open. Pick a format on the left; it loads in the editor above.</p>
       </div>
 
       <div class="io-grid">
@@ -187,10 +363,10 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
               </button>
             </li>
             <li>
-              <button class="io-card" type="button" data-load="video">
+              <button class="io-card" type="button" data-goto="demo">
                 <span class="io-card__t">
                   <svg class="io-card__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><polygon points="10,9 16,12 10,15" fill="currentColor" stroke="none"/></svg>
-                  Demo videos <span class="io-card__go">Load ↑</span>
+                  Demo videos <span class="io-card__go">See it ↑</span>
                 </span>
                 <span class="io-card__d">Point it at your live app, say what to show &mdash; it records a narrated walkthrough with chapter thumbnails.</span>
               </button>
@@ -236,13 +412,13 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
-  <!-- ════ ROOM 4 — UNDER THE HOOD (the real feature surface) ════════════ -->
-  <section class="band band--solid hood">
+  <!-- ════ ROOM 5 — UNDER THE HOOD (NEW build) ═══════════════════════════ -->
+  <section class="band hood">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>03</b> Under the hood</span>
+        <span class="sec-eyebrow"><b>04</b> Under the hood</span>
         <h2 class="sec-title">More than a pretty draft. <span class="y">A real editing engine.</span></h2>
-        <p class="sec-intro">The demo above is the tip of it. Here's what the agent in your terminal actually does &mdash; every piece of it real, not a mockup.</p>
+        <p class="sec-intro">The demos above are the tip of it. Here's what the agent in your terminal actually does &mdash; every piece of it real, not a mockup.</p>
       </div>
 
       <ul class="hood-grid">
@@ -259,7 +435,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         <li class="hood-card hood-card--feature">
           <span class="hood-card__k">Style import</span>
           <h3>Steal any brand's look from a URL</h3>
-          <p>Point it at a page whose design you like. It renders that page, <em>reads the design</em>, synthesizes a theme, and re-skins your whole document &mdash; and the look sticks for every later edit. (Try it in the studio above.)</p>
+          <p>Point it at a page whose design you like. It renders that page, <em>reads the design</em>, synthesizes a theme, and re-skins your whole document &mdash; and the look sticks for every later edit. (Try it in the editor above.)</p>
         </li>
         <li class="hood-card hood-card--feature">
           <span class="hood-card__k">The judges</span>
@@ -280,14 +456,14 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
-  <!-- ════ ROOM 5 — CLOSER + INSTALL ═════════════════════════════════════ -->
+  <!-- ════ ROOM 6 — CLOSER + INSTALL (NEW build) ═════════════════════════ -->
   <div class="finale">
     <section class="closer">
       <div class="wrap">
         <div class="closer-intro">
           <div class="kicker">That's the whole product</div>
           <h2>One block changed. <span class="y">Everything else held.</span></h2>
-          <p>Every part of this page &mdash; the point-and-say edits, the style import, the four reviewers, the version timeline &mdash; runs on the Claude Code session <em>already open in your terminal</em>. Nothing to host, nothing to learn. Install it and your next deck is a conversation, not a weekend.</p>
+          <p>Every part of this page &mdash; the point-and-say edits, the style import, the four reviewers, the demo-video recorder, the version timeline &mdash; runs on the Claude Code session <em>already open in your terminal</em>. Nothing to host, nothing to learn. Install it and your next deck is a conversation, not a weekend.</p>
           <div class="closer-cta">
             <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">
               <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -323,7 +499,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     <Footer repo={repo} />
   </div>
 
-  <!-- ════ THE STUDIO ENGINE — real, driven, canned data ═════════════════ -->
+  <!-- ════ THE EDITOR ENGINE — real, driven, canned data ═════════════════ -->
   <script is:inline>
   (function () {
     "use strict";
@@ -331,9 +507,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var INSTR = { punchier: "Punchier", warmer: "Warmer", stat: "Add a stat", tighten: "Tighten" };
     var ORDER = ["punchier", "warmer", "stat", "tighten"];
 
-    // each format: a real document with ordered blocks. Every block carries base
-    // text + four rewrites, so a chip OR a typed instruction produces different,
-    // sensible copy for THAT block only.
     var DOCS = {
       brief: {
         prompt: "One-page Q3 launch brief for the whole team.",
@@ -412,47 +585,18 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
             stat: "Publish in one click · live in under 30 seconds.",
             tighten: "Publish in one click." } }
         ]
-      },
-      video: {
-        prompt: "Narrated demo of our onboarding flow.",
-        url: "localhost:4400 · onboarding-demo.mp4 · 4 chapters", kicker: "Demo video · Storyboard",
-        blocks: [
-          { id: "h", kind: "h", text: "A guided tour of your first five minutes", v: {
-            punchier: "Your first five minutes — and why they'll hook you",
-            warmer: "Let's walk through your first five minutes together",
-            stat: "First 5 minutes · 4 chapters · 1:34 runtime",
-            tighten: "Your first five minutes" } },
-          { id: "s", kind: "sub", text: "We record the flow, narrate each step, and hand back a storyboard.", v: {
-            punchier: "Recorded, narrated, storyboarded — zero editing from you.",
-            warmer: "We'll capture it and talk you through every step.",
-            stat: "4 chapters auto-captured from 12 clicks.",
-            tighten: "Recorded, narrated, storyboarded." } },
-          { id: "r1", kind: "row", text: "Chapter 1: create your first project in three clicks.", v: {
-            punchier: "Chapter 1: first project, three clicks, done.",
-            warmer: "Chapter 1: we'll set up your first project together.",
-            stat: "Chapter 1: first project in 3 clicks · 18 seconds.",
-            tighten: "Ch. 1: first project, 3 clicks." } },
-          { id: "r2", kind: "row", text: "Chapter 4: export your work and share the link.", v: {
-            punchier: "Chapter 4: export, share, ship — the loop closes.",
-            warmer: "Chapter 4: export your work and send it to whoever needs it.",
-            stat: "Chapter 4: export in one click · 6 formats.",
-            tighten: "Ch. 4: export and share." } }
-        ]
       }
     };
 
     var KIND_NAME = { h: "Headline", sub: "Subhead", row: "Body line" };
     var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Style import — canned themes stand in for "point at a URL, it reads the
-    // design and re-skins the doc" (wicked.theme.learned; assist Step 8.5).
     var THEMES = {
       _default: { label: "the studio default", paper: "#fbf7ec", ink: "#23303a", muted: "#5f6f78", accent: "#ffda19", halo: "255,218,25" },
       stripe:   { label: "stripe.com",         paper: "#ffffff", ink: "#0a2540", muted: "#425466", accent: "#635bff", halo: "99,91,255" },
       linear:   { label: "linear.app",         paper: "#f6f7fb", ink: "#16182d", muted: "#5b5f6e", accent: "#5e6ad2", halo: "94,106,210" },
       sunset:   { label: "sunset.studio",       paper: "#fff5ec", ink: "#3a1f1a", muted: "#8a5a4a", accent: "#ff6b3d", halo: "255,107,61" }
     };
-    // Reviewers — the four judges (wicked.review.requested enum match/a11y/copy/qe; assist Step 8.6).
     var REV = {
       match: { label: "Brand match",   v: "On-brand — palette, type, and spacing all track the theme." },
       a11y:  { label: "Accessibility", v: "Contrast passes WCAG AA on every block; headings in order." },
@@ -478,15 +622,16 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var brandBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-brand"));
     var judgeBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-judge"));
     var loadBtns = Array.prototype.slice.call(document.querySelectorAll(".io-card[data-load]"));
+    var gotoBtns = Array.prototype.slice.call(document.querySelectorAll(".io-card[data-goto]"));
 
     var fmt = "brief";
-    var live = {};          // id -> { key, text }
-    var history = [];       // [{ vlabel, whatHTML, blocks, theme }]
+    var live = {};
+    var history = [];
     var active = 0;
     var selected = null;
     var building = false;
     var curTheme = "_default";
-    var userActed = false;  // any real interaction cancels the auto-demo
+    var userActed = false;
     var autoStarted = false;
     var styleTick = 0;
     var sayBar = buildSayBar();
@@ -618,8 +763,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     function pushVersion(what, instr) {
       commitVersion(what + ' &rarr; <em>' + instr + '</em>');
     }
-    // one place that appends a version — edits AND restyles both land here, so
-    // every change (including a style import) is rewindable (src/core/versions.js).
     function commitVersion(whatHTML) {
       if (active < history.length - 1) history = history.slice(0, active + 1);
       history.push({ vlabel: "v" + history.length, whatHTML: whatHTML, blocks: clone(live), theme: curTheme });
@@ -640,7 +783,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         pip.addEventListener("click", function () { rewind(i); });
         pipsEl.appendChild(pip);
       });
-      // keep the newest pip in view
       pipsEl.scrollLeft = pipsEl.scrollWidth;
     }
 
@@ -673,15 +815,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       renderPips();
       fmtBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-fmt") === f); });
       setCue("build", "Building your first draft&hellip;");
-      // on a user-driven reload, settle to "your turn" once the build lands; on
-      // the very first load the auto-demo owns the cue instead.
       setTimeout(function () { if (userActed) cueReady(); }, reduced ? 300 : 1400);
     }
 
-    // ---- style import: re-skin the paper from a "learned" theme ------------
     function applyTheme(key, silent) {
       var th = THEMES[key] || THEMES._default;
-      // scoped to the doc — bullets, highlighter, and diff-halo all pick up the brand
       doc.style.setProperty("--paper", th.paper);
       doc.style.setProperty("--paper-ink", th.ink);
       doc.style.setProperty("--paper-muted", th.muted);
@@ -701,7 +839,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       return (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").slice(0, 40) || "your-brand.com";
     }
 
-    // ---- reviewers: run a pass, post a verdict (no new version) -------------
     function verdictRow(key) {
       var row = verdictsEl.querySelector('.ed-verdict[data-rev="' + key + '"]');
       if (!row) { row = document.createElement("div"); row.setAttribute("data-rev", key); verdictsEl.appendChild(row); }
@@ -724,7 +861,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       judgeBtns.forEach(function (b) { b.classList.remove("is-running", "is-passed"); });
     }
 
-    // ---- the auto-demo: play ONE edit, then hand the wheel over ------------
     function startAutoDemo() {
       if (autoStarted || userActed) return;
       autoStarted = true;
@@ -796,7 +932,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     promptForm.addEventListener("submit", function (e) { e.preventDefault(); markUserActed(); loadFormat(fmt, true); });
     fmtBtns.forEach(function (b) { b.addEventListener("click", function () { markUserActed(); loadFormat(b.getAttribute("data-fmt"), false); }); });
 
-    // style import — free-text URL rotates through the canned brands; chips are direct
     styleForm.addEventListener("submit", function (e) {
       e.preventDefault(); markUserActed();
       var url = cleanUrl(styleUrl.value);
@@ -812,12 +947,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       });
     });
 
-    // reviewers — run a pass, post a verdict
     judgeBtns.forEach(function (b) {
       b.addEventListener("click", function () { markUserActed(); runReview(b.getAttribute("data-rev"), b); });
     });
 
-    // Room 3 → drive the studio: load that format and scroll it into view.
+    // Room 4 → drive the editor: load that format and scroll it into view.
     loadBtns.forEach(function (b) {
       b.addEventListener("click", function () {
         markUserActed();
@@ -825,12 +959,16 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         if (editorEl && editorEl.scrollIntoView) editorEl.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
       });
     });
+    // Room 4 "Demo videos" card → jump to the demo-video section instead.
+    gotoBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var target = document.getElementById(b.getAttribute("data-goto"));
+        if (target && target.scrollIntoView) target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+      });
+    });
 
     loadFormat("brief", false);
 
-    // Kick the auto-demo when the studio enters view (so the motion is seen).
-    // Fire as soon as any meaningful part of the editor is visible, with a
-    // fallback timer so it always plays even if the observer never trips.
     if ("IntersectionObserver" in window && editorEl) {
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (en) {
@@ -839,7 +977,84 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       }, { threshold: 0.08, rootMargin: "0px 0px -12% 0px" });
       io.observe(editorEl);
     }
-    setTimeout(startAutoDemo, reduced ? 400 : 3200); // safety net (guards double-run)
+    setTimeout(startAutoDemo, reduced ? 400 : 3200);
+  })();
+  </script>
+
+  <!-- ════ THE DEMO-VIDEO ENGINE — aim→explore→record→storyboard ═════════ -->
+  <script is:inline>
+  (function () {
+    "use strict";
+    var states = ["vS1", "vS2", "vS3", "vS4"].map(function (id) { return document.getElementById(id); });
+    var chs = ["vC1", "vC2", "vC3", "vC4"].map(function (id) { return document.getElementById(id); });
+    var ledger = Array.prototype.slice.call(document.querySelectorAll(".vid-step"));
+    var sbChs = Array.prototype.slice.call(document.querySelectorAll(".vid-sb-ch"));
+    var fill = document.getElementById("vFill");
+    var dot = document.getElementById("vDot");
+    var recEl = document.getElementById("vRecTime");
+    var dl = document.getElementById("vDl");
+    var urlEl = document.getElementById("vUrl");
+    var player = document.getElementById("vidPlayer");
+    if (!states[0]) return;
+
+    var URL_LABELS = [
+      "localhost:4400 · new demo",
+      "localhost:4400 · exploring…",
+      "localhost:3000 · projects / new",
+      "storyboard.html · 4 chapters"
+    ];
+    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var cur = 0, auto = null, thumbTimer = null;
+
+    function startThumbCycle() {
+      var i = 0;
+      thumbTimer = setInterval(function () {
+        i = (i + 1) % sbChs.length;
+        sbChs.forEach(function (c, idx) { c.classList.toggle("active", idx === i); });
+      }, 1200);
+    }
+    function stopThumbCycle() {
+      clearInterval(thumbTimer); thumbTimer = null;
+      sbChs.forEach(function (c, idx) { c.classList.toggle("active", idx === 0); });
+    }
+
+    function setStation(s) {
+      cur = s;
+      states.forEach(function (el, i) { if (el) el.classList.toggle("is-on", i === s); });
+      chs.forEach(function (el, i) { if (el) el.className = "vid-ch" + (i === s ? " now" : i < s ? " past" : ""); });
+      ledger.forEach(function (el, i) { el.classList.toggle("is-active", i === s); });
+      if (fill) fill.style.width = ((s + 1) / 4 * 100) + "%";
+      if (dot) dot.classList.toggle("is-on", s === 2);
+      if (recEl) recEl.textContent = s === 2 ? "REC" : "";
+      if (urlEl) urlEl.textContent = URL_LABELS[s];
+      if (dl) dl.classList.toggle("done", s === 3);
+      if (s === 3 && !thumbTimer) startThumbCycle();
+      else if (s !== 3 && thumbTimer) stopThumbCycle();
+    }
+
+    function advance() { setStation((cur + 1) % 4); }
+    function stop() { if (auto) { clearInterval(auto); auto = null; } }
+    function play() { if (reduced) return; stop(); auto = setInterval(advance, 3400); }
+    function jump(s) { setStation(s); play(); } // manual jump restarts the timer
+
+    ledger.forEach(function (el, i) { el.addEventListener("click", function () { jump(i); }); });
+    chs.forEach(function (el, i) { if (el) el.addEventListener("click", function () { jump(i); }); });
+    sbChs.forEach(function (el, i) {
+      el.addEventListener("click", function () {
+        setStation(3); play();
+        stopThumbCycle();
+        sbChs.forEach(function (c, idx) { c.classList.toggle("active", idx === i); });
+      });
+    });
+    if (dl) dl.addEventListener("click", function () { jump(3); });
+
+    setStation(0);
+    if ("IntersectionObserver" in window && player) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) { if (en.isIntersecting) play(); else stop(); });
+      }, { threshold: 0.25 });
+      io.observe(player);
+    } else { play(); }
   })();
   </script>
 </Base>
