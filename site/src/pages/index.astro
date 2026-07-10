@@ -1,16 +1,18 @@
 ---
 /**
- * index.astro — wicked-interactive landing page (wi.wickedagile.com).
+ * index.astro — wicked-interactive landing (wi.wickedagile.com).
  *
- * The hero IS the demo: the "Talkback Canvas" — a real, hands-on point-and-say
- * editor the visitor drives. describe -> build (block-by-block shimmer) ->
- * click a block, say the change (highlighter + "only this block touched" halo)
- * -> rewind via version pips. A canned engine, but it genuinely reacts to
- * clicks and typed input. The old scroll-pinned Conveyor, the demo-video
- * scroll-jack, and the preset-cycling playground are gone.
+ * CONCEPT: "The Studio." This page IS the product. The hero is a real, driven
+ * point-and-say editor the visitor operates: describe → build (block-by-block
+ * shimmer) → click a block, say the change (highlighter sweep + "only this
+ * block touched" halo) → rewind via the version timeline → export. Beneath it,
+ * three DISTINCT framed rooms — the loop, make-anything/send-anything, and the
+ * closer — so the page reads as separated sections, not a content scroll.
  *
- * Shared wicked-web chrome (Base + Topbar + Footer) owns the chrome and drives
- * theming via [data-theme]; this page styles the canvas + the how-it-works beat.
+ * The demo engine is canned (repeatable, honest — see the note under it); the
+ * real product runs on the Claude Code session already in the visitor's
+ * terminal over wicked-bus. Shared wicked-web chrome (Base/Topbar/Footer) owns
+ * the header, footer, and theming; this page styles + drives the studio.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
@@ -18,129 +20,206 @@ import Footer from 'wicked-web/components/Footer.astro';
 import '../styles/interactive.css';
 
 const title = 'wicked-interactive — Point at the page. Say the change. Ship it tonight.';
-const description = 'wicked-interactive turns plain language into living documents: describe a deck, doc, landing page, or demo, watch it build in the browser, then click any block and say the change — only that block reworks, everything else holds. Export self-contained HTML, PDF, PowerPoint, or video. Local-first; runs on the agent already in your session — no extra setup.';
+const description = 'Describe a deck, doc, landing page, or demo video in plain language and watch it build in your browser. Then click any block and say the change — only that block reworks, everything else holds. Export self-contained HTML, PDF, PowerPoint, or video. No code, no design tickets — it runs on the Claude Code session already in your terminal.';
 const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 ---
 
 <Base title={title} description={description}>
   <Topbar pkg="wicked-interactive" repo={repo} />
 
-  <!-- ── Hero = the demo ──────────────────────────────────────────────── -->
-  <section class="hero">
+  <!-- ════ ROOM 1 — THE STUDIO (hero = the live demo) ════════════════════ -->
+  <section class="studio" id="top">
     <div class="wrap">
-      <div class="kicker">Interactive document builder · point-and-say editing</div>
-      <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
-      <p class="lede">Describe a doc and watch it build, live. Then click any block and say what to change &mdash; <b>only that block reworks</b>, everything else holds perfectly still. Try it right here.</p>
+      <div class="hero-head">
+        <div class="kicker">Interactive builder · point-and-say editing</div>
+        <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
+        <p class="lede">Describe a deck, doc, page, or demo &mdash; watch it build in your browser. Then click any block and say what to change: <b>only that block reworks</b>, everything else holds perfectly still. <span class="down">Try it right here &darr;</span></p>
+      </div>
 
-      <div class="tc" id="tc">
-        <!-- Point at anything: reloads the SAME canvas with a new format -->
-        <div class="tc-switch" role="group" aria-label="Point at any format">
-          <span class="tc-switch__lbl">Point at anything</span>
-          <button class="tc-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
-          <button class="tc-fmt" type="button" data-fmt="deck">Investor deck</button>
-          <button class="tc-fmt" type="button" data-fmt="page">Landing page</button>
-          <button class="tc-fmt" type="button" data-fmt="video">Demo video</button>
+      <div class="editor" id="editor">
+        <div class="ed-formats" role="group" aria-label="Point at any format">
+          <span class="ed-formats__lbl">Point at anything</span>
+          <button class="ed-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
+          <button class="ed-fmt" type="button" data-fmt="deck">Investor deck</button>
+          <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
+          <button class="ed-fmt" type="button" data-fmt="video">Demo video</button>
         </div>
 
-        <div class="tc-stage">
-          <!-- the browser-framed paper document -->
-          <div class="tc-frame" id="tcFrame">
-            <div class="tc-chrome">
-              <span class="tc-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-              <span class="tc-url" id="tcUrl">localhost:4400 · q3-launch-brief.html</span>
-              <span class="tc-live"><span class="tc-pulse" aria-hidden="true"></span>Live</span>
-            </div>
-
-            <form class="tc-prompt" id="tcPromptForm">
-              <span class="tc-you">You</span>
-              <input class="tc-input" id="tcInput" type="text" autocomplete="off"
-                     aria-label="Describe the document to build"
-                     value="One-page Q3 launch brief for the whole team." />
-              <button class="tc-build" type="submit">Build &crarr;</button>
-            </form>
-
-            <div class="tc-doc" id="tcDoc" aria-live="polite"></div>
-
-            <div class="tc-export" id="tcExport">
-              <span class="tc-export__lbl">Ship it</span>
-              <button class="tc-ex" type="button" data-ex="HTML">HTML</button>
-              <button class="tc-ex" type="button" data-ex="PDF">PDF</button>
-              <button class="tc-ex" type="button" data-ex="PPTX">PPTX</button>
-              <button class="tc-ex" type="button" data-ex="Video">Video</button>
-              <span class="tc-export__status" id="tcExStatus"></span>
-            </div>
+        <div class="ed-frame" id="edFrame">
+          <div class="ed-chrome">
+            <span class="ed-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="ed-url" id="edUrl">localhost:4400 · q3-launch-brief.html</span>
+            <span class="ed-live"><span class="ed-pulse" aria-hidden="true"></span>Live</span>
           </div>
 
-          <!-- version rail: real edit history, click to rewind -->
-          <aside class="tc-versions" aria-label="Version history">
-            <div class="tc-versions__head">Versions <span>click to rewind</span></div>
-            <div class="tc-pips" id="tcPips"></div>
-          </aside>
+          <form class="ed-prompt" id="edPromptForm">
+            <span class="ed-you">You</span>
+            <input class="ed-input" id="edInput" type="text" autocomplete="off"
+                   aria-label="Describe the document to build"
+                   value="One-page Q3 launch brief for the whole team." />
+            <button class="ed-build" type="submit">Build &crarr;</button>
+          </form>
+
+          <div class="ed-doc" id="edDoc" aria-live="polite"></div>
+
+          <div class="ed-export" id="edExport">
+            <span class="ed-export__lbl">Ship it</span>
+            <button class="ed-ex" type="button" data-ex="HTML">HTML</button>
+            <button class="ed-ex" type="button" data-ex="PDF">PDF</button>
+            <button class="ed-ex" type="button" data-ex="PPTX">PowerPoint</button>
+            <button class="ed-ex" type="button" data-ex="Video">Video</button>
+            <span class="ed-export__status" id="edExStatus"></span>
+          </div>
         </div>
 
-        <p class="tc-hint" id="tcHint">Click any line in the page above, then say the change.</p>
+        <div class="ed-rail" aria-label="Version history">
+          <div class="ed-rail__head">Versions<span>click to rewind</span></div>
+          <div class="ed-pips" id="edPips"></div>
+        </div>
+
+        <p class="ed-hint" id="edHint">Click any line in the page above, then say the change.</p>
+        <p class="ed-note"><b>Real point-and-say editing.</b> This on-page demo is canned for the tour; the product itself runs on the Claude Code session already in your terminal &mdash; no extra setup, nothing leaves your machine.</p>
       </div>
     </div>
   </section>
 
-  <!-- ── How it works: three moves + the format/export beat ───────────── -->
-  <section class="how">
+  <!-- ════ ROOM 2 — THE LOOP ═════════════════════════════════════════════ -->
+  <section class="band band--solid loop">
     <div class="wrap">
-      <div class="how-head">
-        <div class="kicker">How it works</div>
-        <h2>Three moves, <span class="y">one canvas.</span></h2>
-        <p class="how-lede">No round-trips, no design tickets, no rebuilding the whole thing to fix one line. Describe it, point at what's wrong, ship a self-contained file.</p>
+      <div class="sec-head">
+        <span class="sec-eyebrow"><b>01</b> The loop</span>
+        <h2 class="sec-title">Three moves. <span class="y">One canvas.</span></h2>
+        <p class="sec-intro">No round-trips. No design tickets. No rebuilding the whole thing to fix one line. You describe it, point at what's wrong, and ship a file &mdash; all in the browser.</p>
       </div>
 
-      <ol class="how-steps">
-        <li class="step">
+      <ol class="loop-steps">
+        <li class="step step--1">
           <span class="step__n">1</span>
           <h3>Describe it</h3>
-          <p>Say what you want in plain language. It builds in the browser, block by block &mdash; you watch the page appear as you talk.</p>
+          <p>Say what you want in plain language. A themed first draft renders in the browser, block by block &mdash; <em>no blank page, ever.</em></p>
+          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i></span>
         </li>
-        <li class="step">
+        <li class="step step--2">
           <span class="step__n">2</span>
           <h3>Point and say</h3>
-          <p>Click any block and say the change. <em>Only that block</em> reworks &mdash; every other block holds perfectly still.</p>
+          <p>Highlight any block, say the change in plain English. Only that block regenerates &mdash; <code>data-wid</code> anchoring holds everything else exactly where it was.</p>
+          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i></span>
         </li>
-        <li class="step">
+        <li class="step step--3">
           <span class="step__n">3</span>
           <h3>Ship it</h3>
-          <p>Rewind any edit through the version rail, then export one self-contained file. Nothing to host, nothing to wire up.</p>
+          <p>Rewind any version or <em>fork</em> to chase two ideas at once, then export one self-contained file. Nothing to host, nothing to wire up.</p>
+          <span class="step__vis" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         </li>
       </ol>
+    </div>
+  </section>
 
-      <div class="beat">
-        <div class="beat__col beat__col--fmt">
-          <span class="beat__lbl">Point at any format</span>
-          <ul class="beat__chips">
-            <li>Launch brief</li>
-            <li>Investor deck</li>
-            <li>Landing page</li>
-            <li>Demo video</li>
+  <!-- ════ ROOM 3 — MAKE ANYTHING / SEND ANYTHING ════════════════════════ -->
+  <section class="band band--tint io">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-eyebrow"><b>02</b> One canvas, every format</span>
+        <h2 class="sec-title">Make anything. <span class="y">Send anything.</span></h2>
+        <p class="sec-intro">The stuff you'd normally dread &mdash; built as real, interactive HTML, then handed off as one file anyone can open. Pick a format on the left; it loads in the studio above.</p>
+      </div>
+
+      <div class="io-grid">
+        <div class="io-col io-col--in">
+          <span class="io-col__lbl">What you make</span>
+          <ul class="io-cards">
+            <li>
+              <button class="io-card" type="button" data-load="deck">
+                <span class="io-card__t">
+                  <svg class="io-card__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="16" x2="12" y2="20"/></svg>
+                  Decks <span class="io-card__go">Load ↑</span>
+                </span>
+                <span class="io-card__d">Board updates, pitch decks, QBRs &mdash; on-brand and export-ready, not a sad bulleted list.</span>
+              </button>
+            </li>
+            <li>
+              <button class="io-card" type="button" data-load="brief">
+                <span class="io-card__t">
+                  <svg class="io-card__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/><line x1="9" y1="13" x2="16" y2="13"/><line x1="9" y1="17" x2="16" y2="17"/></svg>
+                  Docs &amp; one-pagers <span class="io-card__go">Load ↑</span>
+                </span>
+                <span class="io-card__d">Reports, briefs, proposals, the FAQ nobody wants to write &mdash; one page everyone can act on.</span>
+              </button>
+            </li>
+            <li>
+              <button class="io-card" type="button" data-load="page">
+                <span class="io-card__t">
+                  <svg class="io-card__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="7" y1="14" x2="14" y2="14"/></svg>
+                  Landing &amp; marketing pages <span class="io-card__go">Load ↑</span>
+                </span>
+                <span class="io-card__d">Launch pages, pricing, sales pages &mdash; anything that lives on the web, built as real HTML.</span>
+              </button>
+            </li>
+            <li>
+              <button class="io-card" type="button" data-load="video">
+                <span class="io-card__t">
+                  <svg class="io-card__glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><polygon points="10,9 16,12 10,15" fill="currentColor" stroke="none"/></svg>
+                  Demo videos <span class="io-card__go">Load ↑</span>
+                </span>
+                <span class="io-card__d">Point it at your live app, say what to show &mdash; it records a narrated walkthrough with chapter thumbnails.</span>
+              </button>
+            </li>
           </ul>
         </div>
-        <div class="beat__col beat__col--out">
-          <span class="beat__lbl">Export, self-contained</span>
-          <ul class="beat__chips">
-            <li>HTML</li>
-            <li>PDF</li>
-            <li>PowerPoint</li>
-            <li>Video</li>
+
+        <div class="io-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"/><polyline points="14,6 20,12 14,18"/></svg>
+          <span>one file</span>
+        </div>
+
+        <div class="io-col io-col--out">
+          <span class="io-col__lbl">How you send it</span>
+          <ul class="io-cards">
+            <li>
+              <div class="io-card">
+                <span class="io-card__t">HTML <span class="io-out__tag">self-contained</span></span>
+                <span class="io-card__d">One file with everything inlined &mdash; opens straight from disk, stays interactive, nothing to host.</span>
+              </div>
+            </li>
+            <li>
+              <div class="io-card">
+                <span class="io-card__t">PDF <span class="io-out__tag">print-ready</span></span>
+                <span class="io-card__d">The same document rendered to a clean, shareable PDF for the people who still want one.</span>
+              </div>
+            </li>
+            <li>
+              <div class="io-card">
+                <span class="io-card__t">PowerPoint <span class="io-out__tag">native .pptx</span></span>
+                <span class="io-card__d">A real, editable PowerPoint &mdash; hand it to someone who lives in slides and they can keep going.</span>
+              </div>
+            </li>
+            <li>
+              <div class="io-card">
+                <span class="io-card__t">Video <span class="io-out__tag">narrated</span></span>
+                <span class="io-card__d">The recorded walkthrough as an MP4 with a chaptered storyboard &mdash; share the link, done.</span>
+              </div>
+            </li>
           </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ── Closer → From the same garden → Footer ───────────────────────── -->
+  <!-- ════ ROOM 4 — CLOSER + INSTALL ═════════════════════════════════════ -->
   <div class="finale">
     <section class="closer">
-      <div class="wrap closer-grid">
+      <div class="wrap">
         <div class="closer-intro">
           <div class="kicker">That's the whole product</div>
-          <h2>One block changed. Everything else held.</h2>
+          <h2>One block changed. <span class="y">Everything else held.</span></h2>
           <p>No round-trip, no design ticket, no rewriting the whole thing to fix one line. You point at what's wrong, say it in plain English, and <em>only that block</em> reworks &mdash; then export a self-contained file and you're done tonight.</p>
+          <div class="closer-cta">
+            <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+              View on GitHub
+            </a>
+            <span class="kicker" style="letter-spacing:.14em">v0.5.30 · npm · MIT</span>
+          </div>
         </div>
 
         <div class="install-group" role="group" aria-label="Install wicked-interactive">
@@ -151,11 +230,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('npx wicked-installer').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
             <pre class="install__code"><code><span class="p">npx</span> wicked-installer</code></pre>
-            <p class="install__note">Interactive picker &mdash; choose your products, wire them across CLIs, and get the <code>wicked</code> command. Installs wicked-interactive and anything else you want in one pass.</p>
+            <p class="install__note">Interactive picker &mdash; choose your products, wire them across your CLIs, and get the <code>wicked</code> command. Installs wicked-interactive and anything else you want in one pass.</p>
           </div>
           <div class="install install--secondary">
             <div class="install__bar">
-              <span class="install__label">or install just this directly</span>
+              <span class="install__label">or install just this, in Claude Code</span>
               <button class="install__copy" type="button" aria-label="Copy direct install commands"
                 onclick="navigator.clipboard&&navigator.clipboard.writeText('/plugin marketplace add mikeparcewski/wicked-interactive\n/plugin install wicked-interactive').then(()=>{this.textContent='Copied';setTimeout(()=>{this.textContent='Copy';},1400);})">Copy</button>
             </div>
@@ -163,35 +242,27 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 <span class="p">/plugin</span> install wicked-interactive</code></pre>
           </div>
         </div>
-
-        <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener" aria-label="View on GitHub">
-          <svg viewBox="0 0 16 16" width="44" height="44" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-          <span>View on Github</span>
-        </a>
       </div>
     </section>
-
 
     <Footer repo={repo} />
   </div>
 
-  <!-- ── Talkback Canvas engine (real, driven, canned data) ───────────── -->
+  <!-- ════ THE STUDIO ENGINE — real, driven, canned data ═════════════════ -->
   <script is:inline>
   (function () {
     "use strict";
 
-    // instruction -> label
     var INSTR = { punchier: "Punchier", warmer: "Warmer", stat: "Add a stat", tighten: "Tighten" };
     var ORDER = ["punchier", "warmer", "stat", "tighten"];
 
-    // each format: prompt + url + ordered blocks. Every block carries a base
-    // text and four rewrites — so a click OR a typed instruction genuinely
-    // produces different, sensible copy for THAT block only.
+    // each format: a real document with ordered blocks. Every block carries base
+    // text + four rewrites, so a chip OR a typed instruction produces different,
+    // sensible copy for THAT block only.
     var DOCS = {
       brief: {
         prompt: "One-page Q3 launch brief for the whole team.",
-        url: "localhost:4400 · q3-launch-brief.html",
-        kicker: "Q3 Launch · One-page brief",
+        url: "localhost:4400 · q3-launch-brief.html", kicker: "Q3 Launch · One-page brief",
         blocks: [
           { id: "h", kind: "h", text: "Our Q3 launch, explained for the whole team", v: {
             punchier: "Ship Q3 with confidence — the whole plan, one read",
@@ -217,8 +288,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       },
       deck: {
         prompt: "Five-slide seed deck for demo day.",
-        url: "localhost:4400 · seed-deck.html · slide 1/5",
-        kicker: "Seed round · Slide 1",
+        url: "localhost:4400 · seed-deck.html · slide 1/5", kicker: "Seed round · Slide 1",
         blocks: [
           { id: "h", kind: "h", text: "Why we exist — the case for backing us now", v: {
             punchier: "The market already chose us. Back us to scale it.",
@@ -244,8 +314,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       },
       page: {
         prompt: "Landing page hero for our new pricing tool.",
-        url: "localhost:4400 · pricing-tool.html",
-        kicker: "Landing page · Hero",
+        url: "localhost:4400 · pricing-tool.html", kicker: "Landing page · Hero",
         blocks: [
           { id: "h", kind: "h", text: "Pricing that finally makes sense for your team", v: {
             punchier: "Stop guessing at pricing. Ship the right number today.",
@@ -271,8 +340,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       },
       video: {
         prompt: "Narrated demo of our onboarding flow.",
-        url: "localhost:4400 · onboarding-demo.mp4 · 4 chapters",
-        kicker: "Demo video · Storyboard",
+        url: "localhost:4400 · onboarding-demo.mp4 · 4 chapters", kicker: "Demo video · Storyboard",
         blocks: [
           { id: "h", kind: "h", text: "A guided tour of your first five minutes", v: {
             punchier: "Your first five minutes — and why they'll hook you",
@@ -299,34 +367,31 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     };
 
     var KIND_NAME = { h: "Headline", sub: "Subhead", row: "Body line" };
-
     var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    var doc = document.getElementById("tcDoc");
-    var urlEl = document.getElementById("tcUrl");
-    var input = document.getElementById("tcInput");
-    var promptForm = document.getElementById("tcPromptForm");
-    var pipsEl = document.getElementById("tcPips");
-    var frame = document.getElementById("tcFrame");
-    var exStatus = document.getElementById("tcExStatus");
-    var fmtBtns = Array.prototype.slice.call(document.querySelectorAll(".tc-fmt"));
-    var exBtns = Array.prototype.slice.call(document.querySelectorAll(".tc-ex"));
+    var doc = document.getElementById("edDoc");
+    var urlEl = document.getElementById("edUrl");
+    var input = document.getElementById("edInput");
+    var promptForm = document.getElementById("edPromptForm");
+    var pipsEl = document.getElementById("edPips");
+    var frame = document.getElementById("edFrame");
+    var exStatus = document.getElementById("edExStatus");
+    var editorEl = document.getElementById("editor");
+    var fmtBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-fmt"));
+    var exBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-ex"));
+    var loadBtns = Array.prototype.slice.call(document.querySelectorAll(".io-card[data-load]"));
 
-    // live state
     var fmt = "brief";
     var live = {};          // id -> { key, text }
-    var history = [];       // [{ vlabel, whatHTML, blocks:{id:{key,text}} }]
+    var history = [];       // [{ vlabel, whatHTML, blocks }]
     var active = 0;
-    var selected = null;    // block id currently selected
+    var selected = null;
     var building = false;
-
-    // the docked "say the change" bar (built once, reparented under a block)
     var sayBar = buildSayBar();
 
     function clone(o) { return JSON.parse(JSON.stringify(o)); }
     function defFor(id) { return DOCS[fmt].blocks.filter(function (b) { return b.id === id; })[0]; }
 
-    // classify a free-typed instruction; null if we can't tell -> we rotate
     function classify(t) {
       t = (t || "").toLowerCase();
       if (/punch|bold|strong|sharp|snapp|confiden|impact|assertive|louder|energ/.test(t)) return "punchier";
@@ -336,11 +401,10 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       return null;
     }
 
-    // choose a variant key that actually changes the text
     function pickKey(id, prefer) {
       var def = defFor(id), cur = live[id];
       if (prefer && def.v[prefer] && def.v[prefer] !== cur.text) return prefer;
-      var start = ORDER.indexOf(cur.key); // -1 for "base"
+      var start = ORDER.indexOf(cur.key);
       for (var n = 1; n <= ORDER.length; n++) {
         var k = ORDER[(Math.max(start, 0) + n) % ORDER.length];
         if (def.v[k] && def.v[k] !== cur.text) return k;
@@ -348,12 +412,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       return prefer || ORDER[0];
     }
 
-    // ---- render the document from `live` -----------------------------------
     function render(build) {
       closeSay();
       doc.innerHTML = "";
       var kick = document.createElement("div");
-      kick.className = "tc-doc__kicker";
+      kick.className = "ed-doc__kicker";
       kick.textContent = DOCS[fmt].kicker;
       doc.appendChild(kick);
 
@@ -362,60 +425,45 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         var st = live[bd.id];
         var btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "tc-block tc-block--" + bd.kind;
+        btn.className = "ed-block ed-block--" + bd.kind;
         btn.setAttribute("data-id", bd.id);
         var shim = document.createElement("span");
-        shim.className = "tc-block__shim";
-        shim.setAttribute("aria-hidden", "true");
+        shim.className = "ed-block__shim"; shim.setAttribute("aria-hidden", "true");
         var t = document.createElement("span");
-        t.className = "tc-block__t";
-        t.textContent = st.text;
-        btn.appendChild(shim);
-        btn.appendChild(t);
+        t.className = "ed-block__t"; t.textContent = st.text;
+        btn.appendChild(shim); btn.appendChild(t);
         btn.addEventListener("click", function () { selectBlock(bd.id, btn); });
 
-        // group the body rows so they sit together with tick marks
         if (bd.kind === "row") {
-          if (!rowGroup) { rowGroup = document.createElement("div"); rowGroup.className = "tc-rowgroup"; doc.appendChild(rowGroup); }
+          if (!rowGroup) { rowGroup = document.createElement("div"); rowGroup.className = "ed-rowgroup"; doc.appendChild(rowGroup); }
           rowGroup.appendChild(btn);
-        } else {
-          rowGroup = null;
-          doc.appendChild(btn);
-        }
-        if (build) btn.classList.add("tc-block--building");
+        } else { rowGroup = null; doc.appendChild(btn); }
+        if (build) btn.classList.add("ed-block--building");
       });
-
       if (build) assemble();
     }
 
-    // block-by-block shimmer reveal
     function assemble() {
       building = true;
-      var blocks = Array.prototype.slice.call(doc.querySelectorAll(".tc-block--building"));
+      var blocks = Array.prototype.slice.call(doc.querySelectorAll(".ed-block--building"));
       var step = reduced ? 40 : 260;
       blocks.forEach(function (b, i) {
         setTimeout(function () {
-          b.classList.remove("tc-block--building");
+          b.classList.remove("ed-block--building");
           if (i === blocks.length - 1) building = false;
         }, (i + 1) * step);
       });
       if (!blocks.length) building = false;
     }
 
-    // ---- selection: highlighter sweep + dock the say bar -------------------
     function selectBlock(id, btn) {
       if (building) return;
       if (selected === id) { closeSay(); return; }
-      Array.prototype.slice.call(doc.querySelectorAll(".tc-block")).forEach(function (b) {
-        b.classList.remove("is-target");
-      });
-      // retrigger the sweep animation
+      Array.prototype.slice.call(doc.querySelectorAll(".ed-block")).forEach(function (b) { b.classList.remove("is-target"); });
       btn.classList.remove("is-target"); void btn.offsetWidth; btn.classList.add("is-target");
       selected = id;
-      // reference the label through sayBar — it lives detached until inserted,
-      // so getElementById would be null on the first-ever selection.
-      sayBar.querySelector(".tc-say__what").textContent = KIND_NAME[defFor(id).kind];
-      sayBar.querySelector(".tc-say__input").value = "";
+      sayBar.querySelector(".ed-say__what").textContent = KIND_NAME[defFor(id).kind];
+      sayBar.querySelector(".ed-say__input").value = "";
       btn.insertAdjacentElement("afterend", sayBar);
       sayBar.classList.add("is-open");
     }
@@ -423,52 +471,38 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     function closeSay() {
       sayBar.classList.remove("is-open");
       if (sayBar.parentNode) sayBar.parentNode.removeChild(sayBar);
-      Array.prototype.slice.call(doc.querySelectorAll(".is-target")).forEach(function (b) {
-        b.classList.remove("is-target");
-      });
+      Array.prototype.slice.call(doc.querySelectorAll(".is-target")).forEach(function (b) { b.classList.remove("is-target"); });
       selected = null;
     }
 
-    // ---- apply a change to ONE block --------------------------------------
     function applyChange(id, prefer) {
       var key = pickKey(id, prefer);
       var def = defFor(id);
       var newText = def.v[key];
-      var btn = doc.querySelector('.tc-block[data-id="' + id + '"]');
+      var btn = doc.querySelector('.ed-block[data-id="' + id + '"]');
       if (!btn) return;
-
-      // if we rewound into the past, a new edit forks the timeline
       if (active < history.length - 1) history = history.slice(0, active + 1);
-
       closeSay();
       doc.classList.add("is-focusing");
-      btn.classList.add("is-target", "tc-block--reworking");
-      var t = btn.querySelector(".tc-block__t");
-
+      btn.classList.add("is-target", "ed-block--reworking");
+      var t = btn.querySelector(".ed-block__t");
       var wait = reduced ? 60 : 560;
       setTimeout(function () {
         live[id] = { key: key, text: newText };
         t.textContent = newText;
-        btn.classList.remove("tc-block--reworking", "is-target");
+        btn.classList.remove("ed-block--reworking", "is-target");
         void btn.offsetWidth;
-        btn.classList.add("tc-block--changed");
+        btn.classList.add("ed-block--changed");
         setTimeout(function () {
-          btn.classList.remove("tc-block--changed");
+          btn.classList.remove("ed-block--changed");
           doc.classList.remove("is-focusing");
         }, reduced ? 400 : 1500);
-
-        // log the version
         pushVersion(KIND_NAME[def.kind], INSTR[key]);
       }, wait);
     }
 
-    // ---- version rail ------------------------------------------------------
     function pushVersion(what, instr) {
-      history.push({
-        vlabel: "v" + history.length,
-        whatHTML: what + ' &rarr; <em>' + instr + '</em>',
-        blocks: clone(live)
-      });
+      history.push({ vlabel: "v" + history.length, whatHTML: what + ' &rarr; <em>' + instr + '</em>', blocks: clone(live) });
       active = history.length - 1;
       renderPips();
     }
@@ -478,37 +512,34 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       history.forEach(function (h, i) {
         var pip = document.createElement("button");
         pip.type = "button";
-        pip.className = "tc-pip" + (i === active ? " is-active" : "");
+        pip.className = "ed-pip" + (i === active ? " is-active" : "");
         pip.innerHTML =
-          '<span class="tc-pip__dot" aria-hidden="true"></span>' +
-          '<span class="tc-pip__body"><span class="tc-pip__v">' + h.vlabel + '</span>' +
-          '<span class="tc-pip__what">' + h.whatHTML + '</span></span>';
+          '<span class="ed-pip__dot" aria-hidden="true"></span>' +
+          '<span class="ed-pip__v">' + h.vlabel + '</span>' +
+          '<span class="ed-pip__what">' + h.whatHTML + '</span>';
         pip.addEventListener("click", function () { rewind(i); });
         pipsEl.appendChild(pip);
       });
+      // keep the newest pip in view
+      pipsEl.scrollLeft = pipsEl.scrollWidth;
     }
 
-    // rewind restores a snapshot; editing from here forks (handled in applyChange)
     function rewind(i) {
       if (building) return;
       active = i;
       live = clone(history[i].blocks);
       render(false);
       renderPips();
-      // brief flash to show the doc reset to that version
       if (!reduced) {
-        Array.prototype.slice.call(doc.querySelectorAll(".tc-block")).forEach(function (b, n) {
-          b.classList.add("tc-block--changed");
-          setTimeout(function () { b.classList.remove("tc-block--changed"); }, 700);
+        Array.prototype.slice.call(doc.querySelectorAll(".ed-block")).forEach(function (b) {
+          b.classList.add("ed-block--changed");
+          setTimeout(function () { b.classList.remove("ed-block--changed"); }, 700);
         });
       }
     }
 
-    // ---- build/rebuild for a format ---------------------------------------
     function loadFormat(f, fromPrompt) {
-      fmt = f;
-      selected = null;
-      live = {};
+      fmt = f; selected = null; live = {};
       DOCS[f].blocks.forEach(function (b) { live[b.id] = { key: "base", text: b.text }; });
       history = [{ vlabel: "v0", whatHTML: "First draft", blocks: clone(live) }];
       active = 0;
@@ -520,7 +551,6 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       fmtBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-fmt") === f); });
     }
 
-    // ---- export: the click IS the pitch -----------------------------------
     function resetExport() {
       exBtns.forEach(function (b) { b.classList.remove("is-locked"); });
       frame.classList.remove("is-shipped");
@@ -542,48 +572,49 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       });
     });
 
-    // ---- the "say the change" bar (built once) ----------------------------
     function buildSayBar() {
       var bar = document.createElement("div");
-      bar.className = "tc-say";
+      bar.className = "ed-say";
       bar.innerHTML =
-        '<div class="tc-say__head">' +
-          '<span class="tc-say__tag">Editing</span>' +
-          '<span class="tc-say__what" id="tcSayWhat">Headline</span>' +
-          '<button class="tc-say__x" type="button">Done</button>' +
+        '<div class="ed-say__head">' +
+          '<span class="ed-say__tag">Editing</span>' +
+          '<span class="ed-say__what">Headline</span>' +
+          '<button class="ed-say__x" type="button">Done</button>' +
         '</div>' +
-        '<div class="tc-say__chips">' +
-          '<button class="tc-instr" type="button" data-instr="punchier">Punchier</button>' +
-          '<button class="tc-instr" type="button" data-instr="warmer">Warmer</button>' +
-          '<button class="tc-instr" type="button" data-instr="stat">Add a stat</button>' +
-          '<button class="tc-instr" type="button" data-instr="tighten">Tighten</button>' +
+        '<div class="ed-say__chips">' +
+          '<button class="ed-instr" type="button" data-instr="punchier">Punchier</button>' +
+          '<button class="ed-instr" type="button" data-instr="warmer">Warmer</button>' +
+          '<button class="ed-instr" type="button" data-instr="stat">Add a stat</button>' +
+          '<button class="ed-instr" type="button" data-instr="tighten">Tighten</button>' +
         '</div>' +
-        '<form class="tc-say__form">' +
-          '<input class="tc-say__input" type="text" autocomplete="off" placeholder="…or say your own change" aria-label="Say your own change" />' +
-          '<button class="tc-say__go" type="submit">Go →</button>' +
+        '<form class="ed-say__form">' +
+          '<input class="ed-say__input" type="text" autocomplete="off" placeholder="…or say your own change" aria-label="Say your own change" />' +
+          '<button class="ed-say__go" type="submit">Go →</button>' +
         '</form>';
-      bar.querySelector(".tc-say__x").addEventListener("click", closeSay);
-      Array.prototype.slice.call(bar.querySelectorAll(".tc-instr")).forEach(function (chip) {
-        chip.addEventListener("click", function () {
-          if (selected) applyChange(selected, chip.getAttribute("data-instr"));
-        });
+      bar.querySelector(".ed-say__x").addEventListener("click", closeSay);
+      Array.prototype.slice.call(bar.querySelectorAll(".ed-instr")).forEach(function (chip) {
+        chip.addEventListener("click", function () { if (selected) applyChange(selected, chip.getAttribute("data-instr")); });
       });
-      bar.querySelector(".tc-say__form").addEventListener("submit", function (e) {
+      bar.querySelector(".ed-say__form").addEventListener("submit", function (e) {
         e.preventDefault();
         if (!selected) return;
-        var typed = bar.querySelector(".tc-say__input").value;
-        applyChange(selected, classify(typed)); // matched intent, or null -> rotate
+        var typed = bar.querySelector(".ed-say__input").value;
+        applyChange(selected, classify(typed));
       });
       return bar;
     }
 
-    // ---- wire the header prompt + format switcher -------------------------
     promptForm.addEventListener("submit", function (e) { e.preventDefault(); loadFormat(fmt, true); });
-    fmtBtns.forEach(function (b) {
-      b.addEventListener("click", function () { loadFormat(b.getAttribute("data-fmt"), false); });
+    fmtBtns.forEach(function (b) { b.addEventListener("click", function () { loadFormat(b.getAttribute("data-fmt"), false); }); });
+
+    // Room 3 → drive the studio: load that format and scroll it into view.
+    loadBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        loadFormat(b.getAttribute("data-load"), false);
+        if (editorEl && editorEl.scrollIntoView) editorEl.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+      });
     });
 
-    // boot
     loadFormat("brief", false);
   })();
   </script>
