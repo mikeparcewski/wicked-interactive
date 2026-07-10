@@ -33,7 +33,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       <div class="hero-head">
         <div class="kicker">Interactive builder · point-and-say editing</div>
         <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
-        <p class="lede">Describe a deck, doc, page, or demo &mdash; watch it build in your browser. Then click any block and say what to change: <b>only that block reworks</b>, everything else holds perfectly still. <span class="down">Try it right here &darr;</span></p>
+        <p class="lede">Describe a deck, doc, page, or demo &mdash; watch it build in your browser. Then point at any block and say the change: <b>only that block reworks.</b> <span class="down">It's live below &darr;</span></p>
       </div>
 
       <div class="editor" id="editor">
@@ -62,6 +62,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 
           <div class="ed-doc" id="edDoc" aria-live="polite"></div>
 
+          <div class="ed-cue" id="edCue" data-state="idle">
+            <span class="ed-cue__dot" aria-hidden="true"></span>
+            <span class="ed-cue__txt" id="edCueTxt">Building your first draft&hellip;</span>
+          </div>
+
           <div class="ed-export" id="edExport">
             <span class="ed-export__lbl">Ship it</span>
             <button class="ed-ex" type="button" data-ex="HTML">HTML</button>
@@ -72,13 +77,39 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           </div>
         </div>
 
+        <div class="ed-tools">
+          <div class="ed-tool ed-tool--style">
+            <span class="ed-tool__lbl">Steal any brand's look</span>
+            <form class="ed-style" id="edStyleForm">
+              <input class="ed-style__url" id="edStyleUrl" type="text" autocomplete="off"
+                     placeholder="paste a URL whose design you like&hellip;" aria-label="Import a style from a URL" />
+              <button class="ed-style__go" type="submit">Import style</button>
+            </form>
+            <div class="ed-brands" role="group" aria-label="Or pick a brand">
+              <span class="ed-brands__or">or try</span>
+              <button class="ed-brand" type="button" data-theme="stripe">stripe.com</button>
+              <button class="ed-brand" type="button" data-theme="linear">linear.app</button>
+              <button class="ed-brand" type="button" data-theme="sunset">sunset.studio</button>
+            </div>
+          </div>
+          <div class="ed-tool ed-tool--review">
+            <span class="ed-tool__lbl">Send it to the judges</span>
+            <div class="ed-judges" role="group" aria-label="Run a review pass">
+              <button class="ed-judge" type="button" data-rev="match"><span class="ed-judge__s" aria-hidden="true"></span>Brand&nbsp;match</button>
+              <button class="ed-judge" type="button" data-rev="a11y"><span class="ed-judge__s" aria-hidden="true"></span>Accessibility</button>
+              <button class="ed-judge" type="button" data-rev="copy"><span class="ed-judge__s" aria-hidden="true"></span>Copy</button>
+              <button class="ed-judge" type="button" data-rev="qe"><span class="ed-judge__s" aria-hidden="true"></span>QE</button>
+            </div>
+            <div class="ed-verdicts" id="edVerdicts" aria-live="polite"></div>
+          </div>
+        </div>
+
         <div class="ed-rail" aria-label="Version history">
           <div class="ed-rail__head">Versions<span>click to rewind</span></div>
           <div class="ed-pips" id="edPips"></div>
         </div>
 
-        <p class="ed-hint" id="edHint">Click any line in the page above, then say the change.</p>
-        <p class="ed-note"><b>Real point-and-say editing.</b> This on-page demo is canned for the tour; the product itself runs on the Claude Code session already in your terminal &mdash; no extra setup, nothing leaves your machine.</p>
+        <p class="ed-note"><b>Real point-and-say editing, style import, and reviewers.</b> This on-page demo is canned for the tour; the product itself runs on the Claude Code session already in your terminal &mdash; no extra setup, nothing leaves your machine.</p>
       </div>
     </div>
   </section>
@@ -205,14 +236,58 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
-  <!-- ════ ROOM 4 — CLOSER + INSTALL ═════════════════════════════════════ -->
+  <!-- ════ ROOM 4 — UNDER THE HOOD (the real feature surface) ════════════ -->
+  <section class="band band--solid hood">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-eyebrow"><b>03</b> Under the hood</span>
+        <h2 class="sec-title">More than a pretty draft. <span class="y">A real editing engine.</span></h2>
+        <p class="sec-intro">The demo above is the tip of it. Here's what the agent in your terminal actually does &mdash; every piece of it real, not a mockup.</p>
+      </div>
+
+      <ul class="hood-grid">
+        <li class="hood-card">
+          <span class="hood-card__k">Anchored edits</span>
+          <h3>The invariant that freezes everything else</h3>
+          <p>Every block is stamped with a <code>data-wid</code>. When you change one, an invariant checks that <em>every other anchor survives byte-for-byte</em> &mdash; drift isn't discouraged, it's impossible.</p>
+        </li>
+        <li class="hood-card">
+          <span class="hood-card__k">Deterministic&nbsp;first</span>
+          <h3>Instant where it can be, smart where it must be</h3>
+          <p>Change text, swap a style, remove a block &mdash; those land <em>the instant you submit</em>, no model in the loop. Only a real rewrite or a whole-doc rethink calls the AI. Fast by default.</p>
+        </li>
+        <li class="hood-card hood-card--feature">
+          <span class="hood-card__k">Style import</span>
+          <h3>Steal any brand's look from a URL</h3>
+          <p>Point it at a page whose design you like. It renders that page, <em>reads the design</em>, synthesizes a theme, and re-skins your whole document &mdash; and the look sticks for every later edit. (Try it in the studio above.)</p>
+        </li>
+        <li class="hood-card hood-card--feature">
+          <span class="hood-card__k">The judges</span>
+          <h3>Four reviewers grade it before you send it</h3>
+          <p>Brand&nbsp;match, accessibility, copy, and QE each run as an independent pass and post a verdict &mdash; non-blocking, so you keep working. Catch the contrast fail or the passive sentence before your audience does.</p>
+        </li>
+        <li class="hood-card">
+          <span class="hood-card__k">Your real numbers</span>
+          <h3>It reads your files, so the figures are real</h3>
+          <p>Drop in files and folders; it indexes them live and grounds every stat in what's actually there. <em>No invented numbers</em> to fill a slot &mdash; the ones that don't check out get flagged.</p>
+        </li>
+        <li class="hood-card">
+          <span class="hood-card__k">Versions&nbsp;&amp;&nbsp;forks</span>
+          <h3>You literally cannot lose work</h3>
+          <p>Every change &mdash; a rewrite, a restyle, a whole redraft &mdash; is a saved version. Rewind to any of them, or <em>fork</em> to chase two directions at once without losing either.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ════ ROOM 5 — CLOSER + INSTALL ═════════════════════════════════════ -->
   <div class="finale">
     <section class="closer">
       <div class="wrap">
         <div class="closer-intro">
           <div class="kicker">That's the whole product</div>
           <h2>One block changed. <span class="y">Everything else held.</span></h2>
-          <p>No round-trip, no design ticket, no rewriting the whole thing to fix one line. You point at what's wrong, say it in plain English, and <em>only that block</em> reworks &mdash; then export a self-contained file and you're done tonight.</p>
+          <p>Every part of this page &mdash; the point-and-say edits, the style import, the four reviewers, the version timeline &mdash; runs on the Claude Code session <em>already open in your terminal</em>. Nothing to host, nothing to learn. Install it and your next deck is a conversation, not a weekend.</p>
           <div class="closer-cta">
             <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">
               <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -369,6 +444,22 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var KIND_NAME = { h: "Headline", sub: "Subhead", row: "Body line" };
     var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    // Style import — canned themes stand in for "point at a URL, it reads the
+    // design and re-skins the doc" (wicked.theme.learned; assist Step 8.5).
+    var THEMES = {
+      _default: { label: "the studio default", paper: "#fbf7ec", ink: "#23303a", muted: "#5f6f78", accent: "#ffda19", halo: "255,218,25" },
+      stripe:   { label: "stripe.com",         paper: "#ffffff", ink: "#0a2540", muted: "#425466", accent: "#635bff", halo: "99,91,255" },
+      linear:   { label: "linear.app",         paper: "#f6f7fb", ink: "#16182d", muted: "#5b5f6e", accent: "#5e6ad2", halo: "94,106,210" },
+      sunset:   { label: "sunset.studio",       paper: "#fff5ec", ink: "#3a1f1a", muted: "#8a5a4a", accent: "#ff6b3d", halo: "255,107,61" }
+    };
+    // Reviewers — the four judges (wicked.review.requested enum match/a11y/copy/qe; assist Step 8.6).
+    var REV = {
+      match: { label: "Brand match",   v: "On-brand — palette, type, and spacing all track the theme." },
+      a11y:  { label: "Accessibility", v: "Contrast passes WCAG AA on every block; headings in order." },
+      copy:  { label: "Copy",          v: "Tightened two lines; flagged one passive sentence to review." },
+      qe:    { label: "QE",            v: "Exports clean to HTML, PDF & PowerPoint — nothing clipped." }
+    };
+
     var doc = document.getElementById("edDoc");
     var urlEl = document.getElementById("edUrl");
     var input = document.getElementById("edInput");
@@ -377,20 +468,43 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var frame = document.getElementById("edFrame");
     var exStatus = document.getElementById("edExStatus");
     var editorEl = document.getElementById("editor");
+    var cueEl = document.getElementById("edCue");
+    var cueTxt = document.getElementById("edCueTxt");
+    var styleForm = document.getElementById("edStyleForm");
+    var styleUrl = document.getElementById("edStyleUrl");
+    var verdictsEl = document.getElementById("edVerdicts");
     var fmtBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-fmt"));
     var exBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-ex"));
+    var brandBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-brand"));
+    var judgeBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-judge"));
     var loadBtns = Array.prototype.slice.call(document.querySelectorAll(".io-card[data-load]"));
 
     var fmt = "brief";
     var live = {};          // id -> { key, text }
-    var history = [];       // [{ vlabel, whatHTML, blocks }]
+    var history = [];       // [{ vlabel, whatHTML, blocks, theme }]
     var active = 0;
     var selected = null;
     var building = false;
+    var curTheme = "_default";
+    var userActed = false;  // any real interaction cancels the auto-demo
+    var autoStarted = false;
+    var styleTick = 0;
     var sayBar = buildSayBar();
 
     function clone(o) { return JSON.parse(JSON.stringify(o)); }
     function defFor(id) { return DOCS[fmt].blocks.filter(function (b) { return b.id === id; })[0]; }
+
+    function setCue(state, html) {
+      if (!cueEl) return;
+      cueEl.setAttribute("data-state", state);
+      if (html != null) cueTxt.innerHTML = html;
+    }
+    function cueReady() { setCue("ready", "Your turn &mdash; click any block, then say the change."); }
+    function markUserActed() {
+      if (userActed) return;
+      userActed = true;
+      cueReady();
+    }
 
     function classify(t) {
       t = (t || "").toLowerCase();
@@ -432,7 +546,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         var t = document.createElement("span");
         t.className = "ed-block__t"; t.textContent = st.text;
         btn.appendChild(shim); btn.appendChild(t);
-        btn.addEventListener("click", function () { selectBlock(bd.id, btn); });
+        btn.addEventListener("click", function () { markUserActed(); selectBlock(bd.id, btn); });
 
         if (bd.kind === "row") {
           if (!rowGroup) { rowGroup = document.createElement("div"); rowGroup.className = "ed-rowgroup"; doc.appendChild(rowGroup); }
@@ -502,7 +616,13 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     }
 
     function pushVersion(what, instr) {
-      history.push({ vlabel: "v" + history.length, whatHTML: what + ' &rarr; <em>' + instr + '</em>', blocks: clone(live) });
+      commitVersion(what + ' &rarr; <em>' + instr + '</em>');
+    }
+    // one place that appends a version — edits AND restyles both land here, so
+    // every change (including a style import) is rewindable (src/core/versions.js).
+    function commitVersion(whatHTML) {
+      if (active < history.length - 1) history = history.slice(0, active + 1);
+      history.push({ vlabel: "v" + history.length, whatHTML: whatHTML, blocks: clone(live), theme: curTheme });
       active = history.length - 1;
       renderPips();
     }
@@ -528,6 +648,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       if (building) return;
       active = i;
       live = clone(history[i].blocks);
+      applyTheme(history[i].theme || "_default", true);
       render(false);
       renderPips();
       if (!reduced) {
@@ -540,15 +661,81 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 
     function loadFormat(f, fromPrompt) {
       fmt = f; selected = null; live = {};
+      curTheme = "_default"; applyTheme("_default", true);
       DOCS[f].blocks.forEach(function (b) { live[b.id] = { key: "base", text: b.text }; });
-      history = [{ vlabel: "v0", whatHTML: "First draft", blocks: clone(live) }];
+      history = [{ vlabel: "v0", whatHTML: "First draft", blocks: clone(live), theme: "_default" }];
       active = 0;
       urlEl.textContent = DOCS[f].url;
       if (!fromPrompt) input.value = DOCS[f].prompt;
       resetExport();
+      resetReviews();
       render(true);
       renderPips();
       fmtBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-fmt") === f); });
+      setCue("build", "Building your first draft&hellip;");
+      // on a user-driven reload, settle to "your turn" once the build lands; on
+      // the very first load the auto-demo owns the cue instead.
+      setTimeout(function () { if (userActed) cueReady(); }, reduced ? 300 : 1400);
+    }
+
+    // ---- style import: re-skin the paper from a "learned" theme ------------
+    function applyTheme(key, silent) {
+      var th = THEMES[key] || THEMES._default;
+      // scoped to the doc — bullets, highlighter, and diff-halo all pick up the brand
+      doc.style.setProperty("--paper", th.paper);
+      doc.style.setProperty("--paper-ink", th.ink);
+      doc.style.setProperty("--paper-muted", th.muted);
+      doc.style.setProperty("--accent", th.accent);
+      doc.style.setProperty("--halo", th.halo);
+      brandBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-theme") === key); });
+      if (!silent && !reduced) { doc.classList.remove("is-retheming"); void doc.offsetWidth; doc.classList.add("is-retheming"); }
+    }
+    function importStyle(key, label) {
+      if (!THEMES[key]) return;
+      curTheme = key;
+      applyTheme(key, false);
+      commitVersion('Style &rarr; <em>learned from ' + label + '</em>');
+      setCue("ready", "Restyled from <b>" + label + "</b> &mdash; and it sticks for every later edit.");
+    }
+    function cleanUrl(u) {
+      return (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").slice(0, 40) || "your-brand.com";
+    }
+
+    // ---- reviewers: run a pass, post a verdict (no new version) -------------
+    function verdictRow(key) {
+      var row = verdictsEl.querySelector('.ed-verdict[data-rev="' + key + '"]');
+      if (!row) { row = document.createElement("div"); row.setAttribute("data-rev", key); verdictsEl.appendChild(row); }
+      return row;
+    }
+    function runReview(key, btn) {
+      var r = REV[key]; if (!r) return;
+      btn.classList.add("is-running"); btn.classList.remove("is-passed");
+      var row = verdictRow(key);
+      row.className = "ed-verdict is-running";
+      row.innerHTML = '<span class="ed-verdict__k">' + r.label + '</span><span class="ed-verdict__v">running the pass&hellip;</span>';
+      setTimeout(function () {
+        btn.classList.remove("is-running"); btn.classList.add("is-passed");
+        row.className = "ed-verdict is-passed";
+        row.innerHTML = '<span class="ed-verdict__k">' + r.label + '</span><span class="ed-verdict__v">&#10003; ' + r.v + '</span>';
+      }, reduced ? 150 : 850);
+    }
+    function resetReviews() {
+      verdictsEl.innerHTML = "";
+      judgeBtns.forEach(function (b) { b.classList.remove("is-running", "is-passed"); });
+    }
+
+    // ---- the auto-demo: play ONE edit, then hand the wheel over ------------
+    function startAutoDemo() {
+      if (autoStarted || userActed) return;
+      autoStarted = true;
+      if (reduced) { cueReady(); return; }
+      var t = 0;
+      function at(delay, fn) { t += delay; setTimeout(function () { if (!userActed) fn(); }, t); }
+      at(500,  function () { setCue("demo", "Watch &mdash; pointing at the headline&hellip;"); });
+      at(900,  function () { var b = doc.querySelector('.ed-block[data-id="h"]'); if (b) selectBlock("h", b); });
+      at(1050, function () { setCue("demo", "&hellip;and saying &ldquo;make it punchier.&rdquo;"); });
+      at(750,  function () { applyChange("h", "punchier"); });
+      at(2500, function () { if (!userActed) cueReady(); });
     }
 
     function resetExport() {
@@ -559,6 +746,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var exTimer = null;
     exBtns.forEach(function (b) {
       b.addEventListener("click", function () {
+        markUserActed();
         var f = b.getAttribute("data-ex");
         clearTimeout(exTimer);
         exBtns.forEach(function (x) { x.classList.remove("is-locked"); });
@@ -593,10 +781,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         '</form>';
       bar.querySelector(".ed-say__x").addEventListener("click", closeSay);
       Array.prototype.slice.call(bar.querySelectorAll(".ed-instr")).forEach(function (chip) {
-        chip.addEventListener("click", function () { if (selected) applyChange(selected, chip.getAttribute("data-instr")); });
+        chip.addEventListener("click", function () { markUserActed(); if (selected) applyChange(selected, chip.getAttribute("data-instr")); });
       });
       bar.querySelector(".ed-say__form").addEventListener("submit", function (e) {
         e.preventDefault();
+        markUserActed();
         if (!selected) return;
         var typed = bar.querySelector(".ed-say__input").value;
         applyChange(selected, classify(typed));
@@ -604,18 +793,53 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       return bar;
     }
 
-    promptForm.addEventListener("submit", function (e) { e.preventDefault(); loadFormat(fmt, true); });
-    fmtBtns.forEach(function (b) { b.addEventListener("click", function () { loadFormat(b.getAttribute("data-fmt"), false); }); });
+    promptForm.addEventListener("submit", function (e) { e.preventDefault(); markUserActed(); loadFormat(fmt, true); });
+    fmtBtns.forEach(function (b) { b.addEventListener("click", function () { markUserActed(); loadFormat(b.getAttribute("data-fmt"), false); }); });
+
+    // style import — free-text URL rotates through the canned brands; chips are direct
+    styleForm.addEventListener("submit", function (e) {
+      e.preventDefault(); markUserActed();
+      var url = cleanUrl(styleUrl.value);
+      var keys = ["stripe", "linear", "sunset"];
+      importStyle(keys[styleTick++ % keys.length], url);
+      styleUrl.value = "";
+    });
+    brandBtns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        markUserActed();
+        var k = b.getAttribute("data-theme");
+        importStyle(k, THEMES[k].label);
+      });
+    });
+
+    // reviewers — run a pass, post a verdict
+    judgeBtns.forEach(function (b) {
+      b.addEventListener("click", function () { markUserActed(); runReview(b.getAttribute("data-rev"), b); });
+    });
 
     // Room 3 → drive the studio: load that format and scroll it into view.
     loadBtns.forEach(function (b) {
       b.addEventListener("click", function () {
+        markUserActed();
         loadFormat(b.getAttribute("data-load"), false);
         if (editorEl && editorEl.scrollIntoView) editorEl.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
       });
     });
 
     loadFormat("brief", false);
+
+    // Kick the auto-demo when the studio enters view (so the motion is seen).
+    // Fire as soon as any meaningful part of the editor is visible, with a
+    // fallback timer so it always plays even if the observer never trips.
+    if ("IntersectionObserver" in window && editorEl) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { io.disconnect(); setTimeout(startAutoDemo, reduced ? 0 : 900); }
+        });
+      }, { threshold: 0.08, rootMargin: "0px 0px -12% 0px" });
+      io.observe(editorEl);
+    }
+    setTimeout(startAutoDemo, reduced ? 400 : 3200); // safety net (guards double-run)
   })();
   </script>
 </Base>
