@@ -1,10 +1,8 @@
 name: Deploy landing site to GitHub Pages
 
+# Dormant by design: manual dispatch only. Go-live is human-gated — this must
+# NOT auto-run on push/merge. Enable Pages + trigger this run by hand when ready.
 on:
-  push:
-    branches: [main]
-    paths:
-      - site/**
   workflow_dispatch:
 
 # Least-privilege token: read the repo, write the Pages deployment, and mint the

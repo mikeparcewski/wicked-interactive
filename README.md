@@ -16,7 +16,7 @@ No code. No design tickets. No "let me loop in the team." Just you, describing w
 Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · PowerPoint · video)
 ```
 
-If you can say it, you can make it.
+Describe it, watch it build, ship it.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/mikeparcewski/wicked-interactive/main/assets/wicked-interactive-demo.gif" alt="wicked-interactive in action: describe a launch page in chat, watch it build live, point at text to change it, remove a block, ask to make it premium, and rewind any version — all in the browser" width="100%">
@@ -73,4 +73,4 @@ That's genuinely it. The first time, it sets up a few helper tools behind the sc
 
 ---
 
-MIT licensed — see [LICENSE](LICENSE). Built on [wicked-bus](https://github.com/mikeparcewski/wicked-bus) (the event spine the UI, service, and agent all speak), [wicked-garden](https://github.com/mikeparcewski/wicked-garden), and [wicked-brain](https://github.com/mikeparcewski/wicked-brain). Presentation craft is built in.
+MIT licensed — see [LICENSE](LICENSE). [wicked-bus](https://github.com/mikeparcewski/wicked-bus) is the required control plane — the one event vocabulary the UI, the service, and the agent all speak (SSE down, POST up). Part of the [wicked-*](https://wickedagile.com) family of local-first, AI-native developer tools. Presentation craft is built in.
