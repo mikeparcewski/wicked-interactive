@@ -33,24 +33,17 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 <Base title={title} description={description}>
   <Topbar pkg="wicked-interactive" repo={repo} />
 
-  <!-- ════ ROOM 1 — HERO (from the LIVE build) ═══════════════════════════ -->
+  <!-- ════ ROOM 1 — HERO + LIVE EDITOR (merged: the hero IS the demo) ═════
+       The signature interaction runs right in the hero. A single ed-* engine,
+       bound to fixed IDs, drives one paper; its controls (style import, the
+       judges, the version rail) sit BESIDE the frame in a 2-col stage so the
+       whole thing fits one snapped viewport. Recovers the proven 6b9c4f8
+       "the hero IS the editor" model on the current engine. ═══════════════ -->
   <section class="hero" id="top">
     <div class="wrap">
       <div class="kicker">Interactive builder · point-and-say editing</div>
       <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
-      <p class="lede">Describe a doc and watch it build, live. Then click any block and say what to change &mdash; <b>only that block reworks</b>, everything else holds perfectly still.</p>
-      <a class="down" href="#point">It's live just below</a>
-    </div>
-  </section>
-
-  <!-- ════ ROOM 2 — POINT AT ANYTHING (the live editor) ══════════════════ -->
-  <section class="band point" id="point">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="sec-eyebrow"><b>01</b> Point at anything</span>
-        <h2 class="sec-title">Describe it. Point at a block. <span class="y">Say the change.</span></h2>
-        <p class="sec-intro">A real, driven editor &mdash; not a screenshot. Describe a document, watch it build block by block, then click any block and say the change. <b>Only that block reworks;</b> steal a brand's look from a URL and send it to the judges before you ship.</p>
-      </div>
+      <p class="lede">Describe a doc and watch it build &mdash; then click any block and say the change; <b>only that block reworks</b>.</p>
 
       <div class="editor" id="editor">
         <div class="ed-formats" role="group" aria-label="Point at any format">
@@ -60,71 +53,72 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
         </div>
 
-        <div class="ed-frame" id="edFrame">
-          <div class="ed-chrome">
-            <span class="ed-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-            <span class="ed-url" id="edUrl">localhost:4400 · q3-launch-brief.html</span>
-            <span class="ed-live"><span class="ed-pulse" aria-hidden="true"></span>Live</span>
-          </div>
+        <div class="editor-stage">
+          <div class="ed-frame" id="edFrame">
+            <div class="ed-chrome">
+              <span class="ed-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span class="ed-url" id="edUrl">localhost:4400 · q3-launch-brief.html</span>
+              <span class="ed-live"><span class="ed-pulse" aria-hidden="true"></span>Live</span>
+            </div>
 
-          <form class="ed-prompt" id="edPromptForm">
-            <span class="ed-you">You</span>
-            <input class="ed-input" id="edInput" type="text" autocomplete="off"
-                   aria-label="Describe the document to build"
-                   value="One-page Q3 launch brief for the whole team." />
-            <button class="ed-build" type="submit">Build &crarr;</button>
-          </form>
-
-          <div class="ed-doc" id="edDoc" aria-live="polite"></div>
-
-          <div class="ed-cue" id="edCue" data-state="idle">
-            <span class="ed-cue__dot" aria-hidden="true"></span>
-            <span class="ed-cue__txt" id="edCueTxt">Building your first draft&hellip;</span>
-          </div>
-
-          <div class="ed-export" id="edExport">
-            <span class="ed-export__lbl">Ship it</span>
-            <button class="ed-ex" type="button" data-ex="HTML">HTML</button>
-            <button class="ed-ex" type="button" data-ex="PDF">PDF</button>
-            <button class="ed-ex" type="button" data-ex="PPTX">PowerPoint</button>
-            <button class="ed-ex" type="button" data-ex="Video">Video</button>
-            <span class="ed-export__status" id="edExStatus"></span>
-          </div>
-        </div>
-
-        <div class="ed-tools">
-          <div class="ed-tool ed-tool--style">
-            <span class="ed-tool__lbl">Steal any brand's look</span>
-            <form class="ed-style" id="edStyleForm">
-              <input class="ed-style__url" id="edStyleUrl" type="text" autocomplete="off"
-                     placeholder="paste a URL whose design you like&hellip;" aria-label="Import a style from a URL" />
-              <button class="ed-style__go" type="submit">Import style</button>
+            <form class="ed-prompt" id="edPromptForm">
+              <span class="ed-you">You</span>
+              <input class="ed-input" id="edInput" type="text" autocomplete="off"
+                     aria-label="Describe the document to build"
+                     value="One-page Q3 launch brief for the whole team." />
+              <button class="ed-build" type="submit">Build &crarr;</button>
             </form>
-            <div class="ed-brands" role="group" aria-label="Or pick a brand">
-              <span class="ed-brands__or">or try</span>
-              <button class="ed-brand" type="button" data-theme="stripe">stripe.com</button>
-              <button class="ed-brand" type="button" data-theme="linear">linear.app</button>
-              <button class="ed-brand" type="button" data-theme="sunset">sunset.studio</button>
+
+            <div class="ed-doc" id="edDoc" aria-live="polite"></div>
+
+            <div class="ed-cue" id="edCue" data-state="idle">
+              <span class="ed-cue__dot" aria-hidden="true"></span>
+              <span class="ed-cue__txt" id="edCueTxt">Building your first draft&hellip;</span>
+            </div>
+
+            <div class="ed-export" id="edExport">
+              <span class="ed-export__lbl">Ship it</span>
+              <button class="ed-ex" type="button" data-ex="HTML">HTML</button>
+              <button class="ed-ex" type="button" data-ex="PDF">PDF</button>
+              <button class="ed-ex" type="button" data-ex="PPTX">PowerPoint</button>
+              <button class="ed-ex" type="button" data-ex="Video">Video</button>
+              <span class="ed-export__status" id="edExStatus"></span>
             </div>
           </div>
-          <div class="ed-tool ed-tool--review">
-            <span class="ed-tool__lbl">Send it to the judges</span>
-            <div class="ed-judges" role="group" aria-label="Run a review pass">
-              <button class="ed-judge" type="button" data-rev="match"><span class="ed-judge__s" aria-hidden="true"></span>Brand&nbsp;match</button>
-              <button class="ed-judge" type="button" data-rev="a11y"><span class="ed-judge__s" aria-hidden="true"></span>Accessibility</button>
-              <button class="ed-judge" type="button" data-rev="copy"><span class="ed-judge__s" aria-hidden="true"></span>Copy</button>
-              <button class="ed-judge" type="button" data-rev="qe"><span class="ed-judge__s" aria-hidden="true"></span>QE</button>
+
+          <div class="ed-side">
+            <div class="ed-tool ed-tool--style">
+              <span class="ed-tool__lbl">Steal any brand's look</span>
+              <form class="ed-style" id="edStyleForm">
+                <input class="ed-style__url" id="edStyleUrl" type="text" autocomplete="off"
+                       placeholder="paste a URL whose design you like&hellip;" aria-label="Import a style from a URL" />
+                <button class="ed-style__go" type="submit">Import</button>
+              </form>
+              <div class="ed-brands" role="group" aria-label="Or pick a brand">
+                <span class="ed-brands__or">or try</span>
+                <button class="ed-brand" type="button" data-theme="stripe">stripe.com</button>
+                <button class="ed-brand" type="button" data-theme="linear">linear.app</button>
+                <button class="ed-brand" type="button" data-theme="sunset">sunset.studio</button>
+              </div>
             </div>
-            <div class="ed-verdicts" id="edVerdicts" aria-live="polite"></div>
+            <div class="ed-tool ed-tool--review">
+              <span class="ed-tool__lbl">Send it to the judges</span>
+              <div class="ed-judges" role="group" aria-label="Run a review pass">
+                <button class="ed-judge" type="button" data-rev="match"><span class="ed-judge__s" aria-hidden="true"></span>Brand&nbsp;match</button>
+                <button class="ed-judge" type="button" data-rev="a11y"><span class="ed-judge__s" aria-hidden="true"></span>Accessibility</button>
+                <button class="ed-judge" type="button" data-rev="copy"><span class="ed-judge__s" aria-hidden="true"></span>Copy</button>
+                <button class="ed-judge" type="button" data-rev="qe"><span class="ed-judge__s" aria-hidden="true"></span>QE</button>
+              </div>
+              <div class="ed-verdicts" id="edVerdicts" aria-live="polite"></div>
+            </div>
+            <div class="ed-rail" aria-label="Version history">
+              <div class="ed-rail__head">Versions<span>click to rewind</span></div>
+              <div class="ed-pips" id="edPips"></div>
+            </div>
           </div>
         </div>
 
-        <div class="ed-rail" aria-label="Version history">
-          <div class="ed-rail__head">Versions<span>click to rewind</span></div>
-          <div class="ed-pips" id="edPips"></div>
-        </div>
-
-        <p class="ed-note"><b>Real point-and-say editing, style import, and reviewers.</b> This on-page demo is canned for the tour; the product itself runs on the Claude Code session already in your terminal &mdash; no extra setup, nothing leaves your machine.</p>
+        <p class="ed-note"><b>Real point-and-say editing, style import, and reviewers &mdash; canned for this tour.</b> The product itself runs on the Claude Code session already in your terminal; nothing leaves your machine.</p>
       </div>
     </div>
   </section>
@@ -133,9 +127,9 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
   <section class="band demo" id="demo">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>02</b> Demo video</span>
+        <span class="sec-eyebrow"><b>01</b> Demo video</span>
         <h2 class="sec-title">Point it at your app. <span class="y">Get a narrated walkthrough.</span></h2>
-        <p class="sec-intro">Give it a URL and a brief. wicked-interactive explores your app, scripts a Playwright spec, records it with narration captions, and hands back an interactive storyboard. <b>No screen-recording tools. No editing.</b></p>
+        <p class="sec-intro">Give it a URL and a brief. It explores your app, scripts a Playwright spec, and hands back a narrated, interactive storyboard. <b>No screen-recording tools. No editing.</b></p>
       </div>
 
       <div class="demo-grid">
@@ -318,7 +312,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         </div>
       </div>
 
-      <p class="vid-demo-note"><b>The four steps auto-play &mdash; or click any step to jump.</b> This on-page walkthrough is canned; the real recorder drives a live Playwright session against your own running app and hands back a self-contained storyboard.</p>
+      <p class="vid-demo-note"><b>The four steps auto-play &mdash; or click any step to jump.</b> This walkthrough is canned; the real recorder drives a live Playwright session against your own running app.</p>
     </div>
   </section>
 
@@ -326,7 +320,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
   <section class="band io">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>03</b> One canvas, every format</span>
+        <span class="sec-eyebrow"><b>02</b> One canvas, every format</span>
         <h2 class="sec-title">Make anything. <span class="y">Send anything.</span></h2>
         <p class="sec-intro">The stuff you'd normally dread &mdash; built as real, interactive HTML, then handed off as one file anyone can open. Pick a format on the left; it loads in the editor above.</p>
       </div>
@@ -416,41 +410,41 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
   <section class="band hood">
     <div class="wrap">
       <div class="sec-head">
-        <span class="sec-eyebrow"><b>04</b> Under the hood</span>
+        <span class="sec-eyebrow"><b>03</b> Under the hood</span>
         <h2 class="sec-title">More than a pretty draft. <span class="y">A real editing engine.</span></h2>
-        <p class="sec-intro">The demos above are the tip of it. Here's what the agent in your terminal actually does &mdash; every piece of it real, not a mockup.</p>
+        <p class="sec-intro">The demos above are the tip of it &mdash; here's what the agent in your terminal actually does, every piece real, not a mockup.</p>
       </div>
 
       <ul class="hood-grid">
         <li class="hood-card">
           <span class="hood-card__k">Anchored edits</span>
           <h3>The invariant that freezes everything else</h3>
-          <p>Every block is stamped with a <code>data-wid</code>. When you change one, an invariant checks that <em>every other anchor survives byte-for-byte</em> &mdash; drift isn't discouraged, it's impossible.</p>
+          <p>Every block carries a <code>data-wid</code>. Change one and an invariant proves <em>every other anchor survives byte-for-byte</em> &mdash; drift is impossible.</p>
         </li>
         <li class="hood-card">
           <span class="hood-card__k">Deterministic&nbsp;first</span>
           <h3>Instant where it can be, smart where it must be</h3>
-          <p>Change text, swap a style, remove a block &mdash; those land <em>the instant you submit</em>, no model in the loop. Only a real rewrite or a whole-doc rethink calls the AI. Fast by default.</p>
+          <p>Text, style, and delete edits land <em>the instant you submit</em> &mdash; no model in the loop. Only a true rewrite or whole-doc rethink calls the AI.</p>
         </li>
         <li class="hood-card hood-card--feature">
           <span class="hood-card__k">Style import</span>
           <h3>Steal any brand's look from a URL</h3>
-          <p>Point it at a page whose design you like. It renders that page, <em>reads the design</em>, synthesizes a theme, and re-skins your whole document &mdash; and the look sticks for every later edit. (Try it in the editor above.)</p>
+          <p>Point it at a page you like. It renders that page, <em>reads the design</em>, synthesizes a theme, and re-skins your whole doc &mdash; and the look sticks for every later edit.</p>
         </li>
         <li class="hood-card hood-card--feature">
           <span class="hood-card__k">The judges</span>
           <h3>Four reviewers grade it before you send it</h3>
-          <p>Brand&nbsp;match, accessibility, copy, and QE each run as an independent pass and post a verdict &mdash; non-blocking, so you keep working. Catch the contrast fail or the passive sentence before your audience does.</p>
+          <p>Brand&nbsp;match, accessibility, copy, and QE each run an <em>independent pass</em> and post a verdict &mdash; non-blocking. Catch the contrast fail before your audience does.</p>
         </li>
         <li class="hood-card">
           <span class="hood-card__k">Your real numbers</span>
           <h3>It reads your files, so the figures are real</h3>
-          <p>Drop in files and folders; it indexes them live and grounds every stat in what's actually there. <em>No invented numbers</em> to fill a slot &mdash; the ones that don't check out get flagged.</p>
+          <p>Drop in files and folders; it indexes them live and grounds every stat in what's there. <em>No invented numbers</em> &mdash; the ones that don't check out get flagged.</p>
         </li>
         <li class="hood-card">
           <span class="hood-card__k">Versions&nbsp;&amp;&nbsp;forks</span>
           <h3>You literally cannot lose work</h3>
-          <p>Every change &mdash; a rewrite, a restyle, a whole redraft &mdash; is a saved version. Rewind to any of them, or <em>fork</em> to chase two directions at once without losing either.</p>
+          <p>Every change &mdash; rewrite, restyle, whole redraft &mdash; is a saved version. Rewind to any of them, or <em>fork</em> to chase two directions at once.</p>
         </li>
       </ul>
     </div>
@@ -951,12 +945,14 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       b.addEventListener("click", function () { markUserActed(); runReview(b.getAttribute("data-rev"), b); });
     });
 
-    // Room 4 → drive the editor: load that format and scroll it into view.
+    // Room 4 → drive the editor: load that format, then snap up to the hero
+    // section that now holds the editor (block:"start" lands on the snap top).
     loadBtns.forEach(function (b) {
       b.addEventListener("click", function () {
         markUserActed();
         loadFormat(b.getAttribute("data-load"), false);
-        if (editorEl && editorEl.scrollIntoView) editorEl.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+        var scrollTarget = (editorEl && editorEl.closest && editorEl.closest("section")) || editorEl;
+        if (scrollTarget && scrollTarget.scrollIntoView) scrollTarget.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
       });
     });
     // Room 4 "Demo videos" card → jump to the demo-video section instead.
