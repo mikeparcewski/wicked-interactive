@@ -13,10 +13,12 @@
      5. Under the hood  — the real feature surface                 (NEW build)
      6. Closer "That's the whole product"                         (NEW build)
 
-   ONE colour scheme: the family DARK ground — dark canvas, light ink, marigold
-   accent. The earlier light-studio flip is reverted; the page always reads dark.
-   The paper you edit stays a bright warm sheet (a document floating on the dark
-   studio — the Figma/Sketch look). The marigold HIGHLIGHTER sweep + glowing DIFF
+   TWO family schemes via the topbar toggle: DARK (near-black studio ground) and
+   LIGHT (the family "harbor-blue" ground — deep teal-blue canvas, cream ink) —
+   see the :root[data-theme="light"] override below. Both keep the marigold accent
+   and the always-dark chrome (topbar/footer). The paper you edit stays a bright
+   warm sheet in either scheme (a document floating on the studio ground — the
+   Figma/Sketch look). The marigold HIGHLIGHTER sweep + glowing DIFF
    HALO ("only this block touched") are the signature marks. Every `.y` marker is
    dark-ink-on-marigold — never white-on-yellow. Type + fonts inherit the shared
    wicked-web family tokens (--font-display/--font-mono/--ease/--topbar-h); only
@@ -30,16 +32,33 @@ body { padding-top: var(--topbar-h); }
    scroll-padding-top offsets the fixed topbar so a snapped room's top clears it.
    Mobile falls back to natural scroll. */
 html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
-.hero, .band, .closer {
-  min-height: 100vh;
+.hero, .band {
+  /* svh (not vh) = smallest viewport height → safe when mobile browser chrome is
+     expanded; minus the fixed topbar so a snapped body runs bottom-exact with no
+     64px overshoot (scroll-padding-top lands the snap top just under the bar). */
+  min-height: calc(100svh - var(--topbar-h));
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  justify-content: safe center;
+  justify-content: safe center;   /* short content centers; tall content top-aligns, never clipping the top */
 }
+/* The finale wraps the closer + the shared family footer as ONE snap screen.
+   Foundation grants only the snap-box contract (one-viewport height + snap-align);
+   the finale already flex-columns its children (see the closer section styles) and
+   the closer's own internal layout — centering the closer, pinning the footer to
+   the bottom — stays owned by the closer section (parallel implementer). */
+.finale {
+  min-height: calc(100svh - var(--topbar-h));
+  scroll-snap-align: start;
+}
+/* The hero is the FIRST section at scroll-0, where the fixed topbar OVERLAYS the
+   content (no scroll-padding applies at page top). It must fill the FULL viewport
+   (100svh, not 100svh − topbar-h) or the topbar-height gap lets the next band
+   bleed in at the bottom. The hero's own top padding clears the bar. */
+.hero { min-height: 100vh; min-height: 100svh; }
 @media (max-width: 760px) {
   html { scroll-snap-type: none; }
-  .hero, .band, .closer { min-height: 0; }
+  .hero, .band, .finale { min-height: 0; }
 }
 
 /* ==========================================================================
@@ -81,6 +100,28 @@ html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
   /* studio backdrop base + grid/ruler ink (light lines on the dark canvas) */
   --studio-bg: #12171d;
   --studio-line: 214, 226, 236;
+}
+
+/* LIGHT MODE = the family "harbor-blue" theme (matches wicked-web / estate / the
+   rest of the family): a deep harbor-blue ground with cream ink — NOT the near-black
+   studio dark. Only the ground / studio surfaces / ink move to harbor-blue; the
+   marigold accent, the bright "paper you edit", and the always-dark chrome
+   (.topbar / .footer, below) are intentionally unchanged. Values mirror
+   wicked-web tokens.css [data-theme="light"]. This block follows the shared
+   :root above, so at equal specificity it wins for a light-themed root. */
+:root[data-theme="light"] {
+  --studio-bg: #16323f;              /* harbor-blue page ground (a touch under --canvas for depth) */
+  --studio-line: 234, 229, 182;      /* cream grid/ruler lines read on harbor-blue */
+  --canvas: #1c4053;                 /* insets / inputs / pip dots */
+  --canvas-2: #182f3c;               /* io-cards, quiet bands */
+  --surface: #224a5e;                /* raised cards + the editor frame */
+  --surface-2: #1a3b4e;
+  --ink: #eae5b6;                    /* cream ink */
+  --muted: rgba(234, 229, 182, 0.58);
+  --faint: rgba(234, 229, 182, 0.28);
+  --hairline: rgba(234, 229, 182, 0.12);
+  --hairline-strong: rgba(234, 229, 182, 0.24);
+  --link: #79c0ff;
 }
 
 /* Chrome tokens — assert the family near-black dark chrome on the fixed Topbar
@@ -183,32 +224,32 @@ body::after {
 .sec-intro { margin: 16px 0 0; font-size: clamp(1rem, 1.4vw, 1.14rem); color: var(--ink); line-height: 1.55; max-width: 64ch; }
 
 /* ==========================================================================
-   ROOM 1 — HERO (from the LIVE f26d5fd build). A clean statement, then a cue
-   down to the live editor below.
+   ROOM 1 — HERO + LIVE EDITOR (merged). A tight statement, then the live
+   point-and-say editor right below it — the hero IS the interactive demo, and
+   the whole thing is tuned to fit one snapped viewport (see .editor-stage).
 ========================================================================== */
-.hero { padding: clamp(24px, 4vw, 48px) 0; }
+.hero { padding: clamp(14px, 2.4vw, 26px) 0; }
 .hero .wrap { position: relative; z-index: 1; min-width: 0; }
 .hero h1 {
-  font-size: clamp(1.95rem, 5vw, 3.6rem); margin: 18px 0 0; max-width: 20ch;
+  font-size: clamp(1.8rem, 4vw, 2.9rem); margin: 12px 0 0; max-width: 22ch;
   overflow-wrap: break-word;
 }
 .hero .lede {
-  margin: 20px 0 0; font-size: clamp(1rem, 1.5vw, 1.18rem);
-  color: var(--ink); max-width: 62ch; line-height: 1.55;
+  margin: 10px 0 0; font-size: clamp(1rem, 1.5vw, 1.18rem);
+  color: var(--ink); max-width: 70ch; line-height: 1.5;
 }
 .hero .lede b { color: var(--ink); font-weight: 700; box-shadow: inset 0 -0.46em 0 rgba(var(--halo), 0.30); }
-.hero .down {
-  display: inline-flex; align-items: center; gap: 9px; margin-top: 26px;
-  font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--gold); font-weight: 700;
-}
-.hero .down::before { content: ""; width: 22px; height: 2px; border-radius: 2px; background: var(--accent); }
 
-/* ==========================================================================
-   ROOM 2 — POINT AT ANYTHING (the live editor + style import + judges).
-========================================================================== */
-.point { padding: clamp(40px, 6vw, 80px) 0; }
-.editor { margin: clamp(16px, 2.4vw, 30px) 0 0; }
+/* ── the live editor, embedded in the hero ─────────────────────────────────
+   .editor-stage puts the paper frame on the left and its controls (style
+   import, judges, version rail) BESIDE it on the right, so the stage height =
+   max(frame, side) ≈ the frame alone — the merged section fits one viewport. */
+.editor { margin: clamp(10px, 1.6vw, 18px) 0 0; }
+.editor-stage {
+  display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start;
+}
+.ed-side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.ed-side .ed-rail { margin-top: 0; }
 
 /* "Point at anything" format switcher */
 .ed-formats { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 8px; }
@@ -236,7 +277,7 @@ body::after {
   box-shadow: 0 44px 100px -48px rgba(var(--halo), 0.5), 0 0 0 1.5px rgba(var(--halo), 0.5) inset;
 }
 .ed-chrome {
-  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  display: flex; align-items: center; gap: 10px; padding: 6px 13px;
   border-bottom: 1px solid var(--hairline); flex: 0 0 auto;
 }
 .ed-lights { display: flex; gap: 6px; }
@@ -256,7 +297,7 @@ body::after {
 
 /* the "You: describe…" prompt bar */
 .ed-prompt {
-  display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+  display: flex; align-items: center; gap: 10px; padding: 7px 13px;
   border-bottom: 1px solid var(--hairline);
   background: color-mix(in oklab, var(--canvas) 40%, var(--surface));
 }
@@ -285,7 +326,7 @@ body::after {
 /* ---- THE PAPER — a real document you'd send ----------------------------- */
 .ed-doc {
   position: relative; background: var(--paper); color: var(--paper-ink);
-  padding: clamp(14px, 2vw, 20px) clamp(18px, 2.6vw, 30px) clamp(16px, 2vw, 22px);
+  padding: clamp(11px, 1.6vw, 16px) clamp(18px, 2.6vw, 30px) clamp(11px, 1.5vw, 16px);
   display: flex; flex-direction: column; gap: 2px; color-scheme: light;
   transition: background-color 0.55s var(--ease), color 0.55s var(--ease);
 }
@@ -301,7 +342,7 @@ body::after {
 .ed-block {
   position: relative; display: block; width: 100%; text-align: left;
   font: inherit; color: inherit; background: transparent; border: none; cursor: pointer;
-  border-radius: 8px; padding: 5px 12px; margin: 0 -12px;
+  border-radius: 8px; padding: 4px 12px; margin: 0 -12px;
   transition: opacity 0.4s var(--ease), background 0.3s var(--ease),
               box-shadow 0.45s var(--ease);
 }
@@ -361,12 +402,12 @@ body::after {
 
 /* ---- the docked "say the change" bar ------------------------------------ */
 .ed-say {
-  margin: 12px -6px 6px; padding: 13px 15px; background: var(--surface); color: var(--ink);
+  margin: 5px -6px 3px; padding: 8px 13px; background: var(--surface); color: var(--ink);
   border: 1px solid var(--hairline-strong); border-radius: 12px;
   box-shadow: 0 18px 44px -24px rgba(var(--shadow-rgb), 0.7); display: none;
 }
 .ed-say.is-open { display: block; animation: ed-dock 0.3s var(--ease) 1; }
-.ed-say__head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.ed-say__head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
 .ed-say__tag {
   font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.16em;
   text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 7px;
@@ -379,31 +420,31 @@ body::after {
   border: 1px solid var(--hairline); border-radius: 6px; padding: 4px 10px; cursor: pointer;
 }
 .ed-say__x:hover { color: var(--ink); border-color: var(--accent); }
-.ed-say__chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+.ed-say__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .ed-instr {
   font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.04em; color: var(--ink);
   background: color-mix(in oklab, var(--ink) 5%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 6px 13px; cursor: pointer;
+  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 4px 12px; cursor: pointer;
   transition: border-color 0.16s, background 0.16s;
 }
 .ed-instr:hover { border-color: var(--accent); background: rgba(var(--halo), 0.14); }
 .ed-say__form { display: flex; gap: 8px; }
 .ed-say__input {
   flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink);
-  background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px; padding: 9px 12px;
+  background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px; padding: 6px 12px;
 }
 .ed-say__input:focus { outline: none; border-color: var(--accent); }
 .ed-say__input::placeholder { color: var(--faint); }
 .ed-say__go {
   flex-shrink: 0; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.06em;
   text-transform: uppercase; font-weight: 700; color: var(--on-accent); background: var(--accent);
-  border: none; border-radius: 8px; padding: 9px 15px; cursor: pointer; transition: background 0.16s;
+  border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; transition: background 0.16s;
 }
 .ed-say__go:hover { background: var(--accent-bright); }
 
 /* ---- export bar — the click IS the pitch -------------------------------- */
 .ed-export {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 7px 14px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 6px 13px;
   border-top: 1px solid var(--hairline); background: color-mix(in oklab, var(--canvas) 40%, var(--surface));
 }
 .ed-export__lbl { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
@@ -448,7 +489,7 @@ body::after {
 
 /* ---- the live cue ------------------------------------------------------- */
 .ed-cue {
-  display: flex; align-items: center; gap: 10px; padding: 6px 14px;
+  display: flex; align-items: center; gap: 10px; padding: 5px 13px;
   border-top: 1px solid var(--hairline);
   background: color-mix(in oklab, var(--accent) 7%, var(--surface));
   font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.02em; color: var(--ink);
@@ -464,8 +505,8 @@ body::after {
   50% { box-shadow: 0 0 0 6px rgba(var(--halo), 0); }
 }
 
-/* ---- the tool shelf: STYLE IMPORT + THE JUDGES -------------------------- */
-.ed-tools { margin-top: 9px; display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+/* ---- the tool shelf: STYLE IMPORT + THE JUDGES (stacked in .ed-side, the
+   right column of .editor-stage; the old 2-col .ed-tools wrapper is gone) --- */
 .ed-tool {
   border: 1px solid var(--hairline-strong); border-radius: 12px;
   background: var(--surface);
@@ -495,12 +536,12 @@ body::after {
 }
 .ed-brand:hover { border-color: var(--accent); background: rgba(var(--halo), 0.12); }
 .ed-brand.is-active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 700; }
-.ed-judges { display: flex; flex-wrap: wrap; gap: 7px; }
+.ed-judges { display: flex; flex-wrap: wrap; gap: 6px; }
 .ed-judge {
   display: inline-flex; align-items: center; gap: 7px;
   font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink);
   background: color-mix(in oklab, var(--ink) 5%, transparent);
-  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 5px 11px; cursor: pointer;
   transition: border-color 0.16s, background 0.16s;
 }
 .ed-judge:hover { border-color: var(--accent); }
@@ -508,9 +549,9 @@ body::after {
 .ed-judge.is-running .ed-judge__s { background: var(--accent); animation: ed-blink 0.8s steps(2,start) infinite; }
 .ed-judge.is-passed { border-color: color-mix(in oklab, var(--accent) 60%, var(--hairline-strong)); }
 .ed-judge.is-passed .ed-judge__s { background: var(--accent); box-shadow: 0 0 0 3px rgba(var(--halo), 0.25); animation: none; }
-.ed-verdicts { display: flex; flex-direction: column; gap: 6px; }
+.ed-verdicts { display: flex; flex-direction: column; gap: 4px; }
 .ed-verdicts:empty { display: none; }
-.ed-verdict { font-family: var(--font-mono); font-size: 0.64rem; line-height: 1.45; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+.ed-verdict { font-family: var(--font-mono); font-size: 0.6rem; line-height: 1.34; color: var(--muted); display: flex; gap: 7px; align-items: baseline; }
 .ed-verdict.is-passed { color: var(--ink); }
 .ed-verdict__k { flex-shrink: 0; font-weight: 700; color: var(--accent-ink); }
 .ed-verdict.is-running .ed-verdict__v { color: var(--faint); }
@@ -524,9 +565,12 @@ body::after {
    scroll-jack is gone: it now auto-advances and the ledger steps + chapter
    labels are clickable, so it lives in one snapped viewport.
 ========================================================================== */
-.demo { padding: clamp(40px, 6vw, 80px) 0; }
+.demo { padding: clamp(16px, 2.6vw, 30px) 0; }
+/* section-scoped head trim so #demo fits the fold (does not touch the shared .sec-* rules) */
+.demo .sec-title { font-size: clamp(1.5rem, 2.9vw, 2.25rem); margin: 10px 0 0; }
+.demo .sec-intro { margin: 8px 0 0; max-width: 54ch; }
 .demo-grid {
-  margin: clamp(24px, 3vw, 40px) 0 0;
+  margin: clamp(12px, 2vw, 22px) 0 0;
   display: grid; grid-template-columns: 240px 1fr; column-gap: 44px; align-items: center;
 }
 /* ---- station ledger (clickable) ----------------------------------------- */
@@ -544,7 +588,7 @@ body::after {
 .vs-lab { font-family: var(--font-mono); font-weight: 700; font-size: 0.92rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 3px; transition: color 0.3s var(--ease); line-height: 1.2; }
 .vs-hint { font-size: 0.78rem; color: var(--faint); margin-top: 4px; max-width: 22ch; opacity: 0; transition: opacity 0.3s var(--ease); line-height: 1.4; }
 /* ---- the interactive video player ---------------------------------------- */
-.vid-player { justify-self: center; width: 100%; max-width: 640px; height: clamp(360px, 58vh, 520px); border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 44px 100px -54px rgba(var(--shadow-rgb), 0.9); display: flex; flex-direction: column; }
+.vid-player { justify-self: center; width: 100%; max-width: 640px; height: clamp(430px, 54vh, 480px); border: 1px solid var(--hairline-strong); border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: 0 44px 100px -54px rgba(var(--shadow-rgb), 0.9); display: flex; flex-direction: column; }
 .vid-chrome { background: color-mix(in oklab, var(--canvas) 60%, var(--surface)); border-bottom: 1px solid var(--hairline); padding: 6px 12px; display: flex; align-items: center; gap: 7px; }
 .vid-tl { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .vid-chrome .vid-tl:nth-child(1) { background: #ff5f57; }
@@ -772,23 +816,29 @@ body::after {
   95%  { top: 28%; left: 62%; transform: translate(-50%,-50%) scale(1); }
   100% { top: 15%; left: 74%; transform: translate(-50%,-50%) scale(1); }
 }
-.vid-demo-note { margin-top: 14px; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.03em; color: var(--muted); line-height: 1.5; }
+.vid-demo-note { margin-top: 8px; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.03em; color: var(--muted); line-height: 1.5; }
 .vid-demo-note b { color: var(--ink); font-weight: 700; }
 
 /* ==========================================================================
    ROOM 4 — MAKE ANYTHING / SEND ANYTHING (NEW build). Tint band.
 ========================================================================== */
-.io { padding: clamp(48px, 7vw, 92px) 0; }
-.io-grid { margin: clamp(28px, 3.6vw, 44px) 0 0; display: grid; grid-template-columns: 1fr auto 1fr; gap: 26px; align-items: stretch; }
+/* Section head + vertical padding trimmed hard so the 4+4 card grid can spend
+   the reclaimed space on LOOSER gaps (cards breathe) and still net ≤ ~700px of
+   content on a 768h laptop. Head rules scoped to .io so the shared .sec-* stays
+   untouched for other rooms (mirrors the #demo / .hood head-trim pattern). */
+.io { padding: clamp(18px, 2.2vw, 24px) 0; }
+.io .sec-title { font-size: clamp(1.5rem, 3vw, 2.15rem); margin: 9px 0 0; }
+.io .sec-intro { margin: 9px 0 0; font-size: clamp(0.95rem, 1.2vw, 1.03rem); line-height: 1.5; max-width: 66ch; }
+.io-grid { margin: clamp(12px, 1.6vw, 18px) 0 0; display: grid; grid-template-columns: 1fr auto 1fr; gap: 26px; align-items: stretch; }
 .io-col { min-width: 0; }
-.io-col__lbl { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); font-weight: 700; display: inline-flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+.io-col__lbl { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); font-weight: 700; display: inline-flex; align-items: center; gap: 9px; margin-bottom: 13px; }
 .io-col__lbl::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
 .io-col--out .io-col__lbl::before { border-radius: 999px; }
-.io-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.io-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 15px; }
 .io-card {
   display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
   background: var(--canvas-2); border: 1px solid var(--hairline-strong); border-radius: 13px;
-  padding: 15px 17px; color: var(--ink); transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), background 0.2s var(--ease);
+  padding: 12px 16px; color: var(--ink); transition: border-color 0.2s var(--ease), transform 0.2s var(--ease), background 0.2s var(--ease);
 }
 .io-card:hover { border-color: var(--accent); transform: translateX(3px); background: color-mix(in oklab, var(--canvas-2) 82%, var(--accent) 8%); }
 .io-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -807,11 +857,15 @@ body::after {
 /* ==========================================================================
    ROOM 5 — UNDER THE HOOD (NEW build). Solid band.
 ========================================================================== */
-.hood { padding: clamp(48px, 7vw, 92px) 0; }
-.hood-grid { list-style: none; margin: clamp(28px, 3.6vw, 44px) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.hood { padding: clamp(20px, 3.2vw, 40px) 0; }
+/* scoped head trim — keeps the shared .sec-title/.sec-intro rules untouched for
+   #demo / .io while shrinking this band's head so the 3x2 grid clears the fold */
+.hood .sec-title { font-size: clamp(1.55rem, 3.2vw, 2.35rem); margin: 10px 0 0; }
+.hood .sec-intro { margin: 8px 0 0; max-width: 58ch; }
+.hood-grid { list-style: none; margin: clamp(14px, 2vw, 24px) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .hood-card {
   position: relative; background: var(--surface); border: 1px solid var(--hairline-strong);
-  border-radius: 16px; padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 9px;
+  border-radius: 16px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 7px;
   box-shadow: 0 24px 60px -48px rgba(var(--shadow-rgb), 0.8); overflow: hidden;
 }
 .hood-card::after { content: ""; position: absolute; left: 0; top: 0; height: 3px; width: 0; background: var(--accent); transition: width 0.4s var(--ease); }
@@ -823,11 +877,11 @@ body::after {
 }
 .hood-card--feature::after { width: 100%; height: 4px; opacity: 0.9; }
 .hood-card__k {
-  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase;
-  color: var(--on-accent); background: var(--accent); align-self: flex-start; border-radius: 6px; padding: 4px 9px;
+  font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--on-accent); background: var(--accent); align-self: flex-start; border-radius: 6px; padding: 3px 8px;
 }
-.hood-card h3 { font-family: var(--font-display); font-weight: 900; font-stretch: 118%; font-size: 1.12rem; letter-spacing: -0.01em; color: var(--ink); margin: 2px 0 0; line-height: 1.1; }
-.hood-card p { margin: 0; font-size: 0.9rem; line-height: 1.55; color: var(--ink); }
+.hood-card h3 { font-family: var(--font-display); font-weight: 900; font-stretch: 118%; font-size: 1.0rem; letter-spacing: -0.01em; color: var(--ink); margin: 2px 0 0; line-height: 1.12; }
+.hood-card p { margin: 0; font-size: 0.83rem; line-height: 1.42; color: var(--ink); }
 .hood-card p em { font-style: normal; color: var(--ink); font-weight: 700; box-shadow: inset 0 -0.42em 0 rgba(var(--halo), 0.24); }
 .hood-card code { font-family: var(--font-mono); font-size: 0.84em; color: var(--gold); font-weight: 600; }
 
@@ -835,13 +889,13 @@ body::after {
    ROOM 6 — CLOSER + INSTALL (NEW build)
 ========================================================================== */
 .finale { display: flex; flex-direction: column; }
-.closer { padding: clamp(52px, 8vw, 96px) 0 clamp(44px, 6vw, 72px); position: relative; }
-.closer .wrap { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 40px 56px; align-items: center; }
+.closer { padding: clamp(22px, 3vw, 36px) 0 clamp(18px, 2.2vw, 28px); position: relative; }
+.closer .wrap { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 28px 48px; align-items: center; }
 .closer-intro { min-width: 0; }
-.closer h2 { font-size: clamp(1.9rem, 4vw, 3rem); color: var(--ink); }
-.closer p { color: var(--ink); max-width: 52ch; margin: 18px 0 0; font-size: 1.06rem; line-height: 1.6; }
+.closer h2 { font-size: clamp(1.5rem, 2.7vw, 2.1rem); line-height: 1.12; margin: 0; color: var(--ink); }
+.closer p { color: var(--ink); max-width: 52ch; margin: 12px 0 0; font-size: 0.96rem; line-height: 1.5; }
 .closer p em { font-style: normal; color: var(--ink); border-bottom: 2px solid var(--accent); font-weight: 600; }
-.closer-cta { margin-top: 24px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.closer-cta { margin-top: 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .gh-pill {
   display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink);
   background: var(--surface); border: 1px solid var(--hairline-strong); border-radius: 999px; padding: 11px 20px;
@@ -851,18 +905,18 @@ body::after {
 .gh-pill:hover { border-color: var(--accent); color: var(--gold); }
 .gh-pill svg { flex-shrink: 0; }
 
-.install-group { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.install-group { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .install { text-align: left; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .install--primary { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent); }
 .install--secondary { opacity: 0.94; }
-.install__bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--hairline); }
+.install__bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 13px; border-bottom: 1px solid var(--hairline); }
 .install__label { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
 .install__tag { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--on-accent); background: var(--accent); padding: 2px 7px; border-radius: 5px; margin-left: 8px; vertical-align: middle; }
 .install__copy { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--hairline); border-radius: 7px; padding: 4px 11px; cursor: pointer; }
 .install__copy:hover { color: var(--ink); border-color: var(--accent); }
-.install__code { margin: 0; padding: 14px 16px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.9; color: var(--ink); white-space: pre; overflow-x: auto; }
+.install__code { margin: 0; padding: 11px 15px; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.6; color: var(--ink); white-space: pre; overflow-x: auto; }
 .install__code .p { color: var(--accent); font-weight: 700; }
-.install__note { margin: 0; padding: 0 16px 13px; font-size: 0.8rem; line-height: 1.5; color: var(--muted); }
+.install__note { margin: 0; padding: 0 15px 11px; font-size: 0.78rem; line-height: 1.45; color: var(--muted); }
 .install__note code { font-family: var(--font-mono); color: var(--ink); font-size: 0.92em; }
 
 /* ==========================================================================
@@ -888,7 +942,7 @@ body::after {
   .io-arrow svg { transform: rotate(90deg); }
   .closer .wrap { grid-template-columns: 1fr; gap: 30px; }
   .hood-grid { grid-template-columns: 1fr 1fr; }
-  .ed-tools { grid-template-columns: 1fr; }
+  .editor-stage { grid-template-columns: 1fr; }
   .demo-grid { grid-template-columns: 1fr; gap: 22px; }
   .vid-step-ledger { flex-direction: column; border-right: none; padding-right: 0; }
 }
@@ -915,4 +969,7 @@ body::after {
   .vid-cursor { opacity: 1; }
   .step::after, .io-card, .hood-card::after, .ed-doc, .vid-fill { transition: none; }
   * { scroll-behavior: auto !important; }
+  /* Soften snapping so it can never feel like a scroll trap when motion is reduced;
+     mandatory remains the default for everyone else (line 32). */
+  html { scroll-snap-type: y proximity; }
 }
