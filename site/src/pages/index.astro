@@ -829,8 +829,15 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       commitVersion('Style &rarr; <em>learned from ' + label + '</em>');
       setCue("ready", "Restyled from <b>" + label + "</b> &mdash; and it sticks for every later edit.");
     }
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
     function cleanUrl(u) {
-      return (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").slice(0, 40) || "your-brand.com";
+      var clean = (u || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").slice(0, 40) || "your-brand.com";
+      // HTML-escape before this value flows into innerHTML (importStyle -> commitVersion/setCue) — prevents self-XSS from a pasted URL.
+      return esc(clean);
     }
 
     function verdictRow(key) {
