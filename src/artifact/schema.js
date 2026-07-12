@@ -8,7 +8,7 @@ const VALID_SECTION_TYPES = new Set([
   'callout', 'evidence', 'recommendation', 'diagram',
 ]);
 
-const VALID_SOURCE_TYPES = new Set(['crew', 'signal', 'file']);
+const VALID_SOURCE_TYPES = new Set(['crew', 'garden', 'file']);
 
 const IDEMPOTENCY_KEY_RE = /^[a-z][a-z0-9-]*:[a-z][a-z0-9._-]*:[a-z0-9-]+:[a-z0-9-]*:[0-9]+$/;
 
@@ -72,7 +72,7 @@ export function validateWiContent(data) {
 /**
  * Compute the wicked-bus idempotency key for an artifact.created event.
  * Format (REQ-003 §4 / SC-WI-043): interactive:artifact.created:{path_hash}:{source_type}:0
- * @param {string} sourceType — crew | signal | file
+ * @param {string} sourceType — crew | garden | file
  * @param {string} artifactAbsPath — absolute path of the HTML artifact
  * @returns {string}
  */

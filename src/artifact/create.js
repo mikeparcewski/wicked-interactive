@@ -2,25 +2,25 @@
 //
 // Usage:
 //   wicked-interactive create --from-crew <session_id> [--theme <t>] [--out <path>]
-//   wicked-interactive create --from-signal <signal_id> [--theme <t>] [--out <path>]
+//   wicked-interactive create --from-garden <session_id> [--theme <t>] [--out <path>]
 //   wicked-interactive create --from-file <wi-content.json> [--out <path>]
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { randomUUID, createHash } from 'node:crypto';
+import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 
 import { validateWiContent, computeIdempotencyKey } from './schema.js';
 import { generateArtifactHTML } from './template.js';
 import { crewToWiContent } from './from-crew.js';
-import { signalToWiContent } from './from-signal.js';
+import { gardenCouncilToWiContent } from './from-garden.js';
 
 const HELP = `
 Usage: wicked-interactive create [options]
 
 Options:
   --from-crew <session_id>    Create artifact from a wicked-crew session
-  --from-signal <signal_id>   Create artifact from a wicked-signals direct outcome
+  --from-garden <session_id>  Create artifact from a wicked-garden council verdict
   --from-file <path>          Create artifact from a wi-content JSON file
   --theme <theme-name>        Apply a named theme (optional)
   --out <output-path>         Output path for the HTML artifact (default: <title>.html)
@@ -28,11 +28,13 @@ Options:
 
 Environment:
   WICKED_BUS_PATH             Path to wicked-bus DB (used to resolve crew session paths)
-  WICKED_SIGNALS_PATH         Path to wicked-signals store directory
+  WICKED_GARDEN_PATH          Path to the wicked-garden data root (default:
+                              ~/.something-wicked/wicked-garden); council transcripts
+                              resolve under it. Omit --from-garden's id for the latest.
 
 Exit codes:
   0  Success
-  1  Validation error / missing source / signal wrong type
+  1  Validation error / missing source
 `.trimStart();
 
 /**
@@ -56,7 +58,7 @@ function emitCreatedEvent(artifactPath, sourceType, extra = {}) {
   const payload = JSON.stringify({
     artifact_path: artifactPath,
     source_type: sourceType,
-    signal_id: extra.signalId ?? null,
+    council_session_id: extra.councilSessionId ?? null,
     crew_session_id: extra.sessionId ?? null,
     schema_version: '1.0',
     ...(extra.outcomeType ? { outcome_type: extra.outcomeType } : {}),
@@ -90,7 +92,7 @@ function buildWiContent(title, sections, sourceType, extra = {}) {
     created_at: new Date().toISOString(),
     source_type: sourceType,
     crew_session_id: extra.sessionId ?? null,
-    signal_id: extra.signalId ?? null,
+    council_session_id: extra.councilSessionId ?? null,
     title,
     sections,
   };
@@ -108,17 +110,17 @@ export async function runCreate(args) {
   }
 
   const fromCrew = args['from-crew'];
-  const fromSignal = args['from-signal'];
+  const fromGarden = args['from-garden'];
   const fromFile = args['from-file'];
 
-  const sourceCount = [fromCrew, fromSignal, fromFile].filter(Boolean).length;
+  const sourceCount = [fromCrew, fromGarden, fromFile].filter(Boolean).length;
   if (sourceCount === 0) {
-    process.stderr.write('Error: one of --from-crew, --from-signal, or --from-file is required\n');
+    process.stderr.write('Error: one of --from-crew, --from-garden, or --from-file is required\n');
     process.stderr.write('Run: wicked-interactive create --help\n');
     return 1;
   }
   if (sourceCount > 1) {
-    process.stderr.write('Error: only one of --from-crew, --from-signal, --from-file may be specified\n');
+    process.stderr.write('Error: only one of --from-crew, --from-garden, --from-file may be specified\n');
     return 1;
   }
 
@@ -145,23 +147,25 @@ export async function runCreate(args) {
     extra = { sessionId: fromCrew, outcomeType: mapped.crewType };
   }
 
-  // ── --from-signal ──────────────────────────────────────────────────────────
-  if (fromSignal) {
+  // ── --from-garden ────────────────────────────────────────────────────────────
+  if (fromGarden) {
     let mapped;
     try {
-      mapped = await signalToWiContent(fromSignal);
+      // `--from-garden` with no id resolves the latest council transcript.
+      mapped = await gardenCouncilToWiContent(fromGarden === true ? undefined : fromGarden);
     } catch (e) {
       process.stderr.write(`Error: ${e.message}\n`);
       return 1;
     }
 
-    wiContent = buildWiContent(mapped.title, mapped.sections, 'signal', { signalId: fromSignal });
-    extra = {
-      signalId: fromSignal,
-      // REQ-003 §2.4: outcome_type is required for signal-origin events.
-      // Fall back to 'triage' if the signal pre-dates the field.
-      outcomeType: mapped.signalData?.outcome_type || 'triage',
-    };
+    if (!mapped.sessionFound) {
+      process.stderr.write(
+        `Warning: garden council "${mapped.sessionId}" not found — producing a "content pending" artifact.\n`,
+      );
+    }
+
+    wiContent = buildWiContent(mapped.title, mapped.sections, 'garden', { councilSessionId: mapped.sessionId });
+    extra = { councilSessionId: mapped.sessionId, outcomeType: 'council' };
   }
 
   // ── --from-file ────────────────────────────────────────────────────────────
