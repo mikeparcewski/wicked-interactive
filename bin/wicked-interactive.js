@@ -164,7 +164,7 @@ async function main() {
 
   if (cmd !== "serve") {
     console.error("usage: wicked-interactive <create|publish|validate|serve> [options]");
-    console.error("  create   --from-crew <id> | --from-signal <id> | --from-file <path>  [--output <path>]");
+    console.error("  create   --from-crew <id> | --from-garden <id> | --from-file <path>  [--output <path>]");
     console.error("  publish  <artifact-path> [--api-key <key>]");
     console.error("  validate <artifact-path>");
     console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart]");
