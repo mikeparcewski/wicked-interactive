@@ -239,6 +239,11 @@ body::after {
   color: var(--ink); max-width: 70ch; line-height: 1.5;
 }
 .hero .lede b { color: var(--ink); font-weight: 700; box-shadow: inset 0 -0.46em 0 rgba(var(--halo), 0.30); }
+.hero .hero-pos {
+  margin: 12px 0 0; font-size: clamp(0.85rem, 1.1vw, 0.95rem);
+  color: var(--muted); max-width: 66ch; line-height: 1.55;
+  padding-left: 12px; border-left: 2px solid rgba(var(--halo), 0.5);
+}
 
 /* ── the live editor, embedded in the hero ─────────────────────────────────
    .editor-stage puts the paper frame on the left and its controls (style

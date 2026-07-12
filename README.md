@@ -6,6 +6,8 @@
    \_/\_/ |_|\___|_|\_\___|\__,_|     |_|_| |_|\__\___|_|  \__,_|\___|\__|_| \_/ \___|
 ```
 
+> A creative surface on the same substrate: describe it, watch it build, ship HTML/PDF/deck. It composes the family's building blocks; it does not close the loop.
+
 ## It's 11pm. The deck's due tomorrow. You haven't opened PowerPoint.
 
 Good news: you don't have to. Just tell it what you need — out loud, like you'd tell a coworker — and watch it build the thing in your browser. The board deck. The launch one-pager. The sales page. A narrated demo video of your product. Then point at anything you don't like and say what to fix.
