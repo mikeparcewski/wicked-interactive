@@ -32,8 +32,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // Command events a per-doc workspace materializes (everything else on the bus — facts, chat,
 // status, question.answered — is handled by the bridge or another subscriber, not here).
 const COMMAND_TYPES = new Set([
-  "wicked.feedback.submitted", "wicked.edit.completed", "wicked.draft.completed",
-  "wicked.demo.requested", "wicked.theme.requested", "wicked.source.attached", "wicked.source.updated", "wicked.source.removed",
+  "wicked.interactive.feedback.submitted", "wicked.interactive.edit.completed", "wicked.interactive.draft.completed",
+  "wicked.interactive.demo.requested", "wicked.interactive.theme.requested", "wicked.interactive.source.attached", "wicked.interactive.source.updated", "wicked.interactive.source.removed",
 ]);
 
 /**
@@ -84,7 +84,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     if (!Number.isInteger(from)) return res.status(400).json({ error: "from (version number) required" });
     enqueue(async () => {
       const { version, parent } = forkVersion(dir, from);
-      emit("wicked.version.created", { version, parent, kind: "fork", html_file: `_v${version}.html` });
+      emit("wicked.interactive.version.created", { version, parent, kind: "fork", html_file: `_v${version}.html` });
       return { version, parent };
     }).then((r) => res.json(r)).catch((e) => res.status(400).json({ error: e.message }));
   });
@@ -102,10 +102,10 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         : exportHtml(dir, version);
       const file = basename(result.path);
       const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
-      emit("wicked.export.requested", { version, format });
+      emit("wicked.interactive.export.requested", { version, format });
       // Export gate: announce the freshly-rendered artifact + its on-disk path so the supervising
-      // agent can vision-review it before the user trusts it (the agent replies wicked.export.reviewed).
-      emit("wicked.export.generated", { version, format, path: result.path, file, download });
+      // agent can vision-review it before the user trusts it (the agent replies wicked.interactive.export.reviewed).
+      emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download });
       res.json({ format, ...result, file, download });
     } catch (e) {
       res.status(400).json({ error: e.message });
@@ -211,7 +211,7 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
   });
 
   // Sources (ADR-0017): the list, materialized into requests/sources.json by the command
-  // handlers. The browser only reads it (and emits wicked.source.attached to add more).
+  // handlers. The browser only reads it (and emits wicked.interactive.source.attached to add more).
   app.get("/api/sources", (_req, res) => {
     try {
       const f = resolve(dir, REQUESTS_DIR, "sources.json");
@@ -254,14 +254,14 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     const p = event.payload || {};
     const ctx = { emit, documentId, dir };
     switch (event.event_type) {
-      case "wicked.feedback.submitted": return enqueue(() => materializeFeedback(dir, p, ctx));
-      case "wicked.edit.completed":     return enqueue(() => materializeEdit(dir, p, ctx));
-      case "wicked.draft.completed":    return enqueue(() => materializeDraft(dir, p, ctx));
-      case "wicked.demo.requested":     return enqueue(() => materializeDemo(dir, p, ctx));
-      case "wicked.theme.requested":    return enqueue(() => materializeThemeRequested(dir, p, ctx));
-      case "wicked.source.attached":    return enqueue(() => materializeSourceAttached(dir, p));
-      case "wicked.source.updated":     return enqueue(() => materializeSourceUpdated(dir, p));
-      case "wicked.source.removed":     return enqueue(() => materializeSourceRemoved(dir, p));
+      case "wicked.interactive.feedback.submitted": return enqueue(() => materializeFeedback(dir, p, ctx));
+      case "wicked.interactive.edit.completed":     return enqueue(() => materializeEdit(dir, p, ctx));
+      case "wicked.interactive.draft.completed":    return enqueue(() => materializeDraft(dir, p, ctx));
+      case "wicked.interactive.demo.requested":     return enqueue(() => materializeDemo(dir, p, ctx));
+      case "wicked.interactive.theme.requested":    return enqueue(() => materializeThemeRequested(dir, p, ctx));
+      case "wicked.interactive.source.attached":    return enqueue(() => materializeSourceAttached(dir, p));
+      case "wicked.interactive.source.updated":     return enqueue(() => materializeSourceUpdated(dir, p));
+      case "wicked.interactive.source.removed":     return enqueue(() => materializeSourceRemoved(dir, p));
       default: return Promise.resolve();
     }
   }
@@ -375,9 +375,9 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (!name || !DOC_NAME.test(name)) return;
     const dir = docDir(name);
     try {
-      if (event.event_type === "wicked.chat.posted") {
+      if (event.event_type === "wicked.interactive.chat.posted") {
         appendConversation(dir, { role: event.payload.role, text: event.payload.text });
-      } else if (event.event_type === "wicked.status.posted") {
+      } else if (event.event_type === "wicked.interactive.status.posted") {
         const { message, question, state } = event.payload;
         if (message || question) appendConversation(dir, { role: "agent", text: question || message, state });
       }
@@ -449,7 +449,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
 
-    // Demo (ADR-0018): seed a placeholder storyboard v0, emit wicked.doc.created(kind:demo).
+    // Demo (ADR-0018): seed a placeholder storyboard v0, emit wicked.interactive.doc.created(kind:demo).
     // The agent explores the app, authors demo.spec.mjs, then emits wicked.demo.requested.
     if (isDemo) {
       let u;
@@ -459,15 +459,15 @@ export function createMultiServer({ root, frontendDir } = {}) {
         const dir = docDir(name);
         initWorkspace(dir, demoPlaceholder(name, demoUrl, brief), { kind: "demo" });
         await mountDoc(name);
-        await emitEvent("wicked.doc.created", { document_id: name, kind: "demo", url: demoUrl, brief }, { producer: PRODUCERS.SERVICE });
+        await emitEvent("wicked.interactive.doc.created", { document_id: name, kind: "demo", url: demoUrl, brief }, { producer: PRODUCERS.SERVICE });
         return res.json({ name, head: 0, kind: "demo", learning: true });
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
     }
 
-    // "From my content" (ADR-0010): seed a placeholder v0, emit wicked.doc.created(kind:source).
-    // The agent indexes the source(s)/brief and emits wicked.draft.completed with the first draft.
+    // "From my content" (ADR-0010): seed a placeholder v0, emit wicked.interactive.doc.created(kind:source).
+    // The agent indexes the source(s)/brief and emits wicked.interactive.draft.completed with the first draft.
     if (fromSource && sourcePaths.length === 0 && !brief) return res.status(400).json({ error: "add at least one source path or a brief" });
     const html = fromSource
       ? (String(req.body?.html ?? "") || generationPlaceholder(name, sourcePaths, brief))
@@ -482,7 +482,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
       // review (semantic-reviewer) checks the current version against. Best-effort.
       if (brief) appendConversation(dir, { role: "user", text: brief });
       const docKind = fromSource ? "source" : (kind || "html");
-      await emitEvent("wicked.doc.created",
+      await emitEvent("wicked.interactive.doc.created",
         { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}), ...(style ? { style } : {}) },
         { producer: PRODUCERS.SERVICE });
       res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}) });

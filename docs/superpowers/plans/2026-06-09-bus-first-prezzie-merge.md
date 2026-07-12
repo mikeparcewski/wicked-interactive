@@ -48,22 +48,22 @@ Every payload carries `document_id` and `ts`. `correlation_id` is assigned by th
 
 | event_type | subdomain | emitted by | consumed by | payload (beyond document_id/ts) | replaces |
 |---|---|---|---|---|---|
-| `wicked.doc.created` | `docs` | service (after POST /api/docs) | agent (kind source/demo) | `kind, source_paths?, brief?, url?` | `generation` + `demo` SSE events, `_gen.request.json`, `_demo.request.json` |
-| `wicked.feedback.submitted` | `feedback` | ui | service | `version_target, items[], author` | POST /api/feedback body + `_v{n}.md` chokidar hop |
-| `wicked.feedback.processed` | `feedback` | service | agent (when `awaiting_structural > 0`), ui | `version, applied[], rejected[], stale[], awaiting_structural, structural_items[]` (selector+instruction+fragment, inline) | `processed` SSE + `_v{n}.request.json` |
-| `wicked.edit.completed` | `feedback` | agent | service | `version, results[] ({selector, fragment} \| {selector, remove:true})` | `_v{n}.response.json` |
-| `wicked.draft.completed` | `generation` | agent | service | `html` (< 256 KB inline) or `html_path` | `_gen.response.json` |
-| `wicked.chat.posted` | `chat` | ui (role user) / agent (role agent) | agent / service→ui; service materializes conversation.jsonl | `role, text` | POST /api/message + `message` SSE |
-| `wicked.question.answered` | `chat` | ui | agent | `request_id, answer` | POST /api/answer + `q{id}.answer.json` + `answer` SSE |
-| `wicked.status.posted` | `status` | agent, service (demo steps) | service→ui; service logs convo | `state (processing\|working\|asking\|complete\|error), message, version?, request_id?, question?, options?` | POST /api/status + `status` SSE |
-| `wicked.source.attached` | `sources` | ui | agent; service materializes sources.json | `added[] ({path, note})` | POST /api/sources + `sources` SSE |
-| `wicked.source.updated` | `sources` | agent | service (materialize + bridge) | `path, status (indexing\|indexed\|error), brain?` | POST /api/sources/status |
-| `wicked.demo.requested` | `demo` | ui or agent (after authoring spec) | service (Playwright record on FIFO) | `headless?` | POST /api/demo/record (both callers) |
-| `wicked.version.created` | `versions` | service | ui (hot-reload), agent (work landed) | `version, parent, kind (deterministic\|structural\|generated\|fork\|demo), html_file` | `html-updated` SSE + `presentation.html.updated` |
-| `wicked.export.requested` | `export` | service (fact, after HTTP export) | observers | `version, format` | `presentation.export.requested` |
-| `wicked.error.raised` | (area) | service | ui, agent | `source, error, context?` | `error` SSE |
+| `wicked.interactive.doc.created` | `docs` | service (after POST /api/docs) | agent (kind source/demo) | `kind, source_paths?, brief?, url?` | `generation` + `demo` SSE events, `_gen.request.json`, `_demo.request.json` |
+| `wicked.interactive.feedback.submitted` | `feedback` | ui | service | `version_target, items[], author` | POST /api/feedback body + `_v{n}.md` chokidar hop |
+| `wicked.interactive.feedback.processed` | `feedback` | service | agent (when `awaiting_structural > 0`), ui | `version, applied[], rejected[], stale[], awaiting_structural, structural_items[]` (selector+instruction+fragment, inline) | `processed` SSE + `_v{n}.request.json` |
+| `wicked.interactive.edit.completed` | `feedback` | agent | service | `version, results[] ({selector, fragment} \| {selector, remove:true})` | `_v{n}.response.json` |
+| `wicked.interactive.draft.completed` | `generation` | agent | service | `html` (< 256 KB inline) or `html_path` | `_gen.response.json` |
+| `wicked.interactive.chat.posted` | `chat` | ui (role user) / agent (role agent) | agent / service→ui; service materializes conversation.jsonl | `role, text` | POST /api/message + `message` SSE |
+| `wicked.interactive.question.answered` | `chat` | ui | agent | `request_id, answer` | POST /api/answer + `q{id}.answer.json` + `answer` SSE |
+| `wicked.interactive.status.posted` | `status` | agent, service (demo steps) | service→ui; service logs convo | `state (processing\|working\|asking\|complete\|error), message, version?, request_id?, question?, options?` | POST /api/status + `status` SSE |
+| `wicked.interactive.source.attached` | `sources` | ui | agent; service materializes sources.json | `added[] ({path, note})` | POST /api/sources + `sources` SSE |
+| `wicked.interactive.source.updated` | `sources` | agent | service (materialize + bridge) | `path, status (indexing\|indexed\|error), brain?` | POST /api/sources/status |
+| `wicked.interactive.demo.requested` | `demo` | ui or agent (after authoring spec) | service (Playwright record on FIFO) | `headless?` | POST /api/demo/record (both callers) |
+| `wicked.interactive.version.created` | `versions` | service | ui (hot-reload), agent (work landed) | `version, parent, kind (deterministic\|structural\|generated\|fork\|demo), html_file` | `html-updated` SSE + `presentation.html.updated` |
+| `wicked.interactive.export.requested` | `export` | service (fact, after HTTP export) | observers | `version, format` | `presentation.export.requested` |
+| `wicked.interactive.error.raised` | (area) | service | ui, agent | `source, error, context?` | `error` SSE |
 
-Loop safety: a **type-ownership table** in `src/service/events.js` declares who may emit each type; consumers drop events whose `producer_id` is themselves; `wicked.chat.posted` routes on `payload.role`. JSON Schemas for all types ship in `src/service/event-schemas/` and install into the bus schema registry (warn mode) at init.
+Loop safety: a **type-ownership table** in `src/service/events.js` declares who may emit each type; consumers drop events whose `producer_id` is themselves; `wicked.interactive.chat.posted` routes on `payload.role`. JSON Schemas for all types ship in `src/service/event-schemas/` and install into the bus schema registry (warn mode) at init.
 
 Idempotency: handler-side dedupe keys are domain-natural — `edit.completed` is a no-op if the target version's successor already exists; `draft.completed` is a no-op if `_v1` exists; agent treats re-delivered `feedback.processed` for a version it already answered as a no-op (the version manifest is the truth). This preserves the existing idempotent-application semantics of structural.js/generation.js.
 
@@ -184,19 +184,19 @@ process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-"));
 const { emitEvent, busDb } = await import("../src/service/bus-client.js");
 
 test("emitEvent lands a well-formed envelope", async () => {
-  const { event_id } = await emitEvent("wicked.version.created", {
+  const { event_id } = await emitEvent("wicked.interactive.version.created", {
     document_id: "t1", version: 1, parent: 0, kind: "fork", html_file: "_v1.html",
   }, { producer: "wi-service" });
   assert.ok(event_id > 0);
   const row = busDb().prepare("SELECT event_type, domain, subdomain, producer_id FROM events WHERE event_id=?").get(event_id);
-  assert.equal(row.event_type, "wicked.version.created");
+  assert.equal(row.event_type, "wicked.interactive.version.created");
   assert.equal(row.domain, "wicked-interactive");
   assert.equal(row.subdomain, "versions");
   assert.equal(row.producer_id, "wi-service");
 });
 
 test("emitEvent rejects types the producer doesn't own", async () => {
-  await assert.rejects(() => emitEvent("wicked.edit.completed", { document_id: "t1" }, { producer: "wi-service" }));
+  await assert.rejects(() => emitEvent("wicked.interactive.edit.completed", { document_id: "t1" }, { producer: "wi-service" }));
 });
 ```
 
@@ -227,7 +227,7 @@ export async function emitEvent(type, payload, { producer, correlationId, sessio
 }
 ```
 
-(`events.js` from Phase 0 supplies `EVENT_TYPES` — `{ "wicked.version.created": { subdomain: "versions", owners: ["wi-service"] }, ... }` for every row of §1 — and `ownerOf`.)
+(`events.js` from Phase 0 supplies `EVENT_TYPES` — `{ "wicked.interactive.version.created": { subdomain: "versions", owners: ["wi-service"] }, ... }` for every row of §1 — and `ownerOf`.)
 
 - [ ] **Step 4:** test → PASS. **Step 5:** commit `feat: bus-client emit path with type ownership (ADR-0019)`.
 
@@ -235,7 +235,7 @@ export async function emitEvent(type, payload, { producer, correlationId, sessio
 
 **Files:** Modify `src/service/server.js`; Create `test/bridge.test.js`
 
-- [ ] **Step 1: failing test** — start `createMultiServer` against a temp root + temp `WICKED_BUS_DATA_DIR`; POST `/api/docs {name:"t1", html:"<section>hi</section>"}`; open `GET /api/events`; assert an SSE frame arrives whose `event:` is `wicked.doc.created` and whose data parses to an envelope with `payload.document_id === "t1"`.
+- [ ] **Step 1: failing test** — start `createMultiServer` against a temp root + temp `WICKED_BUS_DATA_DIR`; POST `/api/docs {name:"t1", html:"<section>hi</section>"}`; open `GET /api/events`; assert an SSE frame arrives whose `event:` is `wicked.interactive.doc.created` and whose data parses to an envelope with `payload.document_id === "t1"`.
 - [ ] **Step 2:** run → FAIL (`/api/events` 404).
 - [ ] **Step 3: implementation** — in `createMultiServer`: start a `subscribe()` loop (`plugin: "wi-service-bridge"`, filter `*@wicked-interactive`, `pollIntervalMs: 500`, `cursor_init: "latest"`) that writes every event as an SSE frame (`event: <event_type>`, `data: <full envelope JSON>`) to bridge clients; replace every `broadcast(name, data)`/`tap` call site with `emitEvent(...)` per the §1 mapping (per-doc `broadcast` becomes a thin shim that calls `emitEvent` during this phase; old `/events` + `/api/events/all` keep working off the same emissions until Phase 2 deletes them). 15 s heartbeat comment frames kept (one place, not two).
 - [ ] **Step 4:** tests pass, including existing `server.test.js`/`multidoc.test.js` (broadcast shim keeps their assertions green this phase). **Step 5:** commit.
@@ -244,14 +244,14 @@ export async function emitEvent(type, payload, { producer, correlationId, sessio
 
 **Files:** Modify `src/service/server.js`; Test `test/bridge.test.js` (extend)
 
-- [ ] **Step 1: failing test** — `POST /api/events {event_type:"wicked.chat.posted", payload:{document_id:"t1", role:"user", text:"hello"}}` → 200 with `{event_id}`; assert the event row exists with `producer_id: "wi-ui"` and a fresh `correlation_id`; `POST /api/events {event_type:"wicked.edit.completed", ...}` → 403 (not UI-emittable); unknown document_id → 404.
+- [ ] **Step 1: failing test** — `POST /api/events {event_type:"wicked.interactive.chat.posted", payload:{document_id:"t1", role:"user", text:"hello"}}` → 200 with `{event_id}`; assert the event row exists with `producer_id: "wi-ui"` and a fresh `correlation_id`; `POST /api/events {event_type:"wicked.interactive.edit.completed", ...}` → 403 (not UI-emittable); unknown document_id → 404.
 - [ ] **Step 2:** FAIL. **Step 3:** implement `POST /api/events`: whitelist via `events.js` (`uiEmittable(type)`), document existence check, envelope enrichment (`producer: "wi-ui"`, uuid `correlation_id`, server `session_id`). **Step 4:** PASS. **Step 5:** commit.
 
 ### Task 4: frontend on envelopes
 
 **Files:** Modify `frontend/src/lib/api.js`, `frontend/src/lib/sse.js`, `frontend/src/hooks/useSse.js`, `frontend/src/App.jsx`; Test `test/frontend-sse.test.js` (parser on envelope frames), `npm run acceptance`
 
-- [ ] **Step 1:** update `useSse` to connect to `/api/events`, dispatch on `event_type`, filter `payload.document_id === currentDoc`; map old handler names (`html-updated` → `wicked.version.created`, `processed` → `wicked.feedback.processed`, etc.).
+- [ ] **Step 1:** update `useSse` to connect to `/api/events`, dispatch on `event_type`, filter `payload.document_id === currentDoc`; map old handler names (`html-updated` → `wicked.interactive.version.created`, `processed` → `wicked.interactive.feedback.processed`, etc.).
 - [ ] **Step 2:** `api.js`: `postFeedback/postMessage/postAnswer/addSources/postDemoRecord` → one `postEvent(type, payload)` helper hitting `/api/events`; state-plane fetches untouched.
 - [ ] **Step 3:** `npm test` + `npm run acceptance` (builds frontend, runs `test/e2e.mjs`) → green. **Step 4:** commit. Phase-1 exit: UI runs entirely on bus envelopes; agent still on wi-watch (cutover is Phase 2).
 

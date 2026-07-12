@@ -1,7 +1,7 @@
 # Quality checklist — run this before you hand a draft back
 
-Before you emit `wicked.draft.completed` (a first draft or whole-doc change) or
-`wicked.edit.completed` (a structural edit), self-check against this list. It's the reactive
+Before you emit `wicked.interactive.draft.completed` (a first draft or whole-doc change) or
+`wicked.interactive.edit.completed` (a structural edit), self-check against this list. It's the reactive
 counterpart to the other references — it catches the things that make a draft feel "off" even when
 the user can't name why. **Fix structure and content before surface**; a polished render can't
 rescue a weak argument or an overstuffed slide.

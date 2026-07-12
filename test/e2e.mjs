@@ -1,6 +1,6 @@
 // Browser-driven acceptance (ADR-0019): the full bus loop through a real browser. A stub
-// "agent" subscribes to the bus, ASKS a clarifying question via wicked.status.posted, reads
-// the user's wicked.question.answered, and fulfils with wicked.edit.completed — exercising the
+// "agent" subscribes to the bus, ASKS a clarifying question via wicked.interactive.status.posted, reads
+// the user's wicked.interactive.question.answered, and fulfils with wicked.interactive.edit.completed — exercising the
 // inline-comment + clarification + hot-reload path entirely over wicked-bus. Exit 0 = PASS.
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -42,23 +42,23 @@ stub = startSubscription({
   handler: async (event) => {
     const p = event.payload || {};
     if (p.document_id !== DOC) return;
-    if (event.event_type === "wicked.feedback.processed" && event.producer_id === PRODUCERS.SERVICE) {
+    if (event.event_type === "wicked.interactive.feedback.processed" && event.producer_id === PRODUCERS.SERVICE) {
       if ((p.awaiting_structural || 0) > 0) {
         const rid = `q-v${p.version}`;
         if (pendingByRid.has(rid)) return;
         pendingByRid.set(rid, { version: p.version, items: p.structural_items });
-        await emitEvent("wicked.status.posted",
+        await emitEvent("wicked.interactive.status.posted",
           { document_id: DOC, state: "asking", question: "Pick a name:", options: [ANSWER, "other"], request_id: rid },
           { producer: PRODUCERS.AGENT });
       }
-    } else if (event.event_type === "wicked.question.answered" && event.producer_id === PRODUCERS.UI) {
+    } else if (event.event_type === "wicked.interactive.question.answered" && event.producer_id === PRODUCERS.UI) {
       const job = pendingByRid.get(p.request_id);
       if (!job) return;
       const results = job.items.map((it) => ({
         selector: it.selector,
         fragment: it.fragment.replace(/^(<[^>]+>)[\s\S]*(<\/[^>]+>)$/, `$1${p.answer}$2`),
       }));
-      await emitEvent("wicked.edit.completed", { document_id: DOC, version: job.version, results }, { producer: PRODUCERS.AGENT });
+      await emitEvent("wicked.interactive.edit.completed", { document_id: DOC, version: job.version, results }, { producer: PRODUCERS.AGENT });
     }
   },
 });
@@ -80,7 +80,7 @@ try {
   await page.waitForSelector(".wi-inline textarea", { timeout: 10000 });
   await page.type(".wi-inline textarea", "improve this");
   await page.click(".wi-inline button[type=submit]");
-  step("sent an inline comment (bus: wicked.feedback.submitted)");
+  step("sent an inline comment (bus: wicked.interactive.feedback.submitted)");
 
   // The agent asks; the question + options must appear in the browser (bus: status.posted).
   await page.waitForSelector(".wi-lock__opts button", { timeout: 20000 });
@@ -89,7 +89,7 @@ try {
   await page.evaluate((ans) => {
     [...document.querySelectorAll(".wi-lock__opts button")].find((b) => b.textContent.trim() === ans).click();
   }, ANSWER);
-  step("answered the question (bus: wicked.question.answered)");
+  step("answered the question (bus: wicked.interactive.question.answered)");
 
   await page.waitForFunction((t) => {
     const f = document.querySelector("iframe");
@@ -110,7 +110,7 @@ try {
     () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),
     { timeout: 10000 },
   );
-  step("chat message round-trips into the transcript (bus: wicked.chat.posted)");
+  step("chat message round-trips into the transcript (bus: wicked.interactive.chat.posted)");
 
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join("; ")}`);
   const m = loadManifest(join(root, DOC));

@@ -46,7 +46,7 @@ test("GET /doc/99 for an unknown version is 404", async () => {
   } finally { await cleanup(); }
 });
 
-test("POST /api/fork creates a follow-on version and announces wicked.version.created", async () => {
+test("POST /api/fork creates a follow-on version and announces wicked.interactive.version.created", async () => {
   const { base, events, cleanup } = await boot();
   try {
     const res = await fetch(`${base}/api/fork`, {
@@ -56,7 +56,7 @@ test("POST /api/fork creates a follow-on version and announces wicked.version.cr
     const body = await res.json();
     assert.equal(body.parent, 0);
     assert.equal(body.version, 1);
-    const fact = events.find((e) => e.type === "wicked.version.created");
+    const fact = events.find((e) => e.type === "wicked.interactive.version.created");
     assert.ok(fact, "emitted version.created");
     assert.equal(fact.payload.kind, "fork");
     assert.equal(fact.payload.version, 1);
@@ -85,7 +85,7 @@ test("POST /api/export returns a download URL + GET /api/export/file serves the 
     const body = await post.json();
     assert.ok(body.file, "response includes the export filename");
     assert.match(body.download, new RegExp(`/api/export/file/${body.file}$`));
-    assert.ok(events.some((e) => e.type === "wicked.export.requested"), "emitted export.requested");
+    assert.ok(events.some((e) => e.type === "wicked.interactive.export.requested"), "emitted export.requested");
 
     const dl = await fetch(`${base}${body.download}`);
     assert.equal(dl.status, 200);
@@ -141,7 +141,7 @@ test("GET /api/conversation starts empty", async () => {
 });
 
 // --- Sources GET + filesystem browse (ADR-0017). The POST intake is now a bus event
-//     (wicked.source.attached); see handlers.test.js + bridge.test.js. ---
+//     (wicked.interactive.source.attached); see handlers.test.js + bridge.test.js. ---
 
 test("GET /api/sources starts empty", async () => {
   const { base, cleanup } = await boot();

@@ -42,18 +42,18 @@ function themeOpts(ctx, dir) {
 
 /**
  * UI feedback batch → apply deterministic edits now, hand the structural remainder to the
- * agent via the emitted `wicked.feedback.processed` (with fragments inline — no request file).
+ * agent via the emitted `wicked.interactive.feedback.processed` (with fragments inline — no request file).
  */
 export async function materializeFeedback(dir, payload, ctx) {
   const { items, author } = payload;
   const { version, parent } = writeFeedback(dir, { items, author });
   const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
   if (!result.idempotent) {
-    ctx.emit("wicked.version.created", {
+    ctx.emit("wicked.interactive.version.created", {
       version, parent, kind: "deterministic", html_file: result.html_file,
     });
   }
-  ctx.emit("wicked.feedback.processed", {
+  ctx.emit("wicked.interactive.feedback.processed", {
     version, applied: result.applied, rejected: result.rejected, stale: result.stale,
     awaiting_structural: result.structural_items.length,
     structural_items: result.structural_items,
@@ -65,7 +65,7 @@ export async function materializeFeedback(dir, payload, ctx) {
 export async function materializeEdit(dir, payload, ctx) {
   const { version, results } = payload;
   const out = await applyStructuralResults(dir, { version, results }, themeOpts(ctx, dir));
-  ctx.emit("wicked.version.created", {
+  ctx.emit("wicked.interactive.version.created", {
     version: out.version, parent: out.parent, kind: "structural", html_file: `_v${out.version}.html`,
   });
   return out;
@@ -78,7 +78,7 @@ export async function materializeDraft(dir, payload, ctx) {
     html = readFileSync(resolve(payload.html_path), "utf-8");
   }
   const out = await applyGeneratedHtml(dir, html, themeOpts(ctx, dir));
-  ctx.emit("wicked.version.created", {
+  ctx.emit("wicked.interactive.version.created", {
     version: out.version, parent: out.parent, kind: "generated", html_file: `_v${out.version}.html`,
   });
   return out;
@@ -90,16 +90,16 @@ export async function materializeDemo(dir, payload, ctx) {
     const result = await recordDemo(dir, {
       documentId: ctx.documentId,
       headless: payload.headless !== false,
-      onStep: ({ index, total, label }) => ctx.emit("wicked.status.posted", {
+      onStep: ({ index, total, label }) => ctx.emit("wicked.interactive.status.posted", {
         state: "working", message: `Step ${index}${total ? `/${total}` : ""}: ${label}`,
       }),
     });
-    ctx.emit("wicked.version.created", {
+    ctx.emit("wicked.interactive.version.created", {
       version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
     });
     return result;
   } catch (e) {
-    ctx.emit("wicked.status.posted", {
+    ctx.emit("wicked.interactive.status.posted", {
       document_id: ctx.documentId, state: "error",
       message: `Recording failed: ${e.message}`,
     });
@@ -120,8 +120,8 @@ export function themeArtifactPath(dir, ts = Date.now()) {
 
 /**
  * Theme-learn trigger → render the URL to a PDF in the doc workspace, then announce its path via
- * `wicked.theme.learned`. Mirrors materializeDemo's shape. `grab` is injectable so tests don't
- * need a real browser/network. On failure we surface a `wicked.status.posted` {state:"error"}
+ * `wicked.interactive.theme.learned`. Mirrors materializeDemo's shape. `grab` is injectable so tests don't
+ * need a real browser/network. On failure we surface a `wicked.interactive.status.posted` {state:"error"}
  * rather than throwing into the command loop (which would retry/DLQ a non-retryable bad URL or a
  * missing Chrome).
  */
@@ -139,7 +139,7 @@ export async function materializeThemeRequested(dir, payload, ctx, { grab = grab
         throw new Error(`learn-from-file needs a PDF or image (got .${ext})`);
       }
       const format = ext === "pdf" ? "pdf" : "image";
-      ctx.emit("wicked.theme.learned", { path: abs, render_path: abs, format });
+      ctx.emit("wicked.interactive.theme.learned", { path: abs, render_path: abs, format });
       return { path: abs, render_path: abs, format };
     }
     if (!url) throw new Error("a theme URL or file is required");
@@ -150,12 +150,12 @@ export async function materializeThemeRequested(dir, payload, ctx, { grab = grab
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`theme URL must be http or https: ${url}`);
     mkdirSync(resolve(dir, THEME_DIR), { recursive: true });
     const renderPath = themeArtifactPath(dir);
-    ctx.emit("wicked.status.posted", { state: "working", message: "Grabbing the page to read its design…" });
+    ctx.emit("wicked.interactive.status.posted", { state: "working", message: "Grabbing the page to read its design…" });
     const { path } = await grab(url, renderPath);
-    ctx.emit("wicked.theme.learned", { url, render_path: path, format: "pdf" });
+    ctx.emit("wicked.interactive.theme.learned", { url, render_path: path, format: "pdf" });
     return { url, render_path: path };
   } catch (e) {
-    ctx.emit("wicked.status.posted", { state: "error", message: `Couldn't grab that URL: ${e.message}` });
+    ctx.emit("wicked.interactive.status.posted", { state: "error", message: `Couldn't grab that URL: ${e.message}` });
     return { error: e.message };
   }
 }

@@ -1,7 +1,7 @@
 // structural.js — apply the agent's structural-change edits as a follow-on version (ADR-0019).
 //
-// The agent receives the structural items inline on `wicked.feedback.processed` and emits its
-// edited fragments back on `wicked.edit.completed`; the service applies them through the INV-2
+// The agent receives the structural items inline on `wicked.interactive.feedback.processed` and emits its
+// edited fragments back on `wicked.interactive.edit.completed`; the service applies them through the INV-2
 // gate, producing a follow-on version (write-once, INV-4). `extractFragment` + `splitItems`
 // are the shared helpers the feedback path uses to pull current markup for the agent.
 
@@ -36,7 +36,7 @@ const rootWid = (fragmentHtml) => {
 };
 
 /**
- * Apply the agent's structural results (from a `wicked.edit.completed` event) as a follow-on
+ * Apply the agent's structural results (from a `wicked.interactive.edit.completed` event) as a follow-on
  * version. The INV-2 gate (in regenerate) rejects any fragment that dropped a data-wid.
  * Result shape: { version (the parent), results: [{selector, fragment} | {selector, remove:true}] }.
  * @returns {Promise<{version:number, parent:number, applied:string[], rejected:object[]}>}

@@ -18,9 +18,9 @@ test("domain is the package name and the all-filter targets it", () => {
   assert.equal(ALL_FILTER, "*@wicked-interactive");
 });
 
-test("every event_type follows wicked.<noun>.<past-verb> and has a known producer", () => {
+test("every event_type follows wicked.<domain>.<noun>.<past-verb> and has a known producer", () => {
   for (const [type, def] of Object.entries(EVENT_TYPES)) {
-    assert.match(type, /^wicked\.[a-z0-9]+\.[a-z0-9]+$/, `${type} shape`);
+    assert.match(type, /^wicked\.[a-z0-9]+\.[a-z0-9]+\.[a-z0-9_]+$/, `${type} shape`);
     assert.ok(def.subdomain && /^[a-z.]+$/.test(def.subdomain), `${type} subdomain`);
     assert.ok(Array.isArray(def.owners) && def.owners.length > 0, `${type} owners`);
     for (const o of def.owners) {
@@ -30,26 +30,36 @@ test("every event_type follows wicked.<noun>.<past-verb> and has a known produce
 });
 
 test("ownership table gates emits by producer", () => {
-  assert.ok(canEmit("wicked.version.created", PRODUCERS.SERVICE));
-  assert.ok(!canEmit("wicked.version.created", PRODUCERS.UI));
-  assert.ok(canEmit("wicked.edit.completed", PRODUCERS.AGENT));
-  assert.ok(!canEmit("wicked.edit.completed", PRODUCERS.SERVICE));
+  assert.ok(canEmit("wicked.interactive.version.created", PRODUCERS.SERVICE));
+  assert.ok(!canEmit("wicked.interactive.version.created", PRODUCERS.UI));
+  assert.ok(canEmit("wicked.interactive.edit.completed", PRODUCERS.AGENT));
+  assert.ok(!canEmit("wicked.interactive.edit.completed", PRODUCERS.SERVICE));
   // chat is dual-owned: both UI and agent may post.
-  assert.ok(canEmit("wicked.chat.posted", PRODUCERS.UI));
-  assert.ok(canEmit("wicked.chat.posted", PRODUCERS.AGENT));
-  assert.ok(!canEmit("wicked.chat.posted", PRODUCERS.SERVICE));
+  assert.ok(canEmit("wicked.interactive.chat.posted", PRODUCERS.UI));
+  assert.ok(canEmit("wicked.interactive.chat.posted", PRODUCERS.AGENT));
+  assert.ok(!canEmit("wicked.interactive.chat.posted", PRODUCERS.SERVICE));
   assert.deepEqual(ownerOf("wicked.unknown.thing"), []);
 });
 
 test("UI may only originate the conversational/intent events", () => {
-  const uiYes = ["wicked.feedback.submitted", "wicked.chat.posted", "wicked.question.answered",
-    "wicked.source.attached", "wicked.demo.requested", "wicked.theme.requested", "wicked.review.requested"];
-  const uiNo = ["wicked.edit.completed", "wicked.draft.completed", "wicked.version.created",
-    "wicked.feedback.processed", "wicked.status.posted", "wicked.doc.created",
-    "wicked.source.updated", "wicked.export.requested", "wicked.error.raised", "wicked.theme.learned",
-    "wicked.review.completed"];
+  // Hand-maintained whitelist — POST /api/events accepts ONLY uiEmittable types,
+  // so this is a security boundary. The set is pinned by hand (not derived from
+  // the registry) precisely so a flipped uiEmittable flag on a service/agent
+  // event fails here instead of silently widening what the browser may originate.
+  const uiYes = ["wicked.interactive.feedback.submitted", "wicked.interactive.chat.posted", "wicked.interactive.question.answered",
+    "wicked.interactive.source.attached", "wicked.interactive.source.removed", "wicked.interactive.demo.requested",
+    "wicked.interactive.theme.requested", "wicked.interactive.review.requested", "wicked.interactive.status.requested"];
+  const uiNo = ["wicked.interactive.edit.completed", "wicked.interactive.draft.completed", "wicked.interactive.version.created",
+    "wicked.interactive.feedback.processed", "wicked.interactive.status.posted", "wicked.interactive.doc.created",
+    "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.export.generated",
+    "wicked.interactive.export.reviewed", "wicked.interactive.error.raised", "wicked.interactive.theme.learned",
+    "wicked.interactive.review.completed"];
   for (const t of uiYes) assert.ok(uiEmittable(t), `${t} should be UI-emittable`);
   for (const t of uiNo) assert.ok(!uiEmittable(t), `${t} should NOT be UI-emittable`);
+  // Completeness: the two hand-maintained lists must together cover EVERY known
+  // type, so a newly added event can't slip past this boundary unclassified.
+  assert.deepEqual([...uiYes, ...uiNo].sort(), Object.keys(EVENT_TYPES).sort(),
+    "uiYes ∪ uiNo must cover every registered event type");
 });
 
 test("helpers reject unknown types", () => {

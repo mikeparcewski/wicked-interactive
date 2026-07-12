@@ -27,31 +27,31 @@ const { SERVICE, AGENT, UI } = PRODUCERS;
 // `uiEmittable` gates POST /api/events — the browser may only originate these. `subdomain`
 // is the bus column (functional area). Keep this table and event-schemas/ in lockstep.
 export const EVENT_TYPES = Object.freeze({
-  "wicked.doc.created":         { subdomain: "docs",       owners: [SERVICE],       uiEmittable: false },
-  "wicked.feedback.submitted":  { subdomain: "feedback",   owners: [UI],            uiEmittable: true  },
-  "wicked.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
-  "wicked.edit.completed":      { subdomain: "feedback",   owners: [AGENT],         uiEmittable: false },
-  "wicked.draft.completed":     { subdomain: "generation", owners: [AGENT],         uiEmittable: false },
-  "wicked.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
-  "wicked.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
-  "wicked.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE],uiEmittable: false },
-  "wicked.status.requested":    { subdomain: "status",     owners: [UI],            uiEmittable: true  },
-  "wicked.source.attached":     { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
-  "wicked.source.updated":      { subdomain: "sources",    owners: [AGENT],         uiEmittable: false },
-  "wicked.source.removed":      { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
-  "wicked.demo.requested":      { subdomain: "demo",       owners: [UI, AGENT],     uiEmittable: true  },
-  "wicked.theme.requested":     { subdomain: "theme",      owners: [UI, AGENT],     uiEmittable: true  },
-  "wicked.theme.learned":       { subdomain: "theme",      owners: [SERVICE],       uiEmittable: false },
-  "wicked.review.requested":    { subdomain: "review",     owners: [UI, AGENT],     uiEmittable: true  },
-  "wicked.review.completed":    { subdomain: "review",     owners: [AGENT],         uiEmittable: false },
-  "wicked.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
-  "wicked.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.doc.created":         { subdomain: "docs",       owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.feedback.submitted":  { subdomain: "feedback",   owners: [UI],            uiEmittable: true  },
+  "wicked.interactive.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.draft.completed":     { subdomain: "generation", owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
+  "wicked.interactive.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
+  "wicked.interactive.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE],uiEmittable: false },
+  "wicked.interactive.status.requested":    { subdomain: "status",     owners: [UI],            uiEmittable: true  },
+  "wicked.interactive.source.attached":     { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
+  "wicked.interactive.source.updated":      { subdomain: "sources",    owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.source.removed":      { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
+  "wicked.interactive.demo.requested":      { subdomain: "demo",       owners: [UI, AGENT],     uiEmittable: true  },
+  "wicked.interactive.theme.requested":     { subdomain: "theme",      owners: [UI, AGENT],     uiEmittable: true  },
+  "wicked.interactive.theme.learned":       { subdomain: "theme",      owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.review.requested":    { subdomain: "review",     owners: [UI, AGENT],     uiEmittable: true  },
+  "wicked.interactive.review.completed":    { subdomain: "review",     owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   // Export gate (ADR-0009 follow-up): the service announces a freshly-rendered artifact with its
   // path so the supervising agent can vision-review it BEFORE the user is told it's good; the
   // agent posts its verdict back as wicked.export.reviewed.
-  "wicked.export.generated":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
-  "wicked.export.reviewed":     { subdomain: "export",     owners: [AGENT],         uiEmittable: false },
-  "wicked.error.raised":        { subdomain: "error",      owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.export.generated":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.export.reviewed":     { subdomain: "export",     owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.error.raised":        { subdomain: "error",      owners: [SERVICE],       uiEmittable: false },
 });
 
 /** Subscription filter that catches every event this system emits. */
