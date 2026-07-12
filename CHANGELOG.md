@@ -10,8 +10,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ### Changed
 - **Replaced `--from-signal` with `--from-garden`.** wicked-signals was archived and its routing/classification role moved to wicked-garden's council, so the signal adapter (and its dead `npm install -g wicked-signals` guidance) is gone; the artifact `source_type` `signal` is now `garden`, and the artifact-created event carries `council_session_id` instead of `signal_id`.
-- **`wicked.export.generated` event schema** — validates the artifact-created payload emitted after export. Required fields: `document_id`, `version`, `format` (html/pdf/pptx), `path`, `file`.
-- **`wicked.export.reviewed` event schema** — validates review-decision payloads. Required fields: `document_id`, `version`, `verdict` (approved/rejected/needs_revision).
+- **`wicked.interactive.export.generated` event schema** — validates the artifact-created payload emitted after export. Required fields: `document_id`, `version`, `format` (html/pdf/pptx), `path`, `file`.
+- **`wicked.interactive.export.reviewed` event schema** — validates review-decision payloads. Required fields: `document_id`, `version`, `verdict` (approved/rejected/needs_revision).
 - **`--output <path>` flag** for `wicked-interactive create` — spec-canonical flag for the output path (legacy `--out` alias retained for backward compatibility).
 
 ### Fixed
