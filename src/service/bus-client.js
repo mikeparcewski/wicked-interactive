@@ -21,6 +21,22 @@ export function busConfig() {
   return _config;
 }
 
+/**
+ * Format a subscribe/poll error for stderr. A silent watch — e.g. WB-003
+ * (CURSOR_BEHIND_TTL_WINDOW) — is indistinguishable from "quiet, no events" (the interactive#42
+ * failure mode), so subscription errors must always be surfaced, never swallowed. WBError carries
+ * `.error` (e.g. "WB-003") and `.code` (e.g. "CURSOR_BEHIND_TTL_WINDOW"); include both when present.
+ * @param {string} plugin subscription/plugin name
+ * @param {*} err the error thrown by the poll/push loop
+ * @returns {string} a single-line, greppable message
+ */
+export function formatSubscriptionError(plugin, err) {
+  const parts = [err && err.error, err && err.code].filter(Boolean);
+  const tag = parts.length ? ` ${parts.join("/")}` : "";
+  const msg = err && err.message ? err.message : String(err);
+  return `[wicked-bus] subscription '${plugin}' error${tag}: ${msg}`;
+}
+
 /** Memoized open DB handle (better-sqlite3, WAL). Throws if the bus can't open. */
 export function busDb() {
   if (!_db) _db = openDb(busConfig());
@@ -67,7 +83,10 @@ export function startSubscription({ plugin, filter, handler, cursorInit = "lates
     pollIntervalMs,
     maxRetries,
     backoffMs: [200, 1000],
-    onError,
+    // Never swallow subscribe/poll errors. A silent watch (e.g. WB-003 CURSOR_BEHIND_TTL_WINDOW)
+    // is indistinguishable from "quiet, no events" — the interactive#42 failure mode. Default to
+    // surfacing on stderr so a stalled subscription is visible; callers may still pass their own.
+    onError: onError || ((err) => console.error(formatSubscriptionError(plugin, err))),
     onDeadLetter,
   });
 }

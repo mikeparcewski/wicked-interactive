@@ -9,9 +9,28 @@ import { join } from "node:path";
 const DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-client-"));
 process.env.WICKED_BUS_DATA_DIR = DATA_DIR;
 
-const { emitEvent, busDb, closeBus } = await import("../src/service/bus-client.js");
+const { emitEvent, busDb, closeBus, formatSubscriptionError } = await import("../src/service/bus-client.js");
 
 after(() => { try { closeBus(); } catch {} rmSync(DATA_DIR, { recursive: true, force: true }); });
+
+test("formatSubscriptionError surfaces WB-003 code and plugin so a stalled watch is visible (interactive#42)", () => {
+  // Shape of a wicked-bus WBError: `.error` = "WB-003", `.code` = machine name.
+  const wb003 = Object.assign(new Error("cursor behind retention window"), {
+    error: "WB-003", code: "CURSOR_BEHIND_TTL_WINDOW",
+  });
+  const line = formatSubscriptionError("wi-service-commands", wb003);
+  assert.match(line, /wi-service-commands/, "names the subscription");
+  assert.match(line, /WB-003/, "surfaces the WB code");
+  assert.match(line, /CURSOR_BEHIND_TTL_WINDOW/, "surfaces the machine-readable code");
+  assert.match(line, /cursor behind retention window/, "surfaces the message");
+});
+
+test("formatSubscriptionError degrades gracefully for a plain error (no WB code)", () => {
+  const line = formatSubscriptionError("wi-service-bridge", new Error("boom"));
+  assert.match(line, /wi-service-bridge/);
+  assert.match(line, /boom/);
+  assert.doesNotMatch(line, /undefined/, "no undefined leaks when .error/.code are absent");
+});
 
 test("emitEvent lands a well-formed envelope", async () => {
   const { event_id } = await emitEvent("wicked.interactive.version.created", {
