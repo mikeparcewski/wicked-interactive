@@ -33,7 +33,9 @@ export function busConfig() {
 export function formatSubscriptionError(plugin, err) {
   const parts = [err && err.error, err && err.code].filter(Boolean);
   const tag = parts.length ? ` ${parts.join("/")}` : "";
-  const msg = err && err.message ? err.message : String(err);
+  // Guard null/undefined so a missing error doesn't render the literal
+  // string "null"/"undefined"; fall back to a generic label instead.
+  const msg = err ? (err.message || String(err)) : "Unknown error";
   return `[wicked-bus] subscription '${plugin}' error${tag}: ${msg}`;
 }
 

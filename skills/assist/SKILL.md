@@ -719,7 +719,10 @@ without generating noise. Do this at the end of Step 1 (or immediately on re-ent
 # iterations WITHIN this session (that's how position survives idle-timeout exits). Do NOT
 # redirect stderr — WB-003 and errors must stay visible.
 while true; do
-  wicked-bus subscribe --plugin "$WI_SUB" --filter '*@wicked-interactive' --idle-timeout 120000
+  # `|| sleep 1` backs off on a fast-failing subscribe (bad config, DB lock,
+  # missing executable) so the loop can't spin at 100% CPU. A clean idle-timeout
+  # exit falls straight through and re-arms immediately.
+  wicked-bus subscribe --plugin "$WI_SUB" --filter '*@wicked-interactive' --idle-timeout 120000 || sleep 1
 done
 ```
 

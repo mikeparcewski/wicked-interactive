@@ -32,6 +32,15 @@ test("formatSubscriptionError degrades gracefully for a plain error (no WB code)
   assert.doesNotMatch(line, /undefined/, "no undefined leaks when .error/.code are absent");
 });
 
+test("formatSubscriptionError renders a generic label for a null/undefined error", () => {
+  for (const bad of [null, undefined]) {
+    const line = formatSubscriptionError("wi-service-bridge", bad);
+    assert.match(line, /wi-service-bridge/);
+    assert.match(line, /Unknown error/, "falls back to a generic label");
+    assert.doesNotMatch(line, /\bnull\b|\bundefined\b/, "never prints the literal null/undefined");
+  }
+});
+
 test("emitEvent lands a well-formed envelope", async () => {
   const { event_id } = await emitEvent("wicked.interactive.version.created", {
     document_id: "t1", version: 1, parent: 0, kind: "fork", html_file: "_v1.html",
