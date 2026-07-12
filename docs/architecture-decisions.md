@@ -24,7 +24,7 @@ plus a bespoke watcher (`wi-watch.mjs`) with its own reconnect/watchdog machiner
 "reconcile pending on restart" step to paper over missed events.
 
 **Decision.** Collapse the **control plane** onto a single wicked-bus v2 vocabulary (domain
-`wicked-interactive`, ~22 `wicked.interactive.<noun>.<verb>` types — see `src/service/events.js`).
+`wicked-interactive`, ~22 `wicked.interactive.<noun>.<past-verb>` types — see `src/service/events.js`).
 - The **service** emits/consumes via the wicked-bus Node lib (`subscribe()` managed loop →
   the existing FIFO; `emit()` for facts) and **bridges** to the browser: bus→SSE fan-out down
   (`GET /api/events`), a whitelisted `POST /api/events` up (browsers can't read SQLite, so SSE
