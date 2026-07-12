@@ -25,7 +25,10 @@
 //   style-edit         -> style (map) and/or class_add[] / class_remove[]
 //   structural-change  -> instruction (free text, LLM)
 
-import yaml from "js-yaml";
+// js-yaml v5 is ESM-only and dropped the CommonJS default export; import the
+// namespace so `yaml.load` / `yaml.dump` keep working (the functions themselves
+// are API-compatible with v4).
+import * as yaml from "js-yaml";
 
 export const TYPES = ["content-edit", "style-edit", "structural-change", "remove"];
 
