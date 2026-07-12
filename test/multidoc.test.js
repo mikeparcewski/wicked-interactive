@@ -113,7 +113,7 @@ test("existing docs on disk are mounted on startup", async () => {
 
 // ---------------------------------------------------------------------------
 // "From my content" (kind:source, ADR-0010): the service seeds a placeholder and emits
-// wicked.doc.created(kind:source) — the agent builds the first draft. No request file
+// wicked.interactive.doc.created(kind:source) — the agent builds the first draft. No request file
 // (ADR-0019); the doc.created emission is verified in bridge.test.js.
 // ---------------------------------------------------------------------------
 test("POST /api/docs kind:source seeds a placeholder (agent builds the draft)", async () => {

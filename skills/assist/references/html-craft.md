@@ -1,6 +1,6 @@
 # HTML craft — generate documents that stay clickable, themeable, exportable
 
-The draft you emit (`wicked.draft.completed`) is instrumented (fresh `data-wid` per block),
+The draft you emit (`wicked.interactive.draft.completed`) is instrumented (fresh `data-wid` per block),
 themed, and landed as a version. Write HTML that plays well with all three.
 
 ## Structure for instrumentation

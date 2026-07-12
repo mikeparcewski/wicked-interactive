@@ -36,7 +36,7 @@ test("materializeFeedback applies a deterministic edit and emits version.created
     const html = readFileSync(join(dir, "_v1.html"), "utf-8");
     assert.match(html, /Q3 Results/, "deterministic edit applied");
     const types = ctx.events.map((e) => e.type);
-    assert.deepEqual(types, ["wicked.version.created", "wicked.feedback.processed"]);
+    assert.deepEqual(types, ["wicked.interactive.version.created", "wicked.interactive.feedback.processed"]);
     const vc = ctx.events[0].payload;
     assert.equal(vc.version, 1); assert.equal(vc.parent, 0); assert.equal(vc.kind, "deterministic");
     const fp = ctx.events[1].payload;
@@ -52,7 +52,7 @@ test("materializeFeedback surfaces structural items inline (no request file)", a
     await materializeFeedback(dir, {
       items: [{ selector: "slide-0-heading-1", type: "structural-change", instruction: "make it punchier" }],
     }, ctx);
-    const fp = ctx.events.find((e) => e.type === "wicked.feedback.processed").payload;
+    const fp = ctx.events.find((e) => e.type === "wicked.interactive.feedback.processed").payload;
     assert.equal(fp.awaiting_structural, 1);
     assert.equal(fp.structural_items[0].selector, "slide-0-heading-1");
     assert.equal(fp.structural_items[0].instruction, "make it punchier");
@@ -77,7 +77,7 @@ test("materializeEdit lands the agent's structural result as a follow-on version
     assert.equal(out.parent, 1);
     assert.equal(out.version, 2);
     assert.equal(loadManifest(dir).head, 2);
-    const vc = ctx.events.find((e) => e.type === "wicked.version.created").payload;
+    const vc = ctx.events.find((e) => e.type === "wicked.interactive.version.created").payload;
     assert.equal(vc.kind, "structural");
     assert.match(readFileSync(join(dir, "_v2.html"), "utf-8"), /Crushed It/);
   } finally { cleanup(dir); }
@@ -92,7 +92,7 @@ test("materializeDraft lands a generated draft from inline html", async () => {
     const html = readFileSync(join(dir, "_v1.html"), "utf-8");
     assert.match(html, /Investor Update/);
     assert.match(html, /data-wid=/, "fresh anchors assigned");
-    assert.equal(ctx.events.find((e) => e.type === "wicked.version.created").payload.kind, "generated");
+    assert.equal(ctx.events.find((e) => e.type === "wicked.interactive.version.created").payload.kind, "generated");
   } finally { cleanup(dir); }
 });
 
@@ -170,14 +170,14 @@ test("materializeThemeRequested grabs the URL and emits theme.learned with rende
     assert.match(grabbedOut, /[\\/]theme[\\/]learned_\d+\.pdf$/, "renders into the per-doc theme/ dir");
     assert.ok(existsSync(grabbedOut), "the PDF artifact exists");
     assert.equal(out.render_path, grabbedOut);
-    const learned = ctx.events.find((e) => e.type === "wicked.theme.learned");
-    assert.ok(learned, "emitted wicked.theme.learned");
+    const learned = ctx.events.find((e) => e.type === "wicked.interactive.theme.learned");
+    assert.ok(learned, "emitted wicked.interactive.theme.learned");
     assert.equal(learned.payload.url, "https://stripe.com");
     assert.equal(learned.payload.render_path, grabbedOut);
     assert.equal(learned.payload.format, "pdf");
     // A working status is posted before the grab (progress), and no error status.
-    assert.ok(ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "working"));
-    assert.ok(!ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
+    assert.ok(ctx.events.some((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "working"));
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error"));
   } finally { cleanup(dir); }
 });
 
@@ -193,11 +193,11 @@ test("materializeThemeRequested learns from a LOCAL file (no grab) — emits the
     assert.equal(grabCalled, false, "must not invoke the URL grab for a local file");
     assert.equal(out.render_path, pdf);
     assert.equal(out.format, "pdf");
-    const learned = ctx.events.find((e) => e.type === "wicked.theme.learned");
-    assert.ok(learned, "emitted wicked.theme.learned");
+    const learned = ctx.events.find((e) => e.type === "wicked.interactive.theme.learned");
+    assert.ok(learned, "emitted wicked.interactive.theme.learned");
     assert.equal(learned.payload.render_path, pdf);
     assert.equal(learned.payload.format, "pdf");
-    assert.ok(!ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error"));
   } finally { cleanup(dir); }
 });
 
@@ -219,8 +219,8 @@ test("materializeThemeRequested rejects a missing file with an error status (no 
   try {
     const out = await materializeThemeRequested(dir, { path: join(dir, "nope.pdf") }, ctx, { grab: () => ({}) });
     assert.ok(out.error, "returns an error, does not throw");
-    assert.ok(ctx.events.some((e) => e.type === "wicked.status.posted" && e.payload.state === "error"));
-    assert.ok(!ctx.events.some((e) => e.type === "wicked.theme.learned"));
+    assert.ok(ctx.events.some((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error"));
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.interactive.theme.learned"));
   } finally { cleanup(dir); }
 });
 
@@ -233,9 +233,9 @@ test("materializeThemeRequested surfaces an error status (not a throw) on a bad 
     const out = await materializeThemeRequested(dir, { url: "ftp://nope" }, ctx, { grab: () => { calls++; } });
     assert.equal(calls, 0, "grab never invoked for a non-http(s) url");
     assert.ok(out.error, "returns an error summary rather than throwing into the loop");
-    const err = ctx.events.find((e) => e.type === "wicked.status.posted" && e.payload.state === "error");
+    const err = ctx.events.find((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error");
     assert.ok(err, "emitted an error status the UI/agent can surface");
-    assert.ok(!ctx.events.some((e) => e.type === "wicked.theme.learned"), "no theme.learned on failure");
+    assert.ok(!ctx.events.some((e) => e.type === "wicked.interactive.theme.learned"), "no theme.learned on failure");
   } finally { cleanup(dir); }
 });
 

@@ -1,8 +1,8 @@
 // generation.js — land "build a document from my content" drafts (ADR-0019). The service is
 // model-free: it cannot index files or generate HTML. So when a doc is created with
-// kind:"source", the service seeds a placeholder v0 and emits wicked.doc.created; the agent
+// kind:"source", the service seeds a placeholder v0 and emits wicked.interactive.doc.created; the agent
 // reads the source materials, drives wicked-brain + the craft references, and emits
-// wicked.draft.completed with the full first draft. The service instruments + themes it and
+// wicked.interactive.draft.completed with the full first draft. The service instruments + themes it and
 // lands it as a follow-on version.
 //
 // Unlike a structural edit, the generated draft is a whole new document — there are no
@@ -45,7 +45,7 @@ export function generationPlaceholder(name, sourcePaths, brief = "") {
 }
 
 /**
- * Land the agent's generated draft (from a `wicked.draft.completed` event) as a follow-on
+ * Land the agent's generated draft (from a `wicked.interactive.draft.completed` event) as a follow-on
  * version. Instruments (fresh data-wids) and themes the draft, then records it write-once
  * (INV-4) with the current head as parent.
  * @returns {Promise<{version:number, parent:number}>}

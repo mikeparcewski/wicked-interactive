@@ -33,7 +33,7 @@ plus a bespoke watcher (`wi-watch.mjs`) with its own reconnect/watchdog machiner
   killing the silent-watcher and reconcile-pending failure classes) and emits with
   `wicked-bus emit --payload @file`.
 - Loop safety: a **type-ownership table** declares who may emit each type; consumers drop
-  events whose `producer_id` is themselves; `wicked.chat.posted` routes on `payload.role`.
+  events whose `producer_id` is themselves; `wicked.interactive.chat.posted` routes on `payload.role`.
 
 **The state plane is untouched.** versions.json, `_v{n}.html`, conversation.jsonl,
 sources.json, the INV-2 / data-wid invariants, and the fork model are exactly as before. Only
@@ -121,15 +121,15 @@ existing capabilities surfaced where people expect them.
   composer** in its own region (top hairline, matching the sidebar edge), and the conversation as a
   **collapsible thread** floating above the composer. Reviewer verdicts render inline as a `review`
   message kind.
-- **The `+` menu reuses existing seams.** *Learn a style* → `wicked.theme.requested` (website grab
+- **The `+` menu reuses existing seams.** *Learn a style* → `wicked.interactive.theme.requested` (website grab
   exists; a local PDF/image now flows through the same handler with `{path}` — no grab, the agent
   reads it in place, ADR-0010 line stays clean). *Attach* → the local file picker writes nothing,
   reads in place (ADR-0017). *Record* → demo creation (ADR-0018).
 - **Reviewers are an agent capability, not service logic.** The UI emits
-  `wicked.review.requested {reviewers, document_id}`; the service does **not** materialize it (it's
+  `wicked.interactive.review.requested {reviewers, document_id}`; the service does **not** materialize it (it's
   not a command type) — it rides the bus to the supervising agent, which runs the named passes
   (`match`/`a11y`/`copy`/`qe`) against the head version and posts verdicts as
-  `wicked.chat.posted {role:"review"}`. Default trigger is the explicit **Review** action; review
+  `wicked.interactive.chat.posted {role:"review"}`. Default trigger is the explicit **Review** action; review
   is read-only (creates no version) until the user asks to apply a fix. This keeps the model/
   deterministic split intact — judgment in the agent, transport on the bus, nothing hard-coded in
   the service.

@@ -65,7 +65,7 @@ test("FIFO queue: two rapid feedback commands both process without racing the ma
   const svc = createServer({ dir });
   try {
     const cmd = (sel, val) => svc.runCommand({
-      event_type: "wicked.feedback.submitted",
+      event_type: "wicked.interactive.feedback.submitted",
       payload: { document_id: "doc", items: [{ selector: sel, type: "content-edit", value: val }] },
     });
     await Promise.all([cmd("slide-0-paragraph-1", "P-EDIT"), cmd("slide-0-heading-1", "H-EDIT")]);
