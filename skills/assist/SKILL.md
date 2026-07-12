@@ -47,6 +47,23 @@ the UI's (loop safety). Export this once at the start of the loop — `wicked-bu
 export WICKED_BUS_PRODUCER_ID=wi-agent
 ```
 
+**Emit identity vs. subscription identity — they are NOT the same thing.**
+`WICKED_BUS_PRODUCER_ID=wi-agent` stamps every event you *emit* and is **stable** — it's how the
+service and your own loop-safety filter recognize your emissions, so it must never change.
+
+Your *subscription* cursor is different: it's keyed by the `--plugin` name you pass to
+`wicked-bus subscribe`. A durable cursor persists across processes, so if a NEW session re-arms
+with the same `--plugin wi-agent`, it **inherits the previous session's cursor** — and if that
+cursor was left behind the TTL window, the fresh watch silently stalls on `WB-003` and the agent
+never wakes (interactive#42). Give each session its **own** subscription id so a fresh arm always
+starts from a fresh cursor:
+
+```bash
+# Per-SESSION subscription cursor — fresh each session, so you never inherit a stale one.
+# (Emit identity above stays wi-agent; only the watch cursor is per-session.)
+export WI_SUB="wi-agent-$(date +%Y%m%d-%H%M%S)-$$"
+```
+
 A tiny helper keeps emits readable — it writes the payload to a temp file and emits by
 `@file` (never hand-escape JSON with embedded HTML):
 
@@ -115,9 +132,14 @@ fires on each stdout line, so every event wakes you the instant it arrives, with
 events. This is THE way — not a drain loop, not a decision to weigh:
 
 ```bash
-wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' \
+wicked-bus subscribe --plugin "$WI_SUB" --filter '*@wicked-interactive' \
   --cursor-init latest --idle-timeout 120000
 ```
+
+**Never swallow the watch's stderr.** Do NOT append `2>/dev/null` (or redirect stderr anywhere you
+won't read it). `WB-003` and every other subscribe error prints on stderr; silence it and a stalled
+watch is indistinguishable from "quiet, no events" — the exact failure in interactive#42. If the
+loop goes suspiciously quiet, a swallowed stderr error is the first thing to suspect.
 
 Each event arrives as one JSON envelope on stdout — `{ "event_type", "payload": { "document_id", … },
 "producer_id", … }` — and Monitor delivers it to you immediately. Anything that arrives while you're
@@ -628,21 +650,41 @@ project brain.
 
 ## Step 10 — Recover a stale cursor (WB-003)
 
-If you were away long enough that the bus swept events past your cursor, `wicked-bus subscribe`
-reports `WB-003` (cursor behind the retention window). The bus is transport, not storage
-(ADR-0021) — events are gone; recover from the **state plane**, which is authoritative.
+`WB-003` (cursor behind the retention window) shows up in two situations:
+
+- **Arming-time inheritance** — a *fresh* session re-armed on a `--plugin` name whose durable
+  cursor was left behind the TTL window by an earlier session. This is the interactive#42 stall.
+  **Step 0's per-session `$WI_SUB` prevents it** — a new session's cursor starts fresh at
+  `--cursor-init latest`, so it can't inherit a prior session's stale position. If you followed
+  Step 0, you should not hit WB-003 on arm.
+- **Long absence** — you held one subscription open (same `$WI_SUB`) across an idle gap longer
+  than the retention window, so the bus swept events past your live cursor.
+
+Recent wicked-bus **self-recovers** from WB-003: the subscribe loop re-anchors the cursor to the
+oldest surviving event and keeps delivering instead of dying (wicked-bus#48). Whether that reaches
+you depends on the installed `wicked-bus` CLI version (see note below) — so the manual recovery
+here is still the guaranteed fallback. Either way the bus is transport, not storage (ADR-0021):
+swept events are gone; recover the missed *work* from the **state plane**, which is authoritative.
 
 **Recovery procedure:**
 
-1. **Bump the cursor name** — the stale cursor cannot be reset with `replay`; a fresh name is
-   the fix. Use a versioned suffix: `wi-agent-v2`, `wi-agent-v3`, etc. The new cursor starts at
-   `--cursor-init latest` so you don't replay old events.
+1. **Re-arm with a fresh subscription id** — the stale cursor cannot be reset with `replay`; a
+   fresh name is the fix. Regenerate `$WI_SUB` (`export WI_SUB="wi-agent-$(date +%Y%m%d-%H%M%S)-$$"`)
+   so the new cursor starts at `--cursor-init latest` and you don't replay old events.
 2. **Reconcile from the state plane** — check what actually needs handling:
    - `GET <BASE>/d/<doc>/api/versions` — any doc still at v0 (`head: 0`)? That means a
      `wicked.interactive.doc.created (kind source)` event was missed; generate its draft now (Step 5).
    - `GET <BASE>/d/<doc>/api/sources` — any sources with `status: "pending"`? Process them (Step 9).
    - `GET <BASE>/d/<doc>/api/conversation` — any unanswered user messages? Reply (Step 4).
 3. **Resume the loop** with the new cursor name.
+
+> **CLI-version note (why the fallback still matters):** the assist loop calls the `wicked-bus`
+> *CLI* (resolved from PATH / the `npx` cache warmed by `serve`), not this package's in-process
+> API. The `^2.0.0` pin in `package.json` governs only the service's in-process subscriptions —
+> the agent's watch runs whatever `wicked-bus` version the user has installed. So the wicked-bus#48
+> self-recovery only reaches this loop once a wicked-bus release carrying it is published **and**
+> the installed CLI is updated to it. Until then, per-session `$WI_SUB` (Step 0) is what actually
+> prevents the interactive#42 arming stall, and this manual recovery covers the long-absence case.
 
 ## Step 11 — Loop (re-arm the drain)
 
@@ -672,10 +714,15 @@ In Claude Code, arm a **persistent subscribe via Monitor** so the loop survives 
 without generating noise. Do this at the end of Step 1 (or immediately on re-entry):
 
 ```bash
-# In Claude Code — arm via Monitor tool with this command:
-export WICKED_BUS_PRODUCER_ID=wi-agent
+# In Claude Code — arm via Monitor tool with this command.
+# $WI_SUB / $WICKED_BUS_PRODUCER_ID come from Step 0; the same $WI_SUB is reused across loop
+# iterations WITHIN this session (that's how position survives idle-timeout exits). Do NOT
+# redirect stderr — WB-003 and errors must stay visible.
 while true; do
-  wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --idle-timeout 120000
+  # `|| sleep 1` backs off on a fast-failing subscribe (bad config, DB lock,
+  # missing executable) so the loop can't spin at 100% CPU. A clean idle-timeout
+  # exit falls straight through and re-arms immediately.
+  wicked-bus subscribe --plugin "$WI_SUB" --filter '*@wicked-interactive' --idle-timeout 120000 || sleep 1
 done
 ```
 
@@ -687,12 +734,12 @@ zero chat noise between events; only real bus events ever reach you.
 On each Monitor notification:
 1. Act on the delivered line: ignore your own `wi-agent` emissions and service facts
    (`wicked.interactive.version.created`, `wicked.interactive.export.requested`), handle the rest (Steps 3–9).
-2. If subscribe reports **WB-003**, bump the cursor name (Step 10) and re-start the Monitor
-   with the new `--plugin` name.
+2. If subscribe reports **WB-003**, regenerate `$WI_SUB` (Step 10) and re-start the Monitor
+   with the fresh subscription id.
 
 *(Not in Claude Code? Use `--drain` in the loop instead — standard harnesses only wake on process
 exit, so you need the drain to exit cleanly. Replace the subscribe line above with:
-`wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --drain --idle-timeout 120000`)*
+`wicked-bus subscribe --plugin "$WI_SUB" --filter '*@wicked-interactive' --drain --idle-timeout 120000`)*
 
 Keep going until the user says to stop. The session staying alive IS the product guarantee —
 `serve` + `assist` together are why a non-technical user can click a block and watch it change
