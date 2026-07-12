@@ -42,14 +42,24 @@ test("ownership table gates emits by producer", () => {
 });
 
 test("UI may only originate the conversational/intent events", () => {
+  // Hand-maintained whitelist — POST /api/events accepts ONLY uiEmittable types,
+  // so this is a security boundary. The set is pinned by hand (not derived from
+  // the registry) precisely so a flipped uiEmittable flag on a service/agent
+  // event fails here instead of silently widening what the browser may originate.
   const uiYes = ["wicked.interactive.feedback.submitted", "wicked.interactive.chat.posted", "wicked.interactive.question.answered",
-    "wicked.interactive.source.attached", "wicked.interactive.demo.requested", "wicked.interactive.theme.requested", "wicked.interactive.review.requested"];
+    "wicked.interactive.source.attached", "wicked.interactive.source.removed", "wicked.interactive.demo.requested",
+    "wicked.interactive.theme.requested", "wicked.interactive.review.requested", "wicked.interactive.status.requested"];
   const uiNo = ["wicked.interactive.edit.completed", "wicked.interactive.draft.completed", "wicked.interactive.version.created",
     "wicked.interactive.feedback.processed", "wicked.interactive.status.posted", "wicked.interactive.doc.created",
-    "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.error.raised", "wicked.interactive.theme.learned",
+    "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.export.generated",
+    "wicked.interactive.export.reviewed", "wicked.interactive.error.raised", "wicked.interactive.theme.learned",
     "wicked.interactive.review.completed"];
   for (const t of uiYes) assert.ok(uiEmittable(t), `${t} should be UI-emittable`);
   for (const t of uiNo) assert.ok(!uiEmittable(t), `${t} should NOT be UI-emittable`);
+  // Completeness: the two hand-maintained lists must together cover EVERY known
+  // type, so a newly added event can't slip past this boundary unclassified.
+  assert.deepEqual([...uiYes, ...uiNo].sort(), Object.keys(EVENT_TYPES).sort(),
+    "uiYes ∪ uiNo must cover every registered event type");
 });
 
 test("helpers reject unknown types", () => {
