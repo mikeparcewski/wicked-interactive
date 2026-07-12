@@ -33,7 +33,7 @@ test("emitEvent lands a well-formed envelope", async () => {
 test("emitEvent rejects types the producer doesn't own", async () => {
   await assert.rejects(
     () => emitEvent("wicked.interactive.edit.completed", { document_id: "t1", version: 1, results: [] }, { producer: "wi-service" }),
-    /wi-service may not emit wicked\.edit\.completed/,
+    /wi-service may not emit wicked\.interactive\.edit\.completed/,
   );
 });
 

@@ -18,9 +18,9 @@ test("domain is the package name and the all-filter targets it", () => {
   assert.equal(ALL_FILTER, "*@wicked-interactive");
 });
 
-test("every event_type follows wicked.<noun>.<past-verb> and has a known producer", () => {
+test("every event_type follows wicked.<domain>.<noun>.<past-verb> and has a known producer", () => {
   for (const [type, def] of Object.entries(EVENT_TYPES)) {
-    assert.match(type, /^wicked\.[a-z0-9]+\.[a-z0-9]+$/, `${type} shape`);
+    assert.match(type, /^wicked\.[a-z0-9]+\.[a-z0-9]+\.[a-z0-9_]+$/, `${type} shape`);
     assert.ok(def.subdomain && /^[a-z.]+$/.test(def.subdomain), `${type} subdomain`);
     assert.ok(Array.isArray(def.owners) && def.owners.length > 0, `${type} owners`);
     for (const o of def.owners) {
