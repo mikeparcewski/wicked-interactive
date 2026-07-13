@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // On-theme, deliberately ephemeral filler shown while the agent is genuinely working. It fills
-// the dead air between REAL wicked.status.posted updates — never replaces them. Kept short,
+// the dead air between REAL wicked.interactive.status.posted updates — never replaces them. Kept short,
 // tasteful, harness-flavored.
 const WHIMSY = [
   "Wiring the harness…",
@@ -173,7 +173,7 @@ export default function Thread({ log, open, forceOpen, lockOpen, working, realSt
           );
         })}
         {/* Ephemeral whimsy filler — muted/italic, aria-hidden so it never narrates to screen
-            readers. The real wicked.status.posted messages above are the announced substance. */}
+            readers. The real wicked.interactive.status.posted messages above are the announced substance. */}
         {working && (
           <div className="wi-whimsy" aria-hidden="true">
             <span className="wi-typing"><span></span><span></span><span></span></span>

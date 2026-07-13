@@ -450,7 +450,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
 
     // Demo (ADR-0018): seed a placeholder storyboard v0, emit wicked.interactive.doc.created(kind:demo).
-    // The agent explores the app, authors demo.spec.mjs, then emits wicked.demo.requested.
+    // The agent explores the app, authors demo.spec.mjs, then emits wicked.interactive.demo.requested.
     if (isDemo) {
       let u;
       try { u = new URL(demoUrl); } catch { return res.status(400).json({ error: "a valid http(s) url is required for a demo" }); }

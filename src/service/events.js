@@ -6,7 +6,7 @@
 // PURE DATA + PURE FUNCTIONS — no bus, no I/O — so the ownership/whitelist rules are trivially
 // testable and both the service (Node lib) and the bridge import the same truth.
 //
-// Naming follows the wicked-bus convention: event_type is `wicked.<noun>.<past-verb>`,
+// Naming follows the wicked-bus convention: event_type is `wicked.interactive.<noun>.<past-verb>`,
 // semantic and source-agnostic; the publisher lives in `domain`; the functional area lives
 // in `subdomain` (never per-document — doc identity is unbounded-cardinality and rides in
 // payload.document_id, ADR-0019 D4).
@@ -48,7 +48,7 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   // Export gate (ADR-0009 follow-up): the service announces a freshly-rendered artifact with its
   // path so the supervising agent can vision-review it BEFORE the user is told it's good; the
-  // agent posts its verdict back as wicked.export.reviewed.
+  // agent posts its verdict back as wicked.interactive.export.reviewed.
   "wicked.interactive.export.generated":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.export.reviewed":     { subdomain: "export",     owners: [AGENT],         uiEmittable: false },
   "wicked.interactive.error.raised":        { subdomain: "error",      owners: [SERVICE],       uiEmittable: false },
