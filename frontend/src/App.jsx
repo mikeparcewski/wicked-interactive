@@ -190,7 +190,7 @@ export default function App() {
       // and we'd land back on the launch screen.
       const created = await createDoc(name, html, meta);
       const docName = created?.name || name;
-      // Server sets generating:true when it emits wicked.doc.created (brief-based creation).
+      // Server sets generating:true when it emits wicked.interactive.doc.created (brief-based creation).
       // Flag it so the new page opens in working mode — the agent generates v1 or asks a
       // clarifying question through the same Thread panel.
       if (created?.generating) {
@@ -280,7 +280,7 @@ export default function App() {
   // ---- Bus SSE bridge: hot-reload + lock + chat transcript (ADR-0019) ----
   // Handlers are keyed by event_type; useSse filters every frame to this doc.
   useSse(eventsUrl(), {
-    "wicked.version.created": async (payload) => {
+    "wicked.interactive.version.created": async (payload) => {
       const wasFollowing = viewingRef.current == null || viewingRef.current === headRef.current;
       const m = await refreshVersions();
       if (wasFollowing) {
@@ -292,7 +292,7 @@ export default function App() {
       if (["structural", "generated", "demo"].includes(payload.kind)) { setProcessing(false); setQuestion(null); }
       if (busyRef.current) { setRenderReady(true); setAgentBusy(false); }
     },
-    "wicked.feedback.processed": (payload) => {
+    "wicked.interactive.feedback.processed": (payload) => {
       setStatus(summarize(payload));
       appendChat({ role: "event", text: summarize(payload).text });
       if (payload.awaiting_structural > 0) {
@@ -302,7 +302,7 @@ export default function App() {
         setProcessing(false);
       }
     },
-    "wicked.status.posted": (payload) => {
+    "wicked.interactive.status.posted": (payload) => {
       // Review narration must NEVER veil/lock the canvas (reviews are non-blocking + concurrent —
       // the user keeps editing). The agent tags review status with `review:true`; as a belt-and-
       // braces fallback we also treat a "working" status as review-only when a review is in flight
@@ -332,7 +332,7 @@ export default function App() {
         if (payload.state === "error") { setProcessing(false); setAgentBusy(false); setStatus({ kind: "error", text: payload.message || "error" }); }
       }
     },
-    "wicked.chat.posted": (payload) => {
+    "wicked.interactive.chat.posted": (payload) => {
       appendChat({ role: payload.role || "user", text: payload.text });
       // A review verdict can also arrive as a chat line (role:"review", SKILL Step 8.6). If it
       // names its reviewer, clear that reviewer's in-flight indicator on the rail.
@@ -342,14 +342,14 @@ export default function App() {
     },
     // Reviews are non-blocking + concurrent: a verdict streams straight into the Thread and clears
     // ONLY that reviewer's rail spinner — it never touches the agentBusy/veil lock path.
-    "wicked.review.completed": (payload) => {
+    "wicked.interactive.review.completed": (payload) => {
       const text = payload.verdict || payload.message || (payload.reviewer ? `${payload.reviewer} review complete` : "Review complete");
       appendChat({ role: "review", text });
       setRealStatusAt(Date.now());
       if (payload.reviewer) setReviewInFlight((m) => ({ ...m, [payload.reviewer]: false }));
       else setReviewInFlight({});   // unspecified reviewer — clear all in-flight
     },
-    "wicked.source.attached": (payload) => {
+    "wicked.interactive.source.attached": (payload) => {
       setSources((prev) => {
         const known = new Set(prev.map((s) => s.path));
         const merged = [...prev];
@@ -359,16 +359,16 @@ export default function App() {
         return merged;
       });
     },
-    "wicked.source.updated": (payload) => {
+    "wicked.interactive.source.updated": (payload) => {
       setSources((prev) => prev.map((s) => (s.path === payload.path ? { ...s, status: payload.status } : s)));
     },
     // Service grabbed the URL → the agent is now reading the design. No lock: completion arrives
-    // as wicked.status.posted + wicked.version.created (the re-theme lands a new version).
-    "wicked.theme.learned": () => {
+    // as wicked.interactive.status.posted + wicked.interactive.version.created (the re-theme lands a new version).
+    "wicked.interactive.theme.learned": () => {
       setStatus({ kind: "ok", text: "Reading the design…" });
       setAgentBusy(true);
     },
-    "wicked.error.raised": (payload) => {
+    "wicked.interactive.error.raised": (payload) => {
       setProcessing(false);
       setAgentBusy(false);
       setStatus({ kind: "error", text: payload.error || "something went wrong" });
@@ -376,7 +376,7 @@ export default function App() {
     // When the agent creates a doc externally (spawned-from-idea flow) and the browser is on the
     // empty screen, auto-navigate to the new doc. Generation-kind docs land in working mode via
     // the wi-generating sessionStorage flag (same path as the wizard's onCreateDoc).
-    "wicked.doc.created": (payload) => {
+    "wicked.interactive.doc.created": (payload) => {
       if (!currentDoc && payload.document_id) {
         if (payload.kind === "source" || payload.kind === "demo") {
           try { sessionStorage.setItem("wi-generating", payload.document_id); } catch { /* private mode */ }
@@ -475,7 +475,7 @@ export default function App() {
   const viewingIsHead = manifest && viewing === manifest.head;
 
   // The "alive while working" signal in the Thread is now carried entirely by the rotating
-  // whimsy filler (gated on `working`) plus the real wicked.status.posted messages — no separate
+  // whimsy filler (gated on `working`) plus the real wicked.interactive.status.posted messages — no separate
   // "working on it…" bubble, which used to double up with both of those.
 
   const [wizardSources, setWizardSources] = useState([]);  // source paths selected during doc creation
@@ -527,7 +527,7 @@ export default function App() {
   // enter the locked/veiled working state, so the user keeps editing the document while it runs.
   // We mark THAT reviewer in-flight (rail shows a spinner) and emit the request for it alone;
   // multiple reviewers can be in flight at once. The verdict streams back into the Thread via
-  // wicked.review.completed / wicked.chat.posted(role:"review") and clears just that spinner.
+  // wicked.interactive.review.completed / wicked.interactive.chat.posted(role:"review") and clears just that spinner.
   async function startReview(key) {
     if (!key || reviewInFlightRef.current[key]) return;   // already running this one
     setReviewInFlight((m) => ({ ...m, [key]: true }));

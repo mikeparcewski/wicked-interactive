@@ -4,15 +4,15 @@ import { connectEvents } from "../lib/sse.js";
 // The bus event types the browser reacts to (ADR-0019). Each SSE frame's `event:` is the
 // event_type and its `data` is the full envelope ({ event_type, payload, producer_id, ... }).
 const TYPES = [
-  "wicked.doc.created",
-  "wicked.version.created",
-  "wicked.feedback.processed",
-  "wicked.status.posted",
-  "wicked.chat.posted",
-  "wicked.review.completed",
-  "wicked.source.attached",
-  "wicked.source.updated",
-  "wicked.error.raised",
+  "wicked.interactive.doc.created",
+  "wicked.interactive.version.created",
+  "wicked.interactive.feedback.processed",
+  "wicked.interactive.status.posted",
+  "wicked.interactive.chat.posted",
+  "wicked.interactive.review.completed",
+  "wicked.interactive.source.attached",
+  "wicked.interactive.source.updated",
+  "wicked.interactive.error.raised",
   "ready",
 ];
 

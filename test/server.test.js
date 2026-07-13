@@ -73,7 +73,7 @@ test("POST /api/fork without a numeric from is rejected", async () => {
 });
 
 // Download endpoint (2026-05-28): POST /api/export exposes the file over GET with
-// Content-Disposition so the browser actually saves it, and emits wicked.export.requested.
+// Content-Disposition so the browser actually saves it, and emits wicked.interactive.export.requested.
 test("POST /api/export returns a download URL + GET /api/export/file serves the bytes", async () => {
   const { base, events, cleanup } = await boot();
   try {

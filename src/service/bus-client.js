@@ -47,7 +47,7 @@ export function busDb() {
 
 /**
  * Emit a domain event after validating the type + producer against events.js.
- * @param {string} type   a known wicked.<noun>.<verb> type
+ * @param {string} type   a known wicked.interactive.<noun>.<past-verb> type
  * @param {object} payload must carry document_id; ts is injected if absent
  * @param {{producer:string, correlationId?:string, sessionId?:string}} ctx
  * @returns {Promise<{event_id:number, idempotency_key:string}>}

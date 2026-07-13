@@ -32,23 +32,23 @@ export async function postEvent(event_type, payload = {}) {
 }
 
 // Intent helpers (what the browser is allowed to originate — the UI whitelist).
-export const emitFeedback = (items, author) => postEvent("wicked.feedback.submitted", { items, ...(author ? { author } : {}) });
-export const emitChat = (text, role = "user") => postEvent("wicked.chat.posted", { role, text });
-export const emitAnswer = (requestId, answer) => postEvent("wicked.question.answered", { request_id: requestId, answer });
-export const emitSourceAttached = (added) => postEvent("wicked.source.attached", { added });
-export const emitSourceRemoved = (path) => postEvent("wicked.source.removed", { path });
-export const emitDemoRecord = () => postEvent("wicked.demo.requested", {});
+export const emitFeedback = (items, author) => postEvent("wicked.interactive.feedback.submitted", { items, ...(author ? { author } : {}) });
+export const emitChat = (text, role = "user") => postEvent("wicked.interactive.chat.posted", { role, text });
+export const emitAnswer = (requestId, answer) => postEvent("wicked.interactive.question.answered", { request_id: requestId, answer });
+export const emitSourceAttached = (added) => postEvent("wicked.interactive.source.attached", { added });
+export const emitSourceRemoved = (path) => postEvent("wicked.interactive.source.removed", { path });
+export const emitDemoRecord = () => postEvent("wicked.interactive.demo.requested", {});
 // Learn a theme from a live URL: the service grabs it to a PDF, the agent reads the design and
 // re-themes the current doc. document_id is stamped by postEvent.
-export const emitThemeFromUrl = (url) => postEvent("wicked.theme.requested", { url });
+export const emitThemeFromUrl = (url) => postEvent("wicked.interactive.theme.requested", { url });
 // Learn a theme from a LOCAL file (PDF/image) the agent reads in place — nothing uploads.
-export const emitThemeFromFile = (path) => postEvent("wicked.theme.requested", { path });
+export const emitThemeFromFile = (path) => postEvent("wicked.interactive.theme.requested", { path });
 // Run a review pass on the current version with the selected reviewers; the agent posts
-// verdicts back as wicked.chat.posted (role: "review").
-export const emitReviewRequested = (reviewers) => postEvent("wicked.review.requested", { reviewers });
+// verdicts back as wicked.interactive.chat.posted (role: "review").
+export const emitReviewRequested = (reviewers) => postEvent("wicked.interactive.review.requested", { reviewers });
 // Heartbeat while the agent is working: nudge it to post a real status update (the UI fires
-// this on a timer during the working state). The agent answers with wicked.status.posted.
-export const emitStatusRequested = (reason) => postEvent("wicked.status.requested", { ts: Date.now(), ...(reason ? { reason } : {}) });
+// this on a timer during the working state). The agent answers with wicked.interactive.status.posted.
+export const emitStatusRequested = (reason) => postEvent("wicked.interactive.status.requested", { ts: Date.now(), ...(reason ? { reason } : {}) });
 
 // --- State-plane reads (doc-prefixed) ---
 export async function getVersions() {
