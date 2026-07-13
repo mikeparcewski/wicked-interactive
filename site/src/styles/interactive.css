@@ -968,9 +968,10 @@ body::after {
      "Load ↑" / "See it ↑" affordance onto its own wrapped line */
   .io-card__go { flex-shrink: 0; white-space: nowrap; }
   /* hand the editor "paper" more of the narrow frame for a readable line length */
-  .ed-doc { padding-left: clamp(14px, 4vw, 30px); padding-right: clamp(14px, 4vw, 30px); }
-  /* the closer's install command must never clip on a narrow frame */
-  .install__code { white-space: pre-wrap; overflow-wrap: break-word; }
+  .ed-doc { padding-inline: clamp(14px, 4vw, 30px); }
+  /* NB: the closer's install command already wraps via the ≤760px block
+     (`.install__code { white-space: pre-wrap; overflow-wrap: break-word }`);
+     ≤600px is a subset of ≤760px, so no re-declaration is needed here. */
 }
 
 /* ── Small phones ≤430px — tighter gutters, calmer heads ─────────────────── */
