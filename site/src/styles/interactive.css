@@ -957,6 +957,33 @@ body::after {
   .vid-step .vs-hint { opacity: 1 !important; max-width: none; }
 }
 
+/* ── Phones ≤600px ─────────────────────────────────────────────────────────
+   The 900/760 breakpoints already stack every room; this layer reclaims the
+   generous 28px desktop gutter for phone-width content and keeps a couple of
+   affordances from wrapping. Scoped to this page's own section wraps so the
+   shared wicked-web footer's `.wrap` (owned by another repo) is untouched. */
+@media (max-width: 600px) {
+  .hero > .wrap, .band > .wrap, .closer > .wrap { padding: 0 20px; }
+  /* long card titles ("Landing & marketing pages") must not push the
+     "Load ↑" / "See it ↑" affordance onto its own wrapped line */
+  .io-card__go { flex-shrink: 0; white-space: nowrap; }
+  /* hand the editor "paper" more of the narrow frame for a readable line length */
+  .ed-doc { padding-inline: clamp(14px, 4vw, 30px); }
+  /* NB: the closer's install command already wraps via the ≤760px block
+     (`.install__code { white-space: pre-wrap; overflow-wrap: break-word }`);
+     ≤600px is a subset of ≤760px, so no re-declaration is needed here. */
+}
+
+/* ── Small phones ≤430px — tighter gutters, calmer heads ─────────────────── */
+@media (max-width: 430px) {
+  .hero > .wrap, .band > .wrap, .closer > .wrap { padding: 0 15px; }
+  /* the eyebrow's trailing rule crowds its label on the narrowest screens */
+  .sec-eyebrow::after { width: 26px; }
+  .sec-eyebrow { gap: 8px; }
+  /* the export row's 2×2 grid of chips breathes better with a touch less pad */
+  .ed-export, .ed-prompt, .ed-chrome { padding-left: 11px; padding-right: 11px; }
+}
+
 /* ---- reduced motion ----------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .ed-pulse, .ed-block__shim, .ed-block.is-target::after, .ed-block--reworking::after,
