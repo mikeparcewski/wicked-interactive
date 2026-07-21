@@ -1,0 +1,73 @@
+{
+  "manifest_version": "1.1.0",
+  "run_id": "interactive-l2-feedback-20260721",
+  "scenario_id": "interactive-l2-feedback",
+  "scenario_name": "interactive-l2-feedback-submission",
+  "scenario_path": ".wicked-testing/evidence/interactive-l2-feedback-20260721/verdict.json",
+  "started_at": "2026-07-21T19:40:00.000Z",
+  "finished_at": "2026-07-21T19:44:00.000Z",
+  "duration_ms": 240000,
+  "status": "passed",
+  "verdict": {
+    "value": "PASS",
+    "reviewer": "acceptance-test-reviewer",
+    "reason": "All 4 assertions pass. Feedback submission reaches bus, feedback file written with correct frontmatter, HTML created deterministically, feedback.processed emitted on bus.",
+    "recorded_at": "2026-07-21T19:44:00.000Z"
+  },
+  "environment": {
+    "os": "darwin 25.5.0",
+    "node": "26.0.0",
+    "wicked_testing_version": "0.9.0",
+    "wicked_interactive_version": "0.6.0"
+  },
+  "artifacts": [
+    {
+      "name": "step1-feedback-event.json",
+      "kind": "misc",
+      "path": "step1-feedback-event.json",
+      "bytes": 86,
+      "sha256": "5dbd53b38d50460e4d34f74246375fb6a0b93dabadab32a101d464411525444c",
+      "captured_at": "2026-07-21T19:42:00.000Z"
+    },
+    {
+      "name": "step2-feedback-file.md",
+      "kind": "misc",
+      "path": "step2-feedback-file.md",
+      "bytes": 182,
+      "sha256": "d8a550498fe59c9ac71a619cbe4379d7d64cb2e6f458c9a8b41313f80d1dc7de",
+      "captured_at": "2026-07-21T19:43:00.000Z"
+    },
+    {
+      "name": "step3-html-created.html",
+      "kind": "misc",
+      "path": "step3-html-created.html",
+      "bytes": 1104,
+      "sha256": "94608df182b99f98a450d99c3ad1c95794144932f79204a3d4784e7f82c7f4f5",
+      "captured_at": "2026-07-21T19:43:00.000Z"
+    },
+    {
+      "name": "step4-versions.json",
+      "kind": "misc",
+      "path": "step4-versions.json",
+      "bytes": 360,
+      "sha256": "ce1de631c2b29d422b2a6c349d25416caeb3aa9bcccd149b2b50193a7aabf088",
+      "captured_at": "2026-07-21T19:43:00.000Z"
+    },
+    {
+      "name": "step5-feedback-processed-bus.json",
+      "kind": "misc",
+      "path": "step5-feedback-processed-bus.json",
+      "bytes": 445,
+      "sha256": "c8a3e320b32e5e21139fdbee9efbb8a45ab70471c71cd6847b0c2fed4ed22eb1",
+      "captured_at": "2026-07-21T19:43:00.000Z"
+    },
+    {
+      "name": "verdict.json",
+      "kind": "misc",
+      "path": "verdict.json",
+      "bytes": 2826,
+      "sha256": "d33a2678f502cfb8c6b65f964f26177aee7cb0e4a4d2142d024f8dc7c5dd9ce3",
+      "captured_at": "2026-07-21T19:44:00.000Z"
+    }
+  ]
+}
