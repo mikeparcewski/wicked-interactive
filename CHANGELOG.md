@@ -4,8 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-21
+
 ### Added
-- **`src/artifact/` module** — self-contained artifact creation pipeline: `create.js`, `publish.js`, `validate.js`, `schema.js`, `template.js`. Provides `wicked-interactive create --from-crew | --from-garden | --from-file --output <path>` for generating self-contained HTML artifacts from crew sessions, garden council verdicts, or raw wi-content JSON files.
+- **`src/artifact/` module** — self-contained artifact creation pipeline: `create.js`, `publish.js`, `validate.js`, `schema.js`, `template.js`. Provides `wicked-interactive create --from-crew <session_id> | --from-garden [<session_id>] | --from-file <path> [--output <path>]` for generating self-contained HTML artifacts from crew sessions, garden council verdicts, or raw wi-content JSON files.
 - **`--from-garden <session_id>`** — renders a wicked-garden multi-model council verdict as an interactive artifact. Reads the council transcript garden persists under `~/.something-wicked/wicked-garden/projects/<slug>/wicked-jam/transcripts/<session_id>.json` (override the root with `WICKED_GARDEN_PATH`); omit the id to use the latest. Maps the verdict → recommendation, each model → a card, and the synthesis → evidence; degrades to a "content pending" stub when no transcript resolves.
 
 ### Changed

@@ -2,7 +2,7 @@
 name: REQ-005-dod-criteria
 title: wicked-interactive — Definition of Done
 status: partially-verified
-version: 0.3
+version: 0.4
 date: 2026-07-21
 author: mike.parcewski@gmail.com
 review-required: true
@@ -21,7 +21,7 @@ Basic correctness on the local dev machine.
 - [x] `node bin/wicked-interactive.js serve --root <dir> --port <n>` starts without error
   <!-- evidence: `node bin/wicked-interactive.js serve --root /tmp/wi-l1-test --port 19999` → first banner line: "wicked-interactive (multi-doc) serving /tmp/wi-l1-test on http://localhost:19999" (printBanner outputs multiple lines; this is the first); SIGINT (Ctrl-C) → exit 0. bin/wicked-interactive.js:114-115 registers both SIGINT and SIGTERM; either terminates cleanly. (2026-07-21) -->
 - [x] `GET /api/docs` returns HTTP 200
-  <!-- evidence: test/multidoc.test.js — "GET /api/docs returns an empty list on a fresh root" parses the JSON body successfully, implying HTTP 200 (explicit status assertion not present; 208/208 tests green, 2026-07-21) -->
+  <!-- evidence: test/multidoc.test.js — "GET /api/docs returns an empty list on a fresh root" parses the JSON body successfully (no explicit 200 assertion in that test case, but the cross-machine smoke in ci.yml uses `curl -fsS` which fails non-zero on any non-2xx, confirming HTTP 200 from the packaged install; CI run 29845901879 passed). -->
 - [x] `GET /` serves the React frontend (HTTP 200, `Content-Type: text/html`)
   <!-- evidence: `curl -s -I http://localhost:19999/` → HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8. Verified on live server (same run as L1-1 above). (2026-07-21) -->
 - [x] `GET /api/events` opens an SSE stream; the server sends a 15-second keep-alive comment (`: ping …`) to maintain the connection
@@ -68,13 +68,16 @@ The full feedback loop works end-to-end.
 
 Required before any version is published to npm or announced to users.
 
-- [ ] CI (`ci.yml`) is green on `main` — all unit tests pass, plugin version is consistent, cross-machine smoke test passes from packed tarball
+- [x] CI (`ci.yml`) is green on `main` — all unit tests pass, plugin version is consistent, cross-machine smoke test passes from packed tarball
+  <!-- evidence: CI run 29845901879 on main (2026-07-21) — `verify` job: success. Steps: unit tests (208 pass, 0 fail), `npm run check:version` (0.6.0 consistent), cross-machine smoke (npm pack → foreign dir install → npx wicked-interactive serve → GET /api/docs 200, GET / 200). All three steps pass. -->
 - [ ] wicked-testing acceptance pipeline: a wicked-testing run (separate evaluator from the agent that ran the tests) produces a PASS verdict recorded in `.wicked-testing/evidence/<run-id>/verdict.json`
 - [x] Adversarial review PASS: at least one council-adversarial review session completed with no unresolved blockers; review record stored in `.product/reviews/`
   <!-- evidence: .product/reviews/adversarial-review-v0.6.0.md (2026-07-21) — verdict PASS. 0 CRITICAL, 0 blocking HIGH. 1 HIGH (H1: SSE keep-alive ping has no test coverage — DoD comment corrected in L1 SSE criterion above), 4 MEDIUM coverage gaps. Security posture sound. -->
 
 - [ ] Cross-product review: wicked-bus event vocabulary and data-wid conventions are consistent with any other wicked-* product that shares these contracts
-- [ ] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`)
-- [ ] Release notes drafted; changelog entry added
+- [x] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`)
+  <!-- evidence: `npm run check:version` → "✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json" (2026-07-21) -->
+- [x] Release notes drafted; changelog entry added
+  <!-- evidence: CHANGELOG.md — [0.6.0] section added (2026-07-21) -->
 - [ ] Published to npm (`npm publish`) and plugin marketplace (`/plugin marketplace`)
 - [ ] The product site (`pages.yml`) updated and live
