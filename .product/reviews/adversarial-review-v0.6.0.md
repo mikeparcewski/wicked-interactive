@@ -24,7 +24,7 @@ None — no CRITICAL findings.
 
 **H1 — DoD claim for SSE keep-alive overstates test evidence (src/service/server.js:330, test/bridge.test.js)**
 
-The DoD states: "test/bridge.test.js opens the SSE stream and receives frames (all bridge tests pass)" as evidence for the 15-second keep-alive ping. This is accurate but misleading. The bridge tests wait for named event frames (`event: wicked.interactive.*\ndata: ...`). The keep-alive writes a comment frame (`\`: ping ${Date.now()}\n\n`), which the `openBridge()` helper in bridge.test.js silently discards (lines 54–58 filter for `event:` and `data:` prefixes; comment lines starting with `:` are never collected). The 15-second heartbeat has no test coverage whatsoever. The code is correctly implemented at `server.js:330`, but the DoD evidence citation is wrong.
+The DoD states: "test/bridge.test.js opens the SSE stream and receives frames (all bridge tests pass)" as evidence for the 15-second keep-alive ping. This is accurate but misleading. The bridge tests wait for named event frames (`event: wicked.interactive.*\ndata: ...`). The keep-alive writes a comment frame (`: ping ${Date.now()}\n\n`), which the `openBridge()` helper in bridge.test.js silently discards (lines 54–58 filter for `event:` and `data:` prefixes; comment lines starting with `:` are never collected). The 15-second heartbeat has no test coverage whatsoever. The code is correctly implemented at `server.js:330`, but the DoD evidence citation is wrong.
 
 **Impact**: Low runtime risk (the ping code is trivially correct). The concern is that the DoD claim references test evidence that does not exist. If the ping were accidentally removed, no test would catch it.
 
@@ -132,7 +132,7 @@ The following L2 items are genuinely blocked (require live browser or running ag
 
 ## Summary
 
-wicked-interactive v0.6.0 (reviewed under the label v0.4.0) is in solid shape for a local-service product at this stage of development. The core mechanics — event vocabulary, SSE bridge, whitelist enforcement, deterministic feedback application, lockfile lifecycle, and path-traversal defenses — are all correctly implemented and covered by a 208-test suite that passes cleanly.
+wicked-interactive v0.6.0 is in solid shape for a local-service product at this stage of development. The core mechanics — event vocabulary, SSE bridge, whitelist enforcement, deterministic feedback application, lockfile lifecycle, and path-traversal defenses — are all correctly implemented and covered by a 208-test suite that passes cleanly.
 
 The most significant gap is that the DoD's evidence citation for the 15-second SSE keep-alive ping overstates what the tests actually verify (H1). The keep-alive code is correct but untested. The `isLocalRequest` reject path and positive `structural-change` parse are also untested (M2, M3).
 
