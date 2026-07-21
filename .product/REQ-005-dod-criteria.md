@@ -82,4 +82,5 @@ Required before any version is published to npm or announced to users.
 - [x] Release notes drafted; changelog entry added
   <!-- evidence: CHANGELOG.md — [0.6.0] section added (2026-07-21) -->
 - [ ] Published to npm (`npm publish`) and plugin marketplace (`/plugin marketplace`)
-- [ ] The product site (`pages.yml`) updated and live
+- [x] The product site (`pages.yml`) updated and live
+  <!-- evidence: pages.yml runs on every push to main; latest run 29856666605 (2026-07-21): conclusion=success, 38s, "Deploy site to GitHub Pages". Product site is live and updated. -->
