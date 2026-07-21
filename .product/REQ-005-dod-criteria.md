@@ -47,7 +47,7 @@ The full feedback loop works end-to-end.
   <!-- evidence: POST /api/events {event_type: "wicked.interactive.feedback.submitted", payload: {document_id: "testdoc", items: [{selector: "wid-001", type: "content-edit", value: "Updated Title..."}], author: "acceptance-test"}} → {ok: true, event_id: 170958}; service consumed the event from bus; wicked.interactive.feedback.processed emitted (event_id=170960, applied=["wid-001"]). .wicked-testing/evidence/interactive-l2-feedback-20260721/ (2026-07-21) -->
 - [x] A feedback file (`_v{n}.md`) is written to the workspace with correct frontmatter and item blocks
   <!-- evidence: _v4.md written with frontmatter: version=4, base_html=_v0.html, author=acceptance-test, item: selector=wid-001, type=content-edit. .wicked-testing/evidence/interactive-l2-feedback-20260721/step2-feedback-file.md (2026-07-21) -->
-- [x] The agent processes the feedback file and writes `_v{n+1}.html`
+- [x] The agent processes the feedback file and writes `_v{n}.html` (same version as the `.md`; both are allocated together)
   <!-- evidence: applyFeedbackItems() applies content-edit items via cheerio DOM surgery (ADR-0003, deterministic — no AI for content-edit). _v4.html created (1104 bytes), title updated, data-wid anchors preserved. versions.json head advanced to 4. .wicked-testing/evidence/interactive-l2-feedback-20260721/step3-html-created.html (2026-07-21) -->
 - [ ] `wicked.interactive.version.created` is emitted; the browser iframe reloads to the new version
   <!-- requires running browser + agent; not verified statically -->

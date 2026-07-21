@@ -85,6 +85,8 @@ try {
   });
   await page.waitForSelector(".wi-inline textarea", { timeout: 10000 });
   await page.type(".wi-inline textarea", "improve this");
+  // Wait for React to enable the submit button (disabled={!text.trim()} until state updates)
+  await page.waitForFunction(() => !document.querySelector(".wi-inline button[type=submit]")?.disabled, { timeout: 5000 });
   // Use programmatic click to avoid CDP input routing issues (same fix as iframe click)
   await page.evaluate(() => document.querySelector(".wi-inline button[type=submit]").click());
   step("sent an inline comment (bus: wicked.interactive.feedback.submitted)");
@@ -112,6 +114,8 @@ try {
 
   // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
   await page.type(".wi-bar textarea", "make the whole page more premium");
+  // Wait for React to enable the submit button (disabled while busy/sending or text empty)
+  await page.waitForFunction(() => !document.querySelector(".wi-bar button[type=submit]")?.disabled, { timeout: 10000 });
   await page.evaluate(() => document.querySelector(".wi-bar button[type=submit]").click());
   await page.waitForFunction(
     () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),

@@ -62,8 +62,9 @@ import re
 with open('src/service/events.js') as f:
     content = f.read()
 
-# EVENT_TYPES keys use double quotes in events.js
-events = set(re.findall(r'\"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"', content))
+# Extract all wicked.interactive.* event type strings from EVENT_TYPES keys (double-quoted)
+# Using a broad match so non-4-segment types are captured, not silently skipped
+events = set(re.findall(r'"(wicked\.interactive\.[^"]+)"', content))
 # Validate 4-segment grammar: wicked.<domain>.<noun>.<past-tense-verb>
 # (Script validates segment count; past-tense is a naming convention enforced by review, not parseable)
 assert len(events) > 0, 'No wicked.interactive.* events found — regex failed to extract any events'
