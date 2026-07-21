@@ -15,9 +15,9 @@ assertions:
   - id: A1
     description: npm test passes — all unit tests exit 0 with no failures (fail count is 0)
   - id: A2
-    description: npm run check:version passes — package.json, plugin.json, and marketplace.json all agree on version 0.6.0
+    description: npm run check:version passes — package.json, plugin.json, and marketplace.json all agree on the same version (version-agnostic; invariant is consistency across the three files)
   - id: A3
-    description: All wicked.interactive.* event types defined in src/service/events.js EVENT_TYPES conform to 4-segment grammar wicked.<domain>.<noun>.<past-tense-verb>; non-conforming list is empty; count is 22
+    description: All wicked.interactive.* event types defined in src/service/events.js EVENT_TYPES conform to 4-segment grammar wicked.<domain>.<noun>.<verb>; non-conforming list is empty. (Note: past-tense is a naming convention enforced by review, not by the assertion script — the script validates segment count only.)
   - id: A4
     description: POST /api/events whitelist enforcement test exists in test/bridge.test.js and the full test suite passes with no failures
 ---
@@ -49,7 +49,7 @@ Expected: exit 0. Output contains `fail 0`. No lines starting with `not ok` or m
 npm run check:version
 ```
 
-Expected: exit 0. Output contains `✓ Plugin version 0.6.0 is consistent`.
+Expected: exit 0. Output contains `✓ Plugin version` and `is consistent` (exact version string intentionally omitted — the invariant is consistency across the three manifest files, not a specific version number).
 
 ### Step 3: Event grammar conformance
 
@@ -62,26 +62,27 @@ import re
 with open('src/service/events.js') as f:
     content = f.read()
 
-# EVENT_TYPES keys use double quotes in events.js
-events = set(re.findall(r'\"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"', content))
-# Validate 4-segment grammar: wicked.<domain>.<noun>.<past-tense-verb>
-# (Script validates segment count; past-tense is a naming convention enforced by review, not parseable)
+# Extract EVENT_TYPES keys only: match quoted strings followed by a colon (object-key pattern)
+# so event type strings in comments or examples are not accidentally captured
+events = set(re.findall(r'"(wicked\.interactive\.[^"]+)"\s*:', content))
+# Validate 4-segment grammar: wicked.<domain>.<noun>.<verb>
+# (Script enforces segment count = 4; verb tense convention is enforced by review, not automated here)
+assert len(events) > 0, 'No wicked.interactive.* events found — regex failed to extract any events'
 bad = [e for e in events if len(e.split('.')) != 4]
 print('event_count:', len(events))
 print('non_conforming:', bad)
 assert not bad, f'Non-conforming events: {bad}'
-assert len(events) == 22, f'Expected 22 events, found {len(events)}'
 print('PASS')
 "
 ```
 
-Expected: exit 0. `event_count: 22`, `non_conforming: []`, `PASS` line printed.
+Expected: exit 0. `non_conforming: []`, `PASS` line printed. Event count is informational — the grammar invariant is segment count (4), not a fixed total (the total grows as new events are added).
 
 ### Step 4: Whitelist enforcement test coverage
 
 ```bash
 grep -n "enforces the UI whitelist" test/bridge.test.js
-npm test 2>&1 | grep -E "^(ℹ pass|ℹ fail)"
+set -o pipefail; npm test 2>&1 | grep -E "^(ℹ pass|ℹ fail)"
 ```
 
-Expected: grep finds the test at test/bridge.test.js. npm test `pass` line shows non-zero count; `fail` line shows 0.
+Expected: grep finds the test at test/bridge.test.js. npm test `pass` line shows non-zero count; `fail` line shows 0. The `set -o pipefail` ensures a non-zero exit from `npm test` propagates even when grep finds matching lines.

@@ -1,0 +1,33 @@
+{
+  "scenario": "interactive-l2-feedback",
+  "run_id": "interactive-l2-feedback-20260721",
+  "date": "2026-07-21",
+  "reviewer": "acceptance-test-reviewer",
+  "executor": "claude-code-main-session",
+  "revision": 1,
+  "assertions": {
+    "A1": {
+      "verdict": "PASS",
+      "evidence": "POST /api/events {event_type: 'wicked.interactive.feedback.submitted', payload: {document_id: 'testdoc', items: [{selector: 'wid-001', type: 'content-edit', value: 'Updated Title from feedback test'}], author: 'acceptance-test'}} → {ok: true, event_id: 170958}. Event landed on wicked-bus.",
+      "notes": "feedback.submitted POST accepted by the service and forwarded to wicked-bus. Selector format is the wid value only (e.g. 'wid-001'), not the full CSS attribute selector."
+    },
+    "A2": {
+      "verdict": "PASS",
+      "evidence": "_v4.md written with frontmatter: version=4, base_html=_v0.html, author=acceptance-test, item: selector=wid-001, type=content-edit, value='Updated Title from feedback test'",
+      "notes": "writeFeedback() creates the feedback file atomically before applyFeedbackItems() runs. File naming is _v{n}.md where n is the next allocated version number."
+    },
+    "A3": {
+      "verdict": "PASS",
+      "evidence": "_v4.html created (1104 bytes), title element updated to 'Updated Title from feedback test', data-wid anchors preserved. versions.json head=4 with feedback_file='_v4.md', html_file='_v4.html'.",
+      "notes": "applyFeedbackItems() applies content-edit items deterministically via cheerio DOM surgery (ADR-0003). No AI required for content-edit type. Structural-change items would require an external agent."
+    },
+    "A4": {
+      "verdict": "PASS",
+      "evidence": "wicked-bus event_id=170960 event_type='wicked.interactive.feedback.processed' domain='wicked-interactive' payload: version=4, applied=['wid-001'], rejected=[], stale=[], awaiting_structural=0",
+      "notes": "Service emitted feedback.processed after successful materialization. Applied contains the selector that was updated. awaiting_structural=0 confirms no AI handoff needed for content-edit items."
+    }
+  },
+  "overall_verdict": "PASS",
+  "structural_separation": "CONFIRMED — executor (claude-code-main-session) ran all steps and collected raw HTTP responses and bus events; reviewer (acceptance-test-reviewer) evaluated cold from evidence files only.",
+  "reviewer_notes": "All four assertions pass. Feedback submission flow verified end-to-end: POST /api/events → bus → service subscription → writeFeedback (_v4.md) → applyFeedbackItems (_v4.html) → emit feedback.processed. The 'agent processes feedback' DoD item is satisfied by the deterministic applyFeedbackItems path for content-edit items; structural-change items remain an AI-agent concern (not tested here, separate L2 item). Note on step4-versions.json timestamps: v0 has created_at='2026-07-21T20:00:00.000Z' (synthetic future timestamp set when creating the test workspace) while v4 has the real timestamp '2026-07-21T19:43:19.305Z'. This is expected — v0 was seeded with a synthetic created_at for test workspace setup; v4 was created during the actual test run."
+}
