@@ -10,7 +10,7 @@ reviewer: council-adversarial
 
 ## Verdict: PASS
 
-The code-level review finds no blocking issues. All L1 DoD claims are either confirmed or plausibly correct with minor caveats (noted below). No CRITICAL or blocking HIGH findings were identified. The product's security posture is sound for a localhost-only service. Several L3 gate items (CI, acceptance pipeline, cross-product review, release notes, publish) remain genuinely open and must be resolved before any release announcement.
+The code-level review finds no blocking issues. All L1 DoD claims are either confirmed or plausibly correct with minor caveats (noted below). No CRITICAL findings and no blocking HIGH findings were identified (one non-blocking HIGH finding is noted regarding a misleading DoD evidence citation — H1). The product's security posture is sound for a localhost-only service. Several L3 gate items (CI, acceptance pipeline, cross-product review, release notes, publish) remain genuinely open and must be resolved before any release announcement.
 
 ---
 
@@ -20,7 +20,7 @@ None — no CRITICAL findings.
 
 ---
 
-## HIGH findings (should fix before release)
+## HIGH findings (non-blocking — should address before next release)
 
 **H1 — DoD claim for SSE keep-alive overstates test evidence (src/service/server.js:330, test/bridge.test.js)**
 
