@@ -2,7 +2,7 @@
 name: REQ-005-dod-criteria
 title: wicked-interactive — Definition of Done
 status: partially-verified
-version: 0.6
+version: 0.7
 date: 2026-07-21
 author: mike.parcewski@gmail.com
 review-required: true
@@ -43,12 +43,12 @@ The full feedback loop works end-to-end.
 
 - [x] wicked-bus integration: the service emits events that a `wicked-bus subscribe` listener receives within the poll interval (≤ 500 ms)
   <!-- evidence: POST /api/events wicked.interactive.source.attached → event_id=170946 on bus; wicked-bus subscribe --once --drain confirmed event landed on bus; sources.json materialized within 1.5s (poll cadence 500ms). Full evidence in .wicked-testing/evidence/interactive-l2-20260721/step3-bus-event.txt. (2026-07-21) -->
-- [ ] Browser feedback submission (POST /api/events with `wicked.interactive.feedback.submitted`) reaches the bus and triggers `wicked.interactive.feedback.processed`
-  <!-- requires running browser; not verified statically -->
-- [ ] A feedback file (`_v{n}.md`) is written to the workspace with correct frontmatter and item blocks
-  <!-- requires running service loop; not verified statically -->
-- [ ] The agent processes the feedback file and writes `_v{n+1}.html`
-  <!-- requires live agent; not verified statically -->
+- [x] Browser feedback submission (POST /api/events with `wicked.interactive.feedback.submitted`) reaches the bus and triggers `wicked.interactive.feedback.processed`
+  <!-- evidence: POST /api/events {event_type: "wicked.interactive.feedback.submitted", payload: {document_id: "testdoc", items: [{selector: "wid-001", type: "content-edit", value: "Updated Title..."}], author: "acceptance-test"}} → {ok: true, event_id: 170958}; service consumed the event from bus; wicked.interactive.feedback.processed emitted (event_id=170960, applied=["wid-001"]). .wicked-testing/evidence/interactive-l2-feedback-20260721/ (2026-07-21) -->
+- [x] A feedback file (`_v{n}.md`) is written to the workspace with correct frontmatter and item blocks
+  <!-- evidence: _v4.md written with frontmatter: version=4, base_html=_v0.html, author=acceptance-test, item: selector=wid-001, type=content-edit. .wicked-testing/evidence/interactive-l2-feedback-20260721/step2-feedback-file.md (2026-07-21) -->
+- [x] The agent processes the feedback file and writes `_v{n+1}.html`
+  <!-- evidence: applyFeedbackItems() applies content-edit items via cheerio DOM surgery (ADR-0003, deterministic — no AI for content-edit). _v4.html created (1104 bytes), title updated, data-wid anchors preserved. versions.json head advanced to 4. .wicked-testing/evidence/interactive-l2-feedback-20260721/step3-html-created.html (2026-07-21) -->
 - [ ] `wicked.interactive.version.created` is emitted; the browser iframe reloads to the new version
   <!-- requires running browser + agent; not verified statically -->
 - [ ] Version rewind: selecting a previous version in the UI swaps the active pointer and the browser renders that version
