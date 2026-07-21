@@ -49,10 +49,10 @@ The full feedback loop works end-to-end.
   <!-- evidence: _v4.md written with frontmatter: version=4, base_html=_v0.html, author=acceptance-test, item: selector=wid-001, type=content-edit. .wicked-testing/evidence/interactive-l2-feedback-20260721/step2-feedback-file.md (2026-07-21) -->
 - [x] The agent processes the feedback file and writes `_v{n}.html` (same version as the `.md`; both are allocated together)
   <!-- evidence: applyFeedbackItems() applies content-edit items via cheerio DOM surgery (ADR-0003, deterministic — no AI for content-edit). _v4.html created (1104 bytes), title updated, data-wid anchors preserved. versions.json head advanced to 4. .wicked-testing/evidence/interactive-l2-feedback-20260721/step3-html-created.html (2026-07-21) -->
-- [ ] `wicked.interactive.version.created` is emitted; the browser iframe reloads to the new version
-  <!-- requires running browser + agent; not verified statically -->
-- [ ] Version rewind: selecting a previous version in the UI swaps the active pointer and the browser renders that version
-  <!-- requires running browser; not verified statically -->
+- [x] `wicked.interactive.version.created` is emitted; the browser iframe reloads to the new version
+  <!-- evidence: npm run acceptance step 5 (2026-07-21) — after stub emits edit.completed, iframe.contentDocument.body.innerHTML matches ANSWER text. The iframe reload is triggered by the frontend receiving version.created via SSE (App.jsx — version.created handler calls setViewing(m.head) to advance the viewed version). Code: handlers.js materializeFeedback (deterministic) and materializeEdit (structural) both emit version.created. -->
+- [x] Version rewind: selecting a previous version in the UI swaps the active pointer and the browser renders that version
+  <!-- evidence: npm run acceptance step 6 (2026-07-21) — VersionStrip select value set to "0", change event dispatched; iframe.contentDocument.body.innerHTML verified to NOT contain ANSWER (original content restored). Restore to head also verified (ANSWER reappears after selecting headVer). AC-20..22 satisfied. -->
 - [x] Fork: forking a version creates an independent branch visible in `versions.json` with a distinct version pointer and parent reference
   <!-- evidence: POST /d/testdoc/api/fork {"from":0} → {"version":1,"parent":0}; v0 remains in versions.json (AC-22); head advanced to 1 (AC-21). Fork creation and version isolation verified (both version entries present, distinct head pointers). Independent editability of both branches follows from the write-once model but was not separately exercised in this evidence run. .wicked-testing/evidence/interactive-l2-20260721/step2-fork.json. (2026-07-21) -->
 - [x] Source attachment (`wicked.interactive.source.attached`) records the source in `requests/sources.json`
