@@ -90,7 +90,11 @@ try {
   // Use el && !el.disabled rather than !el?.disabled — the latter is true when el is null.
   await page.waitForFunction(() => { const el = document.querySelector(".wi-inline button[type=submit]"); return el && !el.disabled; }, { timeout: 5000 });
   // Use programmatic click to avoid CDP input routing issues (same fix as iframe click)
-  await page.evaluate(() => document.querySelector(".wi-inline button[type=submit]").click());
+  await page.evaluate(() => {
+    const btn = document.querySelector(".wi-inline button[type=submit]");
+    if (!btn) throw new Error(".wi-inline button[type=submit] not found");
+    btn.click();
+  });
   step("sent an inline comment (bus: wicked.interactive.feedback.submitted)");
 
   // The agent asks; the question + options must appear in the browser (bus: status.posted).
@@ -98,7 +102,9 @@ try {
   step("agent's clarifying question appeared in the browser (status channel over the bus)");
 
   await page.evaluate((ans) => {
-    [...document.querySelectorAll(".wi-thread__opts button")].find((b) => b.textContent.trim() === ans).click();
+    const btn = [...document.querySelectorAll(".wi-thread__opts button")].find((b) => b.textContent.trim() === ans);
+    if (!btn) throw new Error(`answer button "${ans}" not found in .wi-thread__opts`);
+    btn.click();
   }, ANSWER);
   step("answered the question (bus: wicked.interactive.question.answered)");
 
@@ -119,7 +125,11 @@ try {
   // Wait for React to enable the submit button (disabled while busy/sending or text empty).
   // Use el && !el.disabled rather than !el?.disabled — the latter is true when el is null.
   await page.waitForFunction(() => { const el = document.querySelector(".wi-bar button[type=submit]"); return el && !el.disabled; }, { timeout: 10000 });
-  await page.evaluate(() => document.querySelector(".wi-bar button[type=submit]").click());
+  await page.evaluate(() => {
+    const btn = document.querySelector(".wi-bar button[type=submit]");
+    if (!btn) throw new Error(".wi-bar button[type=submit] not found");
+    btn.click();
+  });
   await page.waitForFunction(
     () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),
     { timeout: 10000 },

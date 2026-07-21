@@ -62,9 +62,9 @@ import re
 with open('src/service/events.js') as f:
     content = f.read()
 
-# Extract all wicked.interactive.* event type strings from EVENT_TYPES keys (double-quoted)
-# Using a broad match so non-4-segment types are captured, not silently skipped
-events = set(re.findall(r'"(wicked\.interactive\.[^"]+)"', content))
+# Extract EVENT_TYPES keys only: match quoted strings followed by a colon (object-key pattern)
+# so event type strings in comments or examples are not accidentally captured
+events = set(re.findall(r'"(wicked\.interactive\.[^"]+)"\s*:', content))
 # Validate 4-segment grammar: wicked.<domain>.<noun>.<verb>
 # (Script enforces segment count = 4; verb tense convention is enforced by review, not automated here)
 assert len(events) > 0, 'No wicked.interactive.* events found — regex failed to extract any events'
