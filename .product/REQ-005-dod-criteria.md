@@ -2,7 +2,7 @@
 name: REQ-005-dod-criteria
 title: wicked-interactive — Definition of Done
 status: partially-verified
-version: 0.2
+version: 0.3
 date: 2026-07-21
 author: mike.parcewski@gmail.com
 review-required: true
@@ -18,12 +18,12 @@ Structured DoD checklist for wicked-interactive features and for the product as 
 
 Basic correctness on the local dev machine.
 
-- [ ] `node bin/wicked-interactive.js serve --root <dir> --port <n>` starts without error
-  <!-- requires live service; not verified statically -->
+- [x] `node bin/wicked-interactive.js serve --root <dir> --port <n>` starts without error
+  <!-- evidence: `node bin/wicked-interactive.js serve --root /tmp/wi-l1-test --port 19999` → first banner line: "wicked-interactive (multi-doc) serving /tmp/wi-l1-test on http://localhost:19999" (printBanner outputs multiple lines; this is the first); SIGINT (Ctrl-C) → exit 0. bin/wicked-interactive.js:114-115 registers both SIGINT and SIGTERM; either terminates cleanly. (2026-07-21) -->
 - [x] `GET /api/docs` returns HTTP 200
   <!-- evidence: test/multidoc.test.js — "GET /api/docs returns an empty list on a fresh root" parses the JSON body successfully, implying HTTP 200 (explicit status assertion not present; 208/208 tests green, 2026-07-21) -->
-- [ ] `GET /` serves the React frontend (HTTP 200, `Content-Type: text/html`)
-  <!-- src/service/server.js:271 wires express.static(staticDir) and frontend/dist/index.html exists; no unit test asserts the 200+Content-Type end-to-end — mark open -->
+- [x] `GET /` serves the React frontend (HTTP 200, `Content-Type: text/html`)
+  <!-- evidence: `curl -s -I http://localhost:19999/` → HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8. Verified on live server (same run as L1-1 above). (2026-07-21) -->
 - [x] `GET /api/events` opens an SSE stream; the server sends a 15-second keep-alive comment (`: ping …`) to maintain the connection
   <!-- evidence: src/service/server.js:324-330 — Content-Type:text/event-stream + `setInterval` writes `: ping ${Date.now()}` every 15s. Note: the keep-alive is a comment frame (`: ping ...`); test/bridge.test.js discards comment frames (only collects `event:` and `data:` prefixed lines), so the heartbeat has NO direct test coverage. The ping code is implemented correctly; the DoD claim is verified by code inspection, not by test assertion. (H1 from adversarial-review-v0.6.0) -->
 - [x] `POST /api/events` with a `uiEmittable: true` event type is accepted; with a non-whitelisted type it is rejected (403 or appropriate error)

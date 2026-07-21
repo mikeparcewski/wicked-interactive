@@ -58,7 +58,7 @@ The DoD correctly notes this gap: "Positive parse of structural-change not yet i
 
 **L1 — `GET /` frontend serving has no unit test (src/service/server.js:270–271)**
 
-Correctly marked open in the DoD. `express.static(staticDir)` is only mounted if `existsSync(staticDir)` is true. In CI the `frontend/dist` directory may not be present unless `npm run build --prefix frontend` has run. No unit test verifies Content-Type or 200 status for the root route. Acceptable as a known gap; flagged for awareness.
+~~Correctly marked open in the DoD.~~ **Resolved in this PR via live evidence.** `express.static(staticDir)` is only mounted if `existsSync(staticDir)` is true. No unit test verifies Content-Type or 200 status for the root route; however, L1-1 (serve start) and L1-3 (GET / → 200, text/html) have been verified against a live server run (`curl -s -I http://localhost:19999/ → HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8`) and are now checked off in the DoD. Live evidence is accepted in lieu of a unit test for criteria that require a running service. Flagged for awareness: a unit test would provide more reliable regression coverage.
 
 **L2 — Shutdown hard-cap timer has no cleanup on normal exit (bin/wicked-interactive.js:110)**
 
@@ -74,9 +74,9 @@ The 2.5-second hard-cap `setTimeout(() => process.exit(0), 2500).unref?.()` fire
 
 | Criterion | Verdict | Notes |
 |---|---|---|
-| `serve` command starts without error | — | Requires live service; correctly marked open |
+| `serve` command starts without error | PASS (live) | Verified in this PR: live run on port 19999, SIGINT → exit 0. Now checked off in DoD. |
 | `GET /api/docs` returns HTTP 200 | PLAUSIBLE | JSON body is parsed successfully in tests; no explicit `assert.equal(res.status, 200)`. DoD comment correctly acknowledges this. |
-| `GET /` serves React frontend (200 + text/html) | — | Correctly marked open; `express.static` wired but not unit-tested |
+| `GET /` serves React frontend (200 + text/html) | PASS (live) | Verified in this PR: `curl -s -I http://localhost:19999/` → HTTP/1.1 200 OK, Content-Type: text/html; charset=utf-8. Now checked off in DoD. |
 | SSE stream opens; 15-second keep-alive comment sent | PARTIALLY CONFIRMED | Stream opening and event-frame delivery confirmed by bridge tests. The 15-second `: ping` comment frame is NOT verified by any test (see H1). Code at `server.js:330` is correct. |
 | `POST /api/events` whitelist: UI-emittable → accepted; non-whitelisted → 403; unknown → 400 | CONFIRMED | `bridge.test.js:184-192` exercises all three cases with correct status codes. `isKnownType` uses `Object.prototype.hasOwnProperty.call` (prototype-safe). |
 | `parseFeedback` parses content-edit, style-edit, remove; structural-change negative case | CONFIRMED (with gap) | All four cases tested. Positive structural-change parse absent (M3). |
