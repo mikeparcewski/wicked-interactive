@@ -2,7 +2,7 @@
 name: REQ-005-dod-criteria
 title: wicked-interactive — Definition of Done
 status: partially-verified
-version: 0.4
+version: 0.5
 date: 2026-07-21
 author: mike.parcewski@gmail.com
 review-required: true
@@ -70,11 +70,13 @@ Required before any version is published to npm or announced to users.
 
 - [x] CI (`ci.yml`) is green on `main` — all unit tests pass, plugin version is consistent, cross-machine smoke test passes from packed tarball
   <!-- evidence: CI run 29845901879 on main (2026-07-21) — `verify` job: success. Steps: unit tests (208 pass, 0 fail), `npm run check:version` (0.6.0 consistent), cross-machine smoke (npm pack → foreign dir install → npx wicked-interactive serve → GET /api/docs 200, GET / 200). All three steps pass. -->
-- [ ] wicked-testing acceptance pipeline: a wicked-testing run (separate evaluator from the agent that ran the tests) produces a PASS verdict recorded in `.wicked-testing/evidence/<run-id>/verdict.json`
+- [x] wicked-testing acceptance pipeline: a wicked-testing run (separate evaluator from the agent that ran the tests) produces a PASS verdict recorded in `.wicked-testing/evidence/<run-id>/verdict.json`
+  <!-- evidence: `.wicked-testing/scenarios/interactive-self-test.md` v1.1 — 4 assertions (A1: npm test exits 0, fail=0; A2: check:version 0.6.0 consistent across all 3 files; A3: 22 events in EVENT_TYPES registry all 4-segment grammar, non_conforming=[]; A4: whitelist enforcement test found at bridge.test.js:184 and passes in full suite). Independent evaluator (acceptance-test-evaluator) issued PASS for all 4 assertions. Two executor deviations noted (regex variant in A3, full suite instead of targeted run in A4) — neither undermines the evidence. Overall verdict PASS written to `.wicked-testing/evidence/interactive-l3-20260721/verdict.json`. executor=claude-code-main-session, reviewer=acceptance-test-evaluator (structural separation confirmed). (2026-07-21) -->
 - [x] Adversarial review PASS: at least one council-adversarial review session completed with no unresolved blockers; review record stored in `.product/reviews/`
   <!-- evidence: .product/reviews/adversarial-review-v0.6.0.md (2026-07-21) — verdict PASS. 0 CRITICAL, 0 blocking HIGH. 1 HIGH (H1: SSE keep-alive ping has no test coverage — DoD comment corrected in L1 SSE criterion above), 4 MEDIUM coverage gaps. Security posture sound. -->
 
-- [ ] Cross-product review: wicked-bus event vocabulary and data-wid conventions are consistent with any other wicked-* product that shares these contracts
+- [x] Cross-product review: wicked-bus event vocabulary and data-wid conventions are consistent with any other wicked-* product that shares these contracts
+  <!-- evidence: (1) All 22 wicked-interactive bus events (as defined in `src/service/events.js` `EVENT_TYPES`) follow the canonical 4-segment grammar `wicked.<domain>.<noun>.<past-tense-verb>` (verified by extracting keys from the authoritative EVENT_TYPES registry in events.js, 2026-07-21). No naming violations found. (2) data-wid is a wicked-interactive-internal HTML anchoring convention (`format: slide-{slideIndex}-{role}-{ordinal}` per ADR-0001); no other wicked-* product defines, emits, or subscribes to data-wid. (3) No other wicked-* product subscribes to `wicked.interactive.*` events (grep across wicked-garden, wicked-crew, wicked-core — no matches). Event vocabulary is internally consistent and isolated; no cross-product contract coordination required. -->
 - [x] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`)
   <!-- evidence: `npm run check:version` → "✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json" (2026-07-21) -->
 - [x] Release notes drafted; changelog entry added
