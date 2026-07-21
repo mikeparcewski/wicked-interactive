@@ -25,7 +25,7 @@ Basic correctness on the local dev machine.
 - [ ] `GET /` serves the React frontend (HTTP 200, `Content-Type: text/html`)
   <!-- src/service/server.js:271 wires express.static(staticDir) and frontend/dist/index.html exists; no unit test asserts the 200+Content-Type end-to-end — mark open -->
 - [x] `GET /api/events` opens an SSE stream; the server sends a 15-second keep-alive comment (`: ping …`) to maintain the connection
-  <!-- evidence: src/service/server.js:324-330 — Content-Type:text/event-stream + `setInterval` writes `: ping ${Date.now()}` every 15s; test/bridge.test.js opens the SSE stream and receives frames (all bridge tests pass). Note: the keep-alive is a comment frame, not an SSE `event:` frame. -->
+  <!-- evidence: src/service/server.js:324-330 — Content-Type:text/event-stream + `setInterval` writes `: ping ${Date.now()}` every 15s. Note: the keep-alive is a comment frame (`: ping ...`); test/bridge.test.js discards comment frames (only collects `event:` and `data:` prefixed lines), so the heartbeat has NO direct test coverage. The ping code is implemented correctly; the DoD claim is verified by code inspection, not by test assertion. (H1 from adversarial-review-v0.6.0) -->
 - [x] `POST /api/events` with a `uiEmittable: true` event type is accepted; with a non-whitelisted type it is rejected (403 or appropriate error)
   <!-- evidence: test/bridge.test.js:184 — "POST /api/events enforces the UI whitelist + known doc"; non-UI type → 403, unknown type → 400 (passes) -->
 - [x] `parseFeedback` correctly parses a feedback file with `content-edit`, `style-edit`, and `remove` item types; `structural-change` negative case (missing `instruction`) is tested
@@ -70,7 +70,9 @@ Required before any version is published to npm or announced to users.
 
 - [ ] CI (`ci.yml`) is green on `main` — all unit tests pass, plugin version is consistent, cross-machine smoke test passes from packed tarball
 - [ ] wicked-testing acceptance pipeline: a wicked-testing run (separate evaluator from the agent that ran the tests) produces a PASS verdict recorded in `.wicked-testing/evidence/<run-id>/verdict.json`
-- [ ] Adversarial review PASS: at least one council-adapter review session completed with no unresolved blockers; review record stored in `.product/reviews/`
+- [x] Adversarial review PASS: at least one council-adversarial review session completed with no unresolved blockers; review record stored in `.product/reviews/`
+  <!-- evidence: .product/reviews/adversarial-review-v0.6.0.md (2026-07-21) — verdict PASS. 0 CRITICAL, 0 blocking HIGH. 1 HIGH (H1: SSE keep-alive ping has no test coverage — DoD comment corrected in L1 SSE criterion above), 4 MEDIUM coverage gaps. Security posture sound. -->
+
 - [ ] Cross-product review: wicked-bus event vocabulary and data-wid conventions are consistent with any other wicked-* product that shares these contracts
 - [ ] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`)
 - [ ] Release notes drafted; changelog entry added
