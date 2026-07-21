@@ -81,12 +81,14 @@ try {
   // Chrome, so we use a programmatic event to reliably trigger the React click handler.
   await frame.evaluate(() => {
     const el = document.querySelector('[data-wid="slide-0-heading-1"]');
+    if (!el) throw new Error('slide-0-heading-1 not found in iframe');
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
   });
   await page.waitForSelector(".wi-inline textarea", { timeout: 10000 });
   await page.type(".wi-inline textarea", "improve this");
-  // Wait for React to enable the submit button (disabled={!text.trim()} until state updates)
-  await page.waitForFunction(() => !document.querySelector(".wi-inline button[type=submit]")?.disabled, { timeout: 5000 });
+  // Wait for React to enable the submit button (disabled={!text.trim()} until state updates).
+  // Use el && !el.disabled rather than !el?.disabled — the latter is true when el is null.
+  await page.waitForFunction(() => { const el = document.querySelector(".wi-inline button[type=submit]"); return el && !el.disabled; }, { timeout: 5000 });
   // Use programmatic click to avoid CDP input routing issues (same fix as iframe click)
   await page.evaluate(() => document.querySelector(".wi-inline button[type=submit]").click());
   step("sent an inline comment (bus: wicked.interactive.feedback.submitted)");
@@ -114,8 +116,9 @@ try {
 
   // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
   await page.type(".wi-bar textarea", "make the whole page more premium");
-  // Wait for React to enable the submit button (disabled while busy/sending or text empty)
-  await page.waitForFunction(() => !document.querySelector(".wi-bar button[type=submit]")?.disabled, { timeout: 10000 });
+  // Wait for React to enable the submit button (disabled while busy/sending or text empty).
+  // Use el && !el.disabled rather than !el?.disabled — the latter is true when el is null.
+  await page.waitForFunction(() => { const el = document.querySelector(".wi-bar button[type=submit]"); return el && !el.disabled; }, { timeout: 10000 });
   await page.evaluate(() => document.querySelector(".wi-bar button[type=submit]").click());
   await page.waitForFunction(
     () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),
