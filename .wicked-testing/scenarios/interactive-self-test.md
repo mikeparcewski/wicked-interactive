@@ -80,7 +80,7 @@ Expected: exit 0. `non_conforming: []`, `PASS` line printed. Event count is info
 
 ```bash
 grep -n "enforces the UI whitelist" test/bridge.test.js
-npm test 2>&1 | grep -E "^(ℹ pass|ℹ fail)"
+set -o pipefail; npm test 2>&1 | grep -E "^(ℹ pass|ℹ fail)"
 ```
 
-Expected: grep finds the test at test/bridge.test.js. npm test `pass` line shows non-zero count; `fail` line shows 0.
+Expected: grep finds the test at test/bridge.test.js. npm test `pass` line shows non-zero count; `fail` line shows 0. The `set -o pipefail` ensures a non-zero exit from `npm test` propagates even when grep finds matching lines.
