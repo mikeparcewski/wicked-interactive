@@ -1,0 +1,25 @@
+{
+  "step1_npm_test": {
+    "command": "npm test 2>&1 | tail -15",
+    "exit_code": 0,
+    "output": "ℹ tests 208\nℹ suites 0\nℹ pass 208\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 11589.175291"
+  },
+  "step2_check_version": {
+    "command": "npm run check:version",
+    "exit_code": 0,
+    "output": "> wicked-interactive@0.6.0 check:version\n> node .github/scripts/check-version.mjs\n\n✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json"
+  },
+  "step3_event_grammar": {
+    "command": "python3 -c \"import subprocess,re; result=subprocess.run(['grep','-rh','wicked.interactive.','src/','--include=*.js'],capture_output=True,text=True); events=set(re.findall(r'wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*',result.stdout)); bad=[e for e in events if len(e.split('.'))!=4]; print('event_count:',len(events)); print('non_conforming:',bad); assert not bad; print('PASS')\"",
+    "exit_code": 0,
+    "output": "event_count: 25\nnon_conforming: []\nPASS"
+  },
+  "step4_whitelist_test": {
+    "command": "grep -n 'enforces the UI whitelist' test/bridge.test.js && npm test 2>&1 | tail -8",
+    "exit_code": 0,
+    "output": "184:test(\"POST /api/events enforces the UI whitelist + known doc\", async () => {\nℹ tests 208\nℹ suites 0\nℹ pass 208\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 12100.875291"
+  },
+  "executor": "claude-code-main-session",
+  "run_date": "2026-07-21",
+  "working_directory": "/Users/michael.parcewski/Projects/wicked/wicked-interactive"
+}

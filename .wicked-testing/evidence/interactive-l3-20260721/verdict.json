@@ -1,0 +1,32 @@
+{
+  "scenario": "interactive-self-test",
+  "run_id": "interactive-l3-20260721",
+  "date": "2026-07-21",
+  "reviewer": "acceptance-test-evaluator",
+  "executor": "claude-code-main-session",
+  "revision": 1,
+  "assertions": {
+    "A1": {
+      "verdict": "PASS",
+      "evidence": "exit_code: 0, output: 'ℹ pass 208 / ℹ fail 0 / ℹ skipped 0 / ℹ todo 0'",
+      "notes": "Command matches scenario exactly (npm test 2>&1 | tail -15). All three required conditions satisfied: exit 0, 'pass 208' present, 'fail 0' present, no FAIL lines in output."
+    },
+    "A2": {
+      "verdict": "PASS",
+      "evidence": "exit_code: 0, output: '✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json'",
+      "notes": "Command matches scenario exactly. Output exceeds the minimum expected string — explicitly names all three files (package.json, plugin.json, marketplace.json) and version 0.6.0. No ambiguity."
+    },
+    "A3": {
+      "verdict": "PASS",
+      "evidence": "exit_code: 0, output: 'event_count: 25 / non_conforming: [] / PASS'",
+      "notes": "The executor deviated from the specified Python script: scenario used a quote-anchored regex ([\"'](wicked\\.interactive\\.[a-z_]+\\.[a-z_]+)[\"']) while executor used an unanchored regex (wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*), with different character classes. Despite the methodological deviation, the output values match the scenario's expected values exactly (event_count: 25, non_conforming: [], PASS). The unanchored regex could theoretically capture non-string-literal matches (e.g. comments), but since both approaches converge on the same count of 25 with no non-conforming entries, the assertion holds. The deviation is noted but does not undermine the result."
+    },
+    "A4": {
+      "verdict": "PASS",
+      "evidence": "grep: '184:test(\"POST /api/events enforces the UI whitelist + known doc\"'; npm test: exit_code 0, pass 208, fail 0, skipped 0",
+      "notes": "The executor deviated from the specified command: the scenario required a targeted mocha run using --grep \"enforces the UI whitelist\" (expected: 1 passing), but the executor ran the full npm test suite instead. However, the assertion's two conditions are still satisfied: (1) the test exists — grep found it at line 184 with the required text 'enforces the UI whitelist' in the test name; (2) the test passes — the full suite shows 208 pass, 0 fail, 0 skipped, meaning the whitelist test was included and passed. The targeted mocha run would have been cleaner proof, but the combined grep + full-suite-pass with zero skips is unambiguous evidence the test runs and passes."
+    }
+  },
+  "overall_verdict": "PASS",
+  "summary": "All four assertions pass. The test suite ran 208 unit tests with zero failures (A1). Version consistency was confirmed across all three manifests at 0.6.0 (A2). Event grammar conformance found 25 wicked.interactive.* events, all 4-segment conforming, with an empty non-conforming list (A3). The whitelist enforcement test was located at line 184 of test/bridge.test.js and ran as part of the full passing suite with zero skips (A4). Two procedural deviations were noted: the executor used a different regex pattern for Step 3 (unanchored vs. quote-anchored), and ran the full npm test instead of a targeted mocha --grep run for Step 4. Neither deviation invalidates the assertions — the results are unambiguous and meet or exceed the scenario's evidence requirements."
+}
