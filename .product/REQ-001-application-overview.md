@@ -23,8 +23,8 @@ The control plane is wicked-bus (ADR-0019). The UI, the service, and the agent a
 ### Flow 1 — Create a document from a description
 
 1. User says what they want (e.g., "Build me a Q3 results deck").
-2. The agent generates the first draft as an HTML document and writes it to the workspace (`_v1.html`).
-3. The service emits `wicked.interactive.draft.completed`; the browser receives it via SSE and renders the document in an iframe.
+2. The agent generates the first draft as an HTML document and emits `wicked.interactive.draft.completed` with the generated HTML.
+3. The service receives the event, materializes the HTML to disk as `_v1.html`, then emits `wicked.interactive.version.created`; the browser receives it via SSE and renders the document in an iframe.
 4. The user sees a live, interactive first draft without any code or file management.
 
 ### Flow 2 — Give feedback and see the update
@@ -32,8 +32,8 @@ The control plane is wicked-bus (ADR-0019). The UI, the service, and the agent a
 1. The user clicks an element in the browser or types an instruction in the chat.
 2. The browser emits `wicked.interactive.feedback.submitted` (UI → bus via POST /api/events).
 3. The service writes the feedback as a `_v{x}.md` feedback file (YAML frontmatter + per-element edit blocks keyed by `data-wid` selector).
-4. The agent picks up `wicked.interactive.feedback.processed`, applies the edits, and writes `_v{x+1}.html`.
-5. The service emits `wicked.interactive.version.created`; the browser hot-reloads the iframe.
+4. The agent picks up `wicked.interactive.feedback.processed`, applies the edits, and emits `wicked.interactive.edit.completed` with the updated HTML.
+5. The service materializes the HTML to disk as `_v{x+1}.html` and emits `wicked.interactive.version.created`; the browser hot-reloads the iframe.
 
 ### Flow 3 — Rewind or fork a version
 
@@ -52,4 +52,4 @@ The control plane is wicked-bus (ADR-0019). The UI, the service, and the agent a
 1. The user requests an export (HTML, PDF, PowerPoint, or video) from the browser.
 2. The service receives the request and renders the artifact (using Playwright for PDF/video; a vendored pipeline for PPTX).
 3. The service emits `wicked.interactive.export.generated`; the supervising agent performs a vision review before the user is notified.
-4. Once reviewed, the service emits `wicked.interactive.export.reviewed` and delivers the artifact.
+4. Once reviewed, the agent emits `wicked.interactive.export.reviewed` and the service delivers the artifact to the user.

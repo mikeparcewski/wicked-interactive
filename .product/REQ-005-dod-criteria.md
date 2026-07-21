@@ -52,7 +52,7 @@ Required before any version is published to npm or announced to users.
 - [ ] wicked-testing acceptance pipeline: a wicked-testing run (separate evaluator from the agent that ran the tests) produces a PASS verdict recorded in `.wicked-testing/evidence/<run-id>/verdict.json`
 - [ ] Adversarial review PASS: at least one council-adapter review session completed with no unresolved blockers; review record stored in `.product/reviews/`
 - [ ] Cross-product review: wicked-bus event vocabulary and data-wid conventions are consistent with any other wicked-* product that shares these contracts
-- [ ] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `marketplace.json`)
+- [ ] `npm run check:version` passes (package.json version matches `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`)
 - [ ] Release notes drafted; changelog entry added
 - [ ] Published to npm (`npm publish`) and plugin marketplace (`/plugin marketplace`)
 - [ ] The product site (`pages.yml`) updated and live

@@ -33,11 +33,10 @@ Key test suites and their scope:
 | `server.test.js` | Express routes: `/api/docs`, `/api/events` SSE, `POST /api/events` whitelist enforcement |
 | `versions.test.js` | Version chain creation, active pointer, rewind, fork graph in `versions.json` |
 | `export.test.js` | Export artifact path generation and preflight logic (without browser binaries) |
-| `bus-client.test.js` | wicked-bus subscribe/emit integration (requires bus running) |
+| `bus-client.test.js` | wicked-bus subscribe/emit integration — isolates bus via `WICKED_BUS_DATA_DIR`; no external bus required |
 | `bridge.test.js` | SSE fan-out bridge (bus event → SSE client) |
 | `serve-bridge.test.js` | Service startup: port selection, lockfile write/delete, reuse detection |
 | `workspace.test.js` | Workspace directory layout, `versions.json` initialization |
-| `feedback-schema.test.js` | All four FeedbackItem types; validation errors |
 | `structural.test.js` | Structural-change instruction routing |
 | `regenerate.test.js` | Deterministic regeneration from feedback file |
 | `theme.test.js` | Theme resolution from `src/themes/` |
@@ -56,15 +55,7 @@ Key test suites and their scope:
 
 ### Layer 2 — End-to-end acceptance test (`test/e2e.mjs`)
 
-Requires a built frontend (`frontend/dist/`) and a running wicked-bus. The acceptance test:
-
-1. Starts the service against a temp workspace
-2. Submits a feedback event via `POST /api/events`
-3. Subscribes to the bus and asserts `wicked.interactive.feedback.processed` is received
-4. Verifies the feedback file is written to disk
-5. Asserts `wicked.interactive.version.created` is emitted after a synthetic agent edit
-6. Verifies the new version file exists on disk
-7. Shuts the service down cleanly and verifies the lockfile is removed
+Requires a built frontend (`frontend/dist/`) and a Chromium binary (Puppeteer). The bus is isolated via `WICKED_BUS_DATA_DIR` — no separately-started wicked-bus required. The test drives a real browser with Puppeteer against the running service.
 
 Run with:
 
@@ -115,4 +106,4 @@ For visual and interaction testing that automated tests cannot cover:
 - **Test runner:** Node.js built-in (`node --test`), available from Node 20+
 - **No test framework dependency:** no Jest, no Vitest, no Mocha. Tests use `assert` from the standard library.
 - **CI:** GitHub Actions (`ubuntu-latest`, Node 24)
-- **wicked-bus in CI:** the bus is not started in the unit test layer; `bus-client.test.js` and `e2e.mjs` require it and are run separately (acceptance) or skipped in the unit pass if the bus is unavailable.
+- **wicked-bus in CI:** `bus-client.test.js` and `e2e.mjs` both isolate their own bus DB via `WICKED_BUS_DATA_DIR`; no separately-started bus process is required. `npm test` runs all unit tests including `bus-client.test.js`. The bigger external requirement for acceptance (`e2e.mjs`) is a Chromium binary.

@@ -21,7 +21,7 @@ This document records the technology stack and the hard constraints that bound i
 - **Runtime:** Node.js >= 20.0.0 (ES modules; `"type": "module"` throughout).
 - **HTTP framework:** Express 5 (`^5.0.0`).
 - **Entry point:** `bin/wicked-interactive.js serve --root <dir> --port <n>`. The port is dynamic: if the requested port is taken the service falls forward to the next available port (ADR-0022). A lockfile (`<root>/.wi-serve.json`) records `{ port, host, pid, startedAt, version }` so any session can discover a running bridge without remembering a port.
-- **HTML manipulation:** cheerio (`^1.0.0`) — used for `data-wid` injection and structural edits.
+- **HTML manipulation:** cheerio (`^1.0.0`) — used for `data-wid` injection and deterministic edits (`content-edit`, `style-edit`). Structural changes are LLM-driven and handled by the agent.
 - **YAML parsing:** js-yaml v5 (`^5.0.0`) — ESM-only; used in the feedback schema and service internals.
 
 ### Frontend
