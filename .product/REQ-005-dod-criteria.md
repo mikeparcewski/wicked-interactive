@@ -21,28 +21,28 @@ Basic correctness on the local dev machine.
 - [ ] `node bin/wicked-interactive.js serve --root <dir> --port <n>` starts without error
   <!-- requires live service; not verified statically -->
 - [x] `GET /api/docs` returns HTTP 200
-  <!-- evidence: test/multidoc.test.js — "GET /api/docs returns an empty list on a fresh root" passes (208/208 tests green, 2026-07-21) -->
+  <!-- evidence: test/multidoc.test.js — "GET /api/docs returns an empty list on a fresh root" parses the JSON body successfully, implying HTTP 200 (explicit status assertion not present; 208/208 tests green, 2026-07-21) -->
 - [ ] `GET /` serves the React frontend (HTTP 200, `Content-Type: text/html`)
   <!-- src/service/server.js:271 wires express.static(staticDir) and frontend/dist/index.html exists; no unit test asserts the 200+Content-Type end-to-end — mark open -->
-- [x] `GET /api/events` opens an SSE stream; the browser receives heartbeat events
-  <!-- evidence: src/service/server.js:324-330 — Content-Type:text/event-stream + 15s ping heartbeat; test/bridge.test.js opens the SSE stream and receives frames (all bridge tests pass) -->
+- [x] `GET /api/events` opens an SSE stream; the server sends a 15-second keep-alive comment (`: ping …`) to maintain the connection
+  <!-- evidence: src/service/server.js:324-330 — Content-Type:text/event-stream + `setInterval` writes `: ping ${Date.now()}` every 15s; test/bridge.test.js opens the SSE stream and receives frames (all bridge tests pass). Note: the keep-alive is a comment frame, not an SSE `event:` frame. -->
 - [x] `POST /api/events` with a `uiEmittable: true` event type is accepted; with a non-whitelisted type it is rejected (403 or appropriate error)
   <!-- evidence: test/bridge.test.js:184 — "POST /api/events enforces the UI whitelist + known doc"; non-UI type → 403, unknown type → 400 (passes) -->
-- [x] `parseFeedback` correctly parses a feedback file with all four item types (`content-edit`, `style-edit`, `structural-change`, `remove`)
-  <!-- evidence: test/feedback-schema.test.js — "parses frontmatter and items", "parses structured style + class fields", "accepts a remove item", structural-change rejection test (all pass) -->
+- [x] `parseFeedback` correctly parses a feedback file with `content-edit`, `style-edit`, and `remove` item types; `structural-change` negative case (missing `instruction`) is tested
+  <!-- evidence: test/feedback-schema.test.js — "parses frontmatter and items" (content-edit), "parses structured style + class fields" (style-edit), "accepts a remove item" (remove), "rejects structural-change missing instruction" (negative). Positive parse of structural-change not yet in test suite. -->
 - [x] `serializeFeedback` round-trips cleanly (serialize → parse → serialize produces identical output)
   <!-- evidence: test/feedback-schema.test.js:88 — "round-trips through serialize -> parse" (passes) -->
 - [x] `npm test` passes with no failing tests
   <!-- evidence: 208 tests, 0 failures, 0 skipped — run 2026-07-21 on commit ddff809 -->
 - [x] Lockfile (`<root>/.wi-serve.json`) is written on start and deleted on SIGINT/SIGTERM
-  <!-- evidence: src/service/serve-bridge.mjs:12 — LOCK_NAME=".wi-serve.json"; removeLock calls unlinkSync; bin/wicked-interactive.js:114-115 registers SIGINT/SIGTERM → shutdown; test/serve-bridge.test.js:pass "lock roundtrip: write → read → remove (ADR-0022)" -->
+  <!-- evidence: src/service/serve-bridge.mjs:12 — LOCK_NAME=".wi-serve.json"; removeLock calls unlinkSync; bin/wicked-interactive.js:114-115 registers SIGINT/SIGTERM → shutdown; test/serve-bridge.test.js — "lock roundtrip: write → read → remove (ADR-0022)" passes -->
 
 ## Level 2 — Integration and Functional Correctness
 
 The full feedback loop works end-to-end.
 
-- [x] wicked-bus integration: the service emits events that a `wicked-bus subscribe` listener receives within the poll interval (≤ 500 ms)
-  <!-- evidence: test/bus-client.test.js — emitEvent lands a well-formed envelope in the embedded SQLite bus store and threads correlation_id; all bus-client tests pass as part of npm test -->
+- [ ] wicked-bus integration: the service emits events that a `wicked-bus subscribe` listener receives within the poll interval (≤ 500 ms)
+  <!-- partial: test/bus-client.test.js verifies emitEvent lands a well-formed envelope in the embedded SQLite bus store and threads correlation_id; does NOT verify a real wicked-bus subscribe listener receives the event within ≤500ms — real-bus timing requires a live integration test -->
 - [ ] Browser feedback submission (POST /api/events with `wicked.interactive.feedback.submitted`) reaches the bus and triggers `wicked.interactive.feedback.processed`
   <!-- requires running browser; not verified statically -->
 - [ ] A feedback file (`_v{n}.md`) is written to the workspace with correct frontmatter and item blocks
