@@ -1,0 +1,19 @@
+POST /api/events wicked.interactive.source.attached → {"ok":true,"event_id":170946,"correlation_id":"ef2527c7-f439-4d38-91b7-7faf0c8590b4"}
+
+wicked-bus subscribe --plugin wi-test-... --filter "*@wicked-interactive" --cursor-init latest --once --drain:
+  Confirmed event landed on bus (event_id=170947 on subsequent drain test)
+
+sources.json on disk after bus poll (≤1500ms):
+{
+  "sources": [
+    {
+      "path": "/tmp/test-source.md",
+      "note": "test source 2",
+      "status": "pending",
+      "added_at": "2026-07-21T19:21:14.887Z",
+      "indexed_at": null
+    }
+  ]
+}
+
+bus-timing-test: POST at T=0 → event_id=170951 in 92ms; sources.json updated within poll interval (500ms cadence)

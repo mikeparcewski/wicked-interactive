@@ -1,0 +1,81 @@
+{
+  "manifest_version": "1.1.0",
+  "run_id": "interactive-l2-20260721",
+  "scenario_id": "interactive-l2-service-api",
+  "scenario_name": "interactive-l2-service-api",
+  "scenario_path": ".wicked-testing/evidence/interactive-l2-20260721/verdict.json",
+  "started_at": "2026-07-21T19:17:00.000Z",
+  "finished_at": "2026-07-21T19:25:00.000Z",
+  "duration_ms": 480000,
+  "status": "passed",
+  "verdict": {
+    "value": "PASS",
+    "reviewer": "acceptance-test-reviewer",
+    "reason": "All 5 assertions pass. Fork, source attachment via wicked-bus, HTML export, and whitelist enforcement all verified against live HTTP responses from the wicked-interactive service.",
+    "recorded_at": "2026-07-21T19:25:00.000Z"
+  },
+  "environment": {
+    "os": "darwin 25.5.0",
+    "node": "26.0.0",
+    "wicked_testing_version": "0.9.0",
+    "wicked_interactive_version": "0.6.0"
+  },
+  "artifacts": [
+    {
+      "name": "step1-service-start.txt",
+      "kind": "misc",
+      "path": "step1-service-start.txt",
+      "bytes": 449,
+      "sha256": "acb5ff0bbb49e8b67c6aab00d78256060b74d4e6312f0909877763cd4f8c0e63",
+      "captured_at": "2026-07-21T19:17:00.000Z"
+    },
+    {
+      "name": "step2-fork.json",
+      "kind": "misc",
+      "path": "step2-fork.json",
+      "bytes": 25,
+      "sha256": "16e69a06739a4799fa70c19135d6575d70bc396803791edb89a593525de2b0b9",
+      "captured_at": "2026-07-21T19:18:00.000Z"
+    },
+    {
+      "name": "step3-source-attachment.json",
+      "kind": "misc",
+      "path": "step3-source-attachment.json",
+      "bytes": 143,
+      "sha256": "a6a09d6690e015c7b8a362fa4540bf325a4b9fc0f24f3d880dda35fb35eabd18",
+      "captured_at": "2026-07-21T19:21:00.000Z"
+    },
+    {
+      "name": "step3-bus-event.txt",
+      "kind": "misc",
+      "path": "step3-bus-event.txt",
+      "bytes": 697,
+      "sha256": "10935f0770b499ccc2454d2ae2a761b1928d9c9e0a39304aec34f76a12bc79b0",
+      "captured_at": "2026-07-21T19:21:00.000Z"
+    },
+    {
+      "name": "step4-export.json",
+      "kind": "misc",
+      "path": "step4-export.json",
+      "bytes": 214,
+      "sha256": "e0f6cf7bd66b92206f386c48cf76744d4249a2bad7350d1f9535580e613aa8cf",
+      "captured_at": "2026-07-21T19:22:00.000Z"
+    },
+    {
+      "name": "step5-whitelist-enforcement.txt",
+      "kind": "misc",
+      "path": "step5-whitelist-enforcement.txt",
+      "bytes": 672,
+      "sha256": "be59f02694b56d2aa19da45b9acd7712ea6d1b978ebe8048b57a3f4c3421c9d3",
+      "captured_at": "2026-07-21T19:23:00.000Z"
+    },
+    {
+      "name": "verdict.json",
+      "kind": "misc",
+      "path": "verdict.json",
+      "bytes": 2808,
+      "sha256": "57aa9caa58c46b7e3d0f1fa277c3964d455b86be632229d14a190840b5141687",
+      "captured_at": "2026-07-21T19:25:00.000Z"
+    }
+  ]
+}

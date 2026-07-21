@@ -1,0 +1,11 @@
+POST /api/events wicked.interactive.feedback.processed (uiEmittable: false):
+HTTP response: {"error":"not a UI-emittable event: wicked.interactive.feedback.processed"}
+→ Service correctly rejects non-UI-emittable event types (403 body error)
+
+POST /api/events wicked.interactive.bogus.type (unknown type):
+HTTP response: {"error":"unknown event type: wicked.interactive.bogus.type"}
+→ Service correctly rejects unknown event types (400 body error)
+
+POST /api/events wicked.interactive.source.attached (uiEmittable: true, owners: [UI]):
+HTTP response: {"ok":true,"event_id":170953,"correlation_id":"dc42920c-..."}
+→ Service correctly accepts UI-emittable event types

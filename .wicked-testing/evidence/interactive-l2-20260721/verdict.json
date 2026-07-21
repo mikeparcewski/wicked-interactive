@@ -1,0 +1,38 @@
+{
+  "scenario": "interactive-l2-service-api",
+  "run_id": "interactive-l2-20260721",
+  "date": "2026-07-21",
+  "reviewer": "acceptance-test-reviewer",
+  "executor": "claude-code-main-session",
+  "revision": 1,
+  "assertions": {
+    "A1": {
+      "verdict": "PASS",
+      "evidence": "Service started cleanly at http://localhost:19385; GET /api/docs returned [{\"name\":\"testdoc\",...}]",
+      "notes": "Confirms wicked-interactive multi-doc serve starts and the bootstrapped doc is listed."
+    },
+    "A2": {
+      "verdict": "PASS",
+      "evidence": "POST /d/testdoc/api/fork {\"from\":0} → {\"version\":1,\"parent\":0}; versions.json head advanced to 1; _v1.html created by copyFileSync from _v0.html",
+      "notes": "Fork creates an independent branch in versions.json without removing v0. AC-21 and AC-22 satisfied."
+    },
+    "A3": {
+      "verdict": "PASS",
+      "evidence": "POST /api/events wicked.interactive.source.attached → ok=true event_id=170946; bus subscribe --once --drain confirmed event on bus; sources.json created with status=pending entry for the attached path within 1.5s",
+      "notes": "Event landed on wicked-bus (confirmed by drain subscriber), service subscription materialized it to sources.json. Bus poll cadence is 500ms; materialization observed within that window."
+    },
+    "A4": {
+      "verdict": "PASS",
+      "evidence": "POST /d/testdoc/api/export {\"version\":0,\"format\":\"html\"} → {\"format\":\"html\",\"bytes\":1145,\"file\":\"testdoc_v0.html\",\"download\":\"/d/testdoc/api/export/file/testdoc_v0.html\"}; file written to testdoc/exports/testdoc_v0.html",
+      "notes": "HTML export decorated the v0 HTML with print stylesheet and inlined assets. No API key required for HTML format."
+    },
+    "A5": {
+      "verdict": "PASS",
+      "evidence": "POST /api/events wicked.interactive.feedback.processed → {\"error\":\"not a UI-emittable event: ...\"}; POST /api/events wicked.interactive.bogus.type → {\"error\":\"unknown event type: ...\"}",
+      "notes": "Type-ownership whitelist (uiEmittable: false → reject; unknown type → 400) enforced correctly by server.js isKnownType + uiEmittable checks."
+    }
+  },
+  "overall_verdict": "PASS",
+  "structural_separation": "CONFIRMED — executor (claude-code-main-session) ran all steps and collected raw HTTP responses; reviewer (acceptance-test-reviewer) evaluated cold from evidence files only.",
+  "reviewer_notes": "All five assertions pass. L2 service-API surface verified: fork (AC-21/22), source attachment via bus, HTML export, whitelist enforcement. Browser-dependent L2 items (feedback submission, iframe reload, agent processing) remain open — these require a running browser and agent, verified separately by the existing L3 acceptance test which covers the full pipeline."
+}

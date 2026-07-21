@@ -1,0 +1,6 @@
+wicked-interactive (multi-doc) serving /var/folders/h9/54gktm4j4kxfd0r55wwh2phr0000gn/T/wi-l2-test3 on http://localhost:19385
+  docs:   http://localhost:19385/api/docs
+  open:   http://localhost:19385/?doc=<name>
+  loop:   wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --cursor-init latest
+
+GET /api/docs (service ready probe): [{"name":"testdoc","kind":"doc","head":0,"versions":1,"updated_at":"2026-07-21T19:00:00.000Z"}]
