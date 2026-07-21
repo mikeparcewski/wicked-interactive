@@ -112,13 +112,39 @@ try {
     const f = document.querySelector("iframe");
     try { return new RegExp(t).test(f.contentDocument.body.innerHTML); } catch { return false; }
   }, { timeout: 20000 }, ANSWER);
-  step("agent applied the answer -> hot-reload (full clarification loop over the bus)");
+  step("agent applied the answer -> hot-reload (wicked.interactive.version.created → iframe reload verified)");
 
   await page.waitForFunction(() => {
     const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "HTML");
     return b && !b.disabled;
   }, { timeout: 10000 });
   step("stage unlocked after completion");
+
+  // Version rewind (AC-20..22): select v0 via VersionStrip dropdown → iframe shows original (no ANSWER).
+  const headVer = await page.evaluate(() => Number(document.querySelector(".wi-vsel select")?.value));
+  if (headVer > 0) {
+    await page.evaluate(() => {
+      const sel = document.querySelector(".wi-vsel select");
+      if (!sel) throw new Error(".wi-vsel select not found");
+      sel.value = "0";
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.waitForFunction((ans) => {
+      const f = document.querySelector("iframe");
+      try { return !new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
+    }, { timeout: 10000 }, ANSWER);
+    step("version rewind: v0 in VersionStrip restores original content (no ANSWER text in iframe)");
+    // Restore to head before the chat step
+    await page.evaluate((v) => {
+      const sel = document.querySelector(".wi-vsel select");
+      sel.value = String(v);
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }, headVer);
+    await page.waitForFunction((ans) => {
+      const f = document.querySelector("iframe");
+      try { return new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
+    }, { timeout: 10000 }, ANSWER);
+  }
 
   // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
   await page.type(".wi-bar textarea", "make the whole page more premium");
