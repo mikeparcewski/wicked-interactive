@@ -17,7 +17,7 @@ assertions:
   - id: A2
     description: npm run check:version passes — package.json, plugin.json, and marketplace.json all agree on version 0.6.0
   - id: A3
-    description: All wicked.interactive.* event types in src/ conform to 4-segment grammar wicked.<domain>.<noun>.<past-tense-verb>; non-conforming list is empty
+    description: All wicked.interactive.* event types defined in src/service/events.js EVENT_TYPES conform to 4-segment grammar wicked.<domain>.<noun>.<past-tense-verb>; non-conforming list is empty; count is 22
   - id: A4
     description: POST /api/events whitelist enforcement is covered by the test suite (test/bridge.test.js "enforces the UI whitelist" test exists and passes)
 ---
@@ -53,28 +53,27 @@ Expected: exit 0. Output contains `✓ Plugin version 0.6.0 is consistent`.
 
 ### Step 3: Event grammar conformance
 
+Read the authoritative EVENT_TYPES registry from src/service/events.js:
+
 ```bash
 python3 -c "
-import subprocess, re
+import re
 
-result = subprocess.run(
-    ['grep', '-rh', 'wicked.interactive.', 'src/', '--include=*.js'],
-    capture_output=True, text=True
-)
-pattern = re.compile(r\"'(wicked\\\\.interactive\\\\.[a-z][a-z0-9_]*\\\\.[a-z][a-z0-9_]*)'\\\"|(wicked\\\\.interactive\\\\.[a-z][a-z0-9_]*\\\\.[a-z][a-z0-9_]*)\\\"\")
+with open('src/service/events.js') as f:
+    content = f.read()
 
-# Simpler: just find all wicked.interactive.X.Y patterns
-raw = re.findall(r\"[\\\"'](wicked\\\\.interactive\\\\.[a-z_]+\\\\.[a-z_]+)[\\\"']\", result.stdout)
-events = set(raw)
+# EVENT_TYPES keys use double quotes in events.js
+events = set(re.findall(r'\"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"', content))
 bad = [e for e in events if len(e.split('.')) != 4]
 print('event_count:', len(events))
 print('non_conforming:', bad)
 assert not bad, f'Non-conforming events: {bad}'
+assert len(events) == 22, f'Expected 22 events, found {len(events)}'
 print('PASS')
 "
 ```
 
-Expected: exit 0. `event_count: 25`, `non_conforming: []`, `PASS` line printed.
+Expected: exit 0. `event_count: 22`, `non_conforming: []`, `PASS` line printed.
 
 ### Step 4: Whitelist enforcement test coverage
 

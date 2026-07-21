@@ -10,9 +10,10 @@
     "output": "> wicked-interactive@0.6.0 check:version\n> node .github/scripts/check-version.mjs\n\n✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json"
   },
   "step3_event_grammar": {
-    "command": "python3 -c \"import subprocess,re; result=subprocess.run(['grep','-rh','wicked.interactive.','src/','--include=*.js'],capture_output=True,text=True); events=set(re.findall(r'wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*',result.stdout)); bad=[e for e in events if len(e.split('.'))!=4]; print('event_count:',len(events)); print('non_conforming:',bad); assert not bad; print('PASS')\"",
+    "command": "python3 script reading src/service/events.js EVENT_TYPES double-quoted keys via regex \"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"",
     "exit_code": 0,
-    "output": "event_count: 25\nnon_conforming: []\nPASS"
+    "output": "event_count: 22\nnon_conforming: []\nPASS",
+    "notes": "Uses the authoritative EVENT_TYPES registry in events.js (double-quoted keys), not a source grep. Corrected from initial run which used grep-based count of 25 (including non-key matches in comments/code). The registry has exactly 22 defined event types."
   },
   "step4_whitelist_test": {
     "command": "grep -n 'enforces the UI whitelist' test/bridge.test.js && npm test 2>&1 | tail -8",
