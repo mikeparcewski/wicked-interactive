@@ -76,18 +76,25 @@ try {
   await frame.waitForSelector('[data-wid="slide-0-heading-1"]', { timeout: 10000 });
   step("document rendered (AC-3)");
 
-  await frame.click('[data-wid="slide-0-heading-1"]');
+  // Dispatch click from within the iframe's JS context: CDP Input.dispatchMouseEvent does not
+  // correctly route cross-frame events to the iframe's contentDocument listeners in headless
+  // Chrome, so we use a programmatic event to reliably trigger the React click handler.
+  await frame.evaluate(() => {
+    const el = document.querySelector('[data-wid="slide-0-heading-1"]');
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  });
   await page.waitForSelector(".wi-inline textarea", { timeout: 10000 });
   await page.type(".wi-inline textarea", "improve this");
-  await page.click(".wi-inline button[type=submit]");
+  // Use programmatic click to avoid CDP input routing issues (same fix as iframe click)
+  await page.evaluate(() => document.querySelector(".wi-inline button[type=submit]").click());
   step("sent an inline comment (bus: wicked.interactive.feedback.submitted)");
 
   // The agent asks; the question + options must appear in the browser (bus: status.posted).
-  await page.waitForSelector(".wi-lock__opts button", { timeout: 20000 });
+  await page.waitForSelector(".wi-thread__opts button", { timeout: 20000 });
   step("agent's clarifying question appeared in the browser (status channel over the bus)");
 
   await page.evaluate((ans) => {
-    [...document.querySelectorAll(".wi-lock__opts button")].find((b) => b.textContent.trim() === ans).click();
+    [...document.querySelectorAll(".wi-thread__opts button")].find((b) => b.textContent.trim() === ans).click();
   }, ANSWER);
   step("answered the question (bus: wicked.interactive.question.answered)");
 
@@ -104,8 +111,8 @@ try {
   step("stage unlocked after completion");
 
   // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
-  await page.type(".wi-chat__input textarea", "make the whole page more premium");
-  await page.click(".wi-chat__input button[type=submit]");
+  await page.type(".wi-bar textarea", "make the whole page more premium");
+  await page.evaluate(() => document.querySelector(".wi-bar button[type=submit]").click());
   await page.waitForFunction(
     () => [...document.querySelectorAll(".wi-msg--user")].some((m) => /premium/.test(m.textContent)),
     { timeout: 10000 },
