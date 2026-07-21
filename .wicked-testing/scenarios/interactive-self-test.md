@@ -66,6 +66,7 @@ with open('src/service/events.js') as f:
 events = set(re.findall(r'\"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"', content))
 # Validate 4-segment grammar: wicked.<domain>.<noun>.<past-tense-verb>
 # (Script validates segment count; past-tense is a naming convention enforced by review, not parseable)
+assert len(events) > 0, 'No wicked.interactive.* events found — regex failed to extract any events'
 bad = [e for e in events if len(e.split('.')) != 4]
 print('event_count:', len(events))
 print('non_conforming:', bad)
