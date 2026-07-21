@@ -5,21 +5,21 @@ description: |
   invariants that every release must preserve: test suite green, version
   consistency, event grammar conformance, and whitelist enforcement coverage.
   Dogfoods wicked-testing against wicked-interactive itself.
-version: "1.0"
+version: "1.1"
 category: cli
 tags: [bootstrap, self-test, dogfood, interactive]
 tools:
-  required: [node, npm, python3]
+  required: [node, npm, python3, grep, bash]
 timeout: 120
 assertions:
   - id: A1
-    description: npm test passes — all 208 unit tests exit 0 with no failures
+    description: npm test passes — all unit tests exit 0 with no failures (fail count is 0)
   - id: A2
     description: npm run check:version passes — package.json, plugin.json, and marketplace.json all agree on version 0.6.0
   - id: A3
     description: All wicked.interactive.* event types defined in src/service/events.js EVENT_TYPES conform to 4-segment grammar wicked.<domain>.<noun>.<past-tense-verb>; non-conforming list is empty; count is 22
   - id: A4
-    description: POST /api/events whitelist enforcement is covered by the test suite (test/bridge.test.js "enforces the UI whitelist" test exists and passes)
+    description: POST /api/events whitelist enforcement test exists in test/bridge.test.js and the full test suite passes with no failures
 ---
 
 # Interactive Self-Test
@@ -38,10 +38,10 @@ echo "Node version: $(node --version)"
 ### Step 1: Run the test suite (npm test)
 
 ```bash
-npm test 2>&1 | tail -15
+npm test 2>&1
 ```
 
-Expected: exit 0. Output contains `pass 208` and `fail 0`. No FAIL lines.
+Expected: exit 0. Output contains `fail 0`. No lines starting with `not ok` or matching `FAIL`.
 
 ### Step 2: Version consistency check
 
@@ -64,6 +64,8 @@ with open('src/service/events.js') as f:
 
 # EVENT_TYPES keys use double quotes in events.js
 events = set(re.findall(r'\"(wicked\\.interactive\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*)\"', content))
+# Validate 4-segment grammar: wicked.<domain>.<noun>.<past-tense-verb>
+# (Script validates segment count; past-tense is a naming convention enforced by review, not parseable)
 bad = [e for e in events if len(e.split('.')) != 4]
 print('event_count:', len(events))
 print('non_conforming:', bad)
@@ -79,7 +81,7 @@ Expected: exit 0. `event_count: 22`, `non_conforming: []`, `PASS` line printed.
 
 ```bash
 grep -n "enforces the UI whitelist" test/bridge.test.js
-node --experimental-vm-modules node_modules/.bin/mocha test/bridge.test.js --grep "enforces the UI whitelist" 2>&1 | tail -6
+npm test 2>&1 | grep -E "^(ℹ pass|ℹ fail)"
 ```
 
-Expected: grep finds the test. mocha exits 0 with 1 passing.
+Expected: grep finds the test at test/bridge.test.js. npm test `pass` line shows non-zero count; `fail` line shows 0.

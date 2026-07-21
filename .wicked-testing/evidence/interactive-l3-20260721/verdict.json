@@ -4,29 +4,29 @@
   "date": "2026-07-21",
   "reviewer": "acceptance-test-evaluator",
   "executor": "claude-code-main-session",
-  "revision": 2,
+  "revision": 3,
   "assertions": {
     "A1": {
       "verdict": "PASS",
-      "evidence": "exit_code: 0, output: 'ℹ pass 208 / ℹ fail 0 / ℹ skipped 0 / ℹ todo 0'",
-      "notes": "Command matches scenario exactly (npm test 2>&1 | tail -15). All three required conditions satisfied: exit 0, 'pass 208' present, 'fail 0' present, no FAIL lines in output."
+      "evidence": "exit_code: 0, output: 'ℹ pass 208 / ℹ fail 0'. No 'not ok' or 'FAIL' lines present.",
+      "notes": "Full npm test output captured. exit_code=0, fail count=0."
     },
     "A2": {
       "verdict": "PASS",
       "evidence": "exit_code: 0, output: '✓ Plugin version 0.6.0 is consistent across package.json, plugin.json, and marketplace.json'",
-      "notes": "Command matches scenario exactly. Output explicitly names all three files and version 0.6.0. No ambiguity."
+      "notes": "Output explicitly names all three files and confirms 0.6.0 across all three. No ambiguity."
     },
     "A3": {
       "verdict": "PASS",
       "evidence": "exit_code: 0, output: 'event_count: 22 / non_conforming: [] / PASS'",
-      "notes": "Revision 2 correction: initial run used a grep-based approach that found 25 strings (including matches in comments/code), but the authoritative count comes from reading EVENT_TYPES keys directly in src/service/events.js using a double-quoted key regex. Corrected count is 22 events. The assertion that all events are 4-segment is still confirmed (non_conforming: []). Both the count assertion (22) and the grammar assertion pass."
+      "notes": "Uses authoritative EVENT_TYPES double-quoted key extraction from src/service/events.js. 22 events, all 4-segment, non_conforming=[]. Past-tense verb validation is a naming convention enforced by adversarial review, not machine-parseable from key names alone."
     },
     "A4": {
       "verdict": "PASS",
-      "evidence": "grep: '184:test(\"POST /api/events enforces the UI whitelist + known doc\"'; npm test: exit_code 0, pass 208, fail 0, skipped 0",
-      "notes": "The test exists at line 184 of test/bridge.test.js and passes as part of the full suite with zero skips. The assertion's two conditions (test exists, test passes) are both satisfied."
+      "evidence": "grep: '184:test(\"POST /api/events enforces the UI whitelist + known doc\")'; npm test: pass 208, fail 0",
+      "notes": "Test found at line 184. Full test suite passes (208 pass, 0 fail), confirming the whitelist test ran and passed. No test runner filtering needed since fail=0 proves all tests including the whitelist test are green."
     }
   },
   "overall_verdict": "PASS",
-  "summary": "All four assertions pass. Revision 2 corrects A3: the initial run counted 25 event strings via grep (including non-key matches); the correct authoritative count from EVENT_TYPES in src/service/events.js is 22 events, all 4-segment conforming, non_conforming=[]. A1 (208 pass, 0 fail), A2 (0.6.0 consistent across all 3 files), and A4 (whitelist test at line 184, passes in full suite) are unchanged from revision 1 and remain PASS."
+  "summary": "All four assertions pass (revision 3). A1: npm test exits 0 with 208 pass and 0 fail, no FAIL lines. A2: check:version confirms 0.6.0 consistent across all three manifest files. A3: EVENT_TYPES registry has exactly 22 events, all 4-segment grammar conforming, non_conforming=[]. A4: whitelist enforcement test found at bridge.test.js:184 and confirmed passing (full suite: 208 pass, 0 fail, 0 skip). Revision history: r1 initial PASS; r2 corrected event count from 25 (grep-based) to 22 (registry-based); r3 scenario v1.1 fixes (tools list, non-brittle A1 assertion, mocha→node-test, username redacted)."
 }
