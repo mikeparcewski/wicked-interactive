@@ -121,30 +121,34 @@ try {
   step("stage unlocked after completion");
 
   // Version rewind (AC-20..22): select v0 via VersionStrip dropdown → iframe shows original (no ANSWER).
-  const headVer = await page.evaluate(() => Number(document.querySelector(".wi-vsel select")?.value));
-  if (headVer > 0) {
-    await page.evaluate(() => {
-      const sel = document.querySelector(".wi-vsel select");
-      if (!sel) throw new Error(".wi-vsel select not found");
-      sel.value = "0";
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await page.waitForFunction((ans) => {
-      const f = document.querySelector("iframe");
-      try { return !new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
-    }, { timeout: 10000 }, ANSWER);
-    step("version rewind: v0 in VersionStrip restores original content (no ANSWER text in iframe)");
-    // Restore to head before the chat step
-    await page.evaluate((v) => {
-      const sel = document.querySelector(".wi-vsel select");
-      sel.value = String(v);
-      sel.dispatchEvent(new Event("change", { bubbles: true }));
-    }, headVer);
-    await page.waitForFunction((ans) => {
-      const f = document.querySelector("iframe");
-      try { return new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
-    }, { timeout: 10000 }, ANSWER);
-  }
+  // Assert the VersionStrip is present and at a real numeric version > 0 before rewinding.
+  const headVer = await page.evaluate(() => {
+    const sel = document.querySelector(".wi-vsel select");
+    if (!sel) throw new Error(".wi-vsel select not found — VersionStrip must be visible after a structural edit");
+    const v = Number(sel.value);
+    if (!Number.isFinite(v) || v < 1) throw new Error(`.wi-vsel select value "${sel.value}" is not a valid head version ≥ 1`);
+    return v;
+  });
+  await page.evaluate(() => {
+    const sel = document.querySelector(".wi-vsel select");
+    sel.value = "0";
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForFunction((ans) => {
+    const f = document.querySelector("iframe");
+    try { return !new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
+  }, { timeout: 10000 }, ANSWER);
+  step("version rewind: v0 in VersionStrip restores original content (no ANSWER text in iframe)");
+  // Restore to head before the chat step
+  await page.evaluate((v) => {
+    const sel = document.querySelector(".wi-vsel select");
+    sel.value = String(v);
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }, headVer);
+  await page.waitForFunction((ans) => {
+    const f = document.querySelector("iframe");
+    try { return new RegExp(ans).test(f.contentDocument.body.innerHTML); } catch { return false; }
+  }, { timeout: 10000 }, ANSWER);
 
   // Conversational panel round-trip (ADR-0014): a chat message appears in the transcript.
   await page.type(".wi-bar textarea", "make the whole page more premium");
