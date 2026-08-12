@@ -20,7 +20,14 @@ test.describe('reduced motion', () => {
     await expect(page.locator('#edDoc .ed-block--building')).toHaveCount(0);
 
     // Walk the rooms — each must be present and visible.
-    for (const selector of ['.band.demo', '.band.io', '.band.hood', '.closer']) {
+    for (const selector of [
+      '.band.demo',
+      '.band.io',
+      '.band.hood',
+      '.band.plane',
+      '.same-garden',
+      '.closer',
+    ]) {
       const section = page.locator(selector);
       await section.scrollIntoViewIfNeeded();
       await expect(section).toBeVisible();

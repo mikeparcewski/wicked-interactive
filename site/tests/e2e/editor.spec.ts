@@ -138,4 +138,56 @@ test.describe('editor simulation', () => {
     );
     await expect(editPip).not.toHaveClass(/is-active/);
   });
+
+  test('judges run independent passes and post verdicts', async ({ page }) => {
+    await gotoEditor(page);
+
+    const a11yJudge = page.locator('.ed-judge[data-rev="a11y"]');
+    await a11yJudge.scrollIntoViewIfNeeded();
+    await a11yJudge.click();
+    await expect(a11yJudge).toHaveClass(/is-passed/, { timeout: 10_000 });
+    const verdict = page.locator('#edVerdicts .ed-verdict[data-rev="a11y"]');
+    await expect(verdict).toHaveClass(/is-passed/);
+    await expect(verdict).toContainText('Contrast passes WCAG AA');
+
+    // A second judge posts its own row — verdicts accumulate independently.
+    await page.locator('.ed-judge[data-rev="qe"]').click();
+    await expect(page.locator('#edVerdicts .ed-verdict')).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.locator('#edVerdicts .ed-verdict[data-rev="qe"]')).toContainText(
+      'Exports clean',
+      { timeout: 10_000 },
+    );
+  });
+
+  test('governed toggle routes the build through the crew gate; edits stay instant', async ({
+    page,
+  }) => {
+    await gotoEditor(page);
+
+    // Gate strip is absent in solo mode.
+    await expect(page.locator('#edGate')).toBeHidden();
+
+    // Flip governed ON — the draft rebuilds routed through the control plane.
+    const govern = page.locator('#edGovern');
+    await govern.scrollIntoViewIfNeeded();
+    await govern.click();
+    await expect(govern).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#edGate')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('#edGate .ed-gate__chip').first()).toContainText('evidence');
+    // …and the version history records it as a governed draft.
+    await expect(page.locator('#edPips .ed-pip', { hasText: 'Governed draft' })).toBeVisible();
+
+    // An instant point-at-block edit does NOT wait on the gate.
+    await settleCanvas(page);
+    await openSayBar(page, 's');
+    await page.locator('.ed-say.is-open .ed-instr[data-instr="tighten"]').click();
+    await expect(page.locator(BLOCK_TEXT('s'))).toHaveText('One page everyone can act on.');
+    await expect(page.locator('#edGate')).toBeVisible();
+    await expect(page.locator('#edCue')).toContainText(/instant edit/i);
+
+    // Flip governed OFF — back to solo mode, gate gone, engine unchanged.
+    await govern.click();
+    await expect(govern).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#edGate')).toBeHidden();
+  });
 });

@@ -49,7 +49,7 @@ test.describe('mobile fallbacks', () => {
     await menuBtn.click();
     await expect(page.locator('#mobileMenu')).toBeVisible();
     await expect(menuBtn).toHaveAttribute('aria-expanded', 'true');
-    // 7 ecosystem rows + Medium + GitHub.
-    await expect(page.locator('#mobileMenu .mm-item')).toHaveCount(9);
+    // 5 plane-grouped product rows + Medium + GitHub (wicked-web@61396e4).
+    await expect(page.locator('#mobileMenu .mm-item')).toHaveCount(7);
   });
 });

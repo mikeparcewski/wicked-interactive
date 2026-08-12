@@ -1,26 +1,28 @@
-/* wicked-interactive — "The Studio" (family-dark hybrid)
+/* wicked-interactive — "The Studio" (the EXPERIENCE deep-dive)
    ==================================================================
    This marketing page IS the product. The signature interaction — point at a
    block, say the change, watch only that block rework — runs live in a dedicated
-   editor section. The page is a set of DISTINCT full-viewport "rooms" that snap
-   room-to-room:
+   editor section, now with a GOVERNED toggle (full drafts route through the
+   control plane; edits stay instant). The page is a set of DISTINCT
+   full-viewport "rooms" that snap room-to-room:
 
-     1. Hero            (from the LIVE f26d5fd build)
-     2. Point at anything — the live editor + style import + judges (NEW build)
-     3. Demo video      — the interactive aim→explore→record→storyboard player
-                          (revived from the original LIVE build)
-     4. Make anything / Send anything                              (NEW build)
-     5. Under the hood  — the real feature surface                 (NEW build)
-     6. Closer "That's the whole product"                         (NEW build)
+     1. Hero + live editor — point-and-say + style import + judges + governed
+     2. Demo video      — the interactive aim→explore→record→storyboard player
+     3. Make anything / Send anything
+     4. Under the hood  — the doc model, unchanged and beloved
+     5. The experience plane — two front doors + the shared SameGarden map
+     6. Closer "That's the whole product"
 
    TWO family schemes via the topbar toggle: DARK (near-black studio ground) and
    LIGHT (the family "harbor-blue" ground — deep teal-blue canvas, cream ink) —
-   see the :root[data-theme="light"] override below. Both keep the marigold accent
-   and the always-dark chrome (topbar/footer). The paper you edit stays a bright
+   see the :root[data-theme="light"] override below. The site ACCENT is the
+   experience plane's AMBER (--plane-experience #f0a868 in wicked-web tokens) —
+   this is the plane this product fronts — while the always-dark chrome
+   (topbar/footer) keeps the family marigold. The paper you edit stays a bright
    warm sheet in either scheme (a document floating on the studio ground — the
-   Figma/Sketch look). The marigold HIGHLIGHTER sweep + glowing DIFF
+   Figma/Sketch look). The amber HIGHLIGHTER sweep + glowing DIFF
    HALO ("only this block touched") are the signature marks. Every `.y` marker is
-   dark-ink-on-marigold — never white-on-yellow. Type + fonts inherit the shared
+   dark-ink-on-amber — never white-on-amber. Type + fonts inherit the shared
    wicked-web family tokens (--font-display/--font-mono/--ease/--topbar-h); only
    the layout + interaction + this dark studio palette are the site's own. */
 
@@ -80,18 +82,20 @@ html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
   --faint: rgba(232, 237, 242, 0.34);
   --hairline: rgba(232, 237, 242, 0.10);
   --hairline-strong: rgba(232, 237, 242, 0.20);
-  /* accents — marigold fills stay bright; accent-as-TEXT goes bright gold */
-  --accent: #ffda19;         /* bright marigold — FILLS, dots, seams, highlighter */
-  --accent-bright: #ffe14d;  /* hover fill */
-  --accent-ink: #ffd24a;     /* accent used as TEXT on dark */
-  --gold: #ffcf3a;           /* bright gold — accent TEXT on the dark studio */
-  --on-accent: #1c2c36;      /* dark ink ON a yellow fill */
+  /* accents — the EXPERIENCE PLANE'S AMBER (matches --plane-experience in the
+     shared wicked-web tokens): fills, dots, seams, highlighter. Accent-as-TEXT
+     clears ≥4.5:1 on every studio surface (7.5:1 on --surface). */
+  --accent: #f0a868;         /* plane amber — FILLS, dots, seams, highlighter */
+  --accent-bright: #f6bd8a;  /* hover fill */
+  --accent-ink: #f2b078;     /* accent used as TEXT on dark */
+  --gold: #f0a868;           /* plane amber — accent TEXT on the dark studio */
+  --on-accent: #1c2c36;      /* dark ink ON an amber fill (7.1:1) */
   --link: #86c8ff;
   /* the paper you edit — its own bright warm world (brand-recolored by style import) */
   --paper: #fbf7ec;
   --paper-ink: #23303a;
   --paper-muted: #5f6f78;
-  --halo: 255, 200, 20;      /* highlighter amber glow — reads on dark */
+  --halo: 240, 168, 104;     /* highlighter amber glow — reads on dark */
   --shadow-rgb: 0, 0, 0;     /* real black depth on the dark studio */
   --grain-opacity: 0.05;
   --grain-blend: screen;     /* screen lifts grain on the dark ground */
@@ -126,11 +130,13 @@ html { scroll-snap-type: y mandatory; scroll-padding-top: var(--topbar-h); }
 
 /* Chrome tokens — assert the family near-black dark chrome on the fixed Topbar
    + Footer unconditionally, so the bars, dropdown surfaces, and icon-on-accent
-   ink track the dark ground in either toggle state. */
+   ink track the dark ground in either toggle state. The chrome keeps the FAMILY
+   MARIGOLD accent (wordmark mark, hovers) — the plane amber is this page's own. */
 .topbar, .footer {
   --ink: #e6edf3; --muted: rgba(230, 237, 243, 0.55); --faint: rgba(230, 237, 243, 0.24);
   --hairline: rgba(230, 237, 243, 0.07); --hairline-strong: rgba(230, 237, 243, 0.14);
   --surface: #1b222e; --canvas: #161c26; --accent-ink: #0d1117;
+  --accent: #ffda19; --accent-bright: #ffe14d;
 }
 
 * { box-sizing: border-box; }
@@ -177,7 +183,7 @@ body::after {
   content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
     repeating-linear-gradient(to bottom, rgba(var(--studio-line), 0.14) 0 1px, transparent 1px 9px),
-    radial-gradient(ellipse 48% 54% at 3% 3%,   rgba(255, 200, 20, 0.14), transparent 60%),
+    radial-gradient(ellipse 48% 54% at 3% 3%,   rgba(240, 168, 104, 0.16), transparent 60%),
     radial-gradient(ellipse 54% 54% at 97% 97%, rgba(60, 130, 180, 0.12), transparent 62%);
   background-repeat: no-repeat, no-repeat, no-repeat;
   background-size: 7px 100%, 100% 100%, 100% 100%;
@@ -200,10 +206,10 @@ body::after {
 .band > .wrap { position: relative; z-index: 1; }
 
 /* Alternating band rhythm: hero + demo + hood transparent (canvas shows raw);
-   point + io + closer get a faint warm-light veil so each reads as its own band
-   while the dark grid still shows through. All translucent — never opaque. */
+   point + io + plane + closer get a faint warm-light veil so each reads as its
+   own band while the dark grid still shows through. Translucent — never opaque. */
 .hero, .demo, .hood { background: transparent; }
-.point, .io, .closer { background: color-mix(in oklab, #ffe6a8 5%, transparent); }
+.point, .io, .plane, .closer { background: color-mix(in oklab, #f0a868 5%, transparent); }
 
 .sec-head { max-width: 100%; }
 .sec-eyebrow {
@@ -253,6 +259,9 @@ body::after {
 
 /* "Point at anything" format switcher */
 .ed-formats { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 8px; }
+/* the a11y group wraps ONLY the format buttons (the governed toggle is its own
+   control) — inline-flex keeps the row's visual rhythm identical */
+.ed-fmts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 9px; }
 .ed-formats__lbl {
   font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em;
   text-transform: uppercase; color: var(--muted); margin-right: 3px;
@@ -265,6 +274,30 @@ body::after {
 }
 .ed-fmt:hover { border-color: var(--accent); color: var(--ink); }
 .ed-fmt.is-active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 700; }
+
+/* ---- the GOVERNED toggle — additive attach, one switch ------------------- */
+.ed-govern {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; font-weight: 700; color: var(--muted);
+  background: transparent; border: 1.5px solid var(--hairline-strong);
+  border-radius: 999px; padding: 5px 13px 5px 7px; cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+.ed-govern:hover { border-color: var(--accent); color: var(--ink); }
+.ed-govern__track {
+  width: 26px; height: 14px; border-radius: 999px; background: var(--canvas);
+  border: 1px solid var(--hairline-strong); position: relative; flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+.ed-govern__knob {
+  position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
+  border-radius: 999px; background: var(--faint);
+  transition: transform 0.2s var(--ease), background 0.2s;
+}
+.ed-govern.is-on { border-color: var(--accent); color: var(--ink); background: rgba(var(--halo), 0.12); }
+.ed-govern.is-on .ed-govern__track { background: var(--accent); border-color: var(--accent); }
+.ed-govern.is-on .ed-govern__knob { transform: translateX(12px); background: var(--on-accent); }
 
 /* the browser-framed window */
 .ed-frame {
@@ -500,6 +533,37 @@ body::after {
 .ed-cue[data-state="ready"] { background: color-mix(in oklab, var(--accent) 14%, var(--surface)); font-weight: 600; }
 .ed-cue[data-state="ready"] .ed-cue__dot { animation: ed-cuepulse 1.5s var(--ease) infinite; }
 .ed-cue[data-state="demo"] .ed-cue__dot { animation: ed-blink 1s steps(2,start) infinite; }
+.ed-cue[data-state="govern"] { background: color-mix(in oklab, var(--accent) 12%, var(--surface)); }
+.ed-cue[data-state="govern"] .ed-cue__dot { animation: ed-blink 0.9s steps(2,start) infinite; }
+
+/* ---- the CREW GATE strip — a governed draft's receipt --------------------
+   Lands between the paper and the cue when a governed build answers. The doc
+   flow stays untouched; this is the control plane's evidence riding along. */
+.ed-gate {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 7px 13px;
+  border-top: 1px solid color-mix(in oklab, var(--accent) 40%, var(--hairline));
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  animation: ed-dock 0.3s var(--ease) 1;
+}
+.ed-gate[hidden] { display: none; }
+.ed-gate__k {
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.16em;
+  text-transform: uppercase; font-weight: 700; color: var(--on-accent);
+  background: var(--accent); border-radius: 5px; padding: 3px 8px; flex-shrink: 0;
+}
+.ed-gate__chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ed-gate__chip {
+  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.04em;
+  color: var(--muted); border: 1px solid var(--hairline-strong);
+  border-radius: 999px; padding: 3px 9px;
+}
+.ed-gate__chip.is-ok {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline-strong));
+  color: var(--accent-ink); font-weight: 700;
+}
+.ed-gate__note { margin-left: auto; font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.03em; color: var(--muted); }
+/* :not(.is-shipped) keeps the export glow's precedence when both states hold */
+.ed-frame.is-governed:not(.is-shipped) { box-shadow: 0 44px 100px -54px rgba(var(--shadow-rgb), 0.9), 0 0 0 1.5px rgba(var(--halo), 0.35) inset; }
 @keyframes ed-cuepulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(var(--halo), 0.6); }
   50% { box-shadow: 0 0 0 6px rgba(var(--halo), 0); }
@@ -886,6 +950,20 @@ body::after {
 .hood-card code { font-family: var(--font-mono); font-size: 0.84em; color: var(--gold); font-weight: 600; }
 
 /* ==========================================================================
+   ROOM 5b — THE EXPERIENCE PLANE (two front doors + the SameGarden map).
+   Reuses the hood-card grammar (one shared card language for "what's real");
+   .plane-grid pins the three story cards to one row on desktop. The shared
+   SameGarden component brings its own styles + the --plane-* tokens from
+   wicked-web; it sits full-bleed under the cards inside this band.
+========================================================================== */
+.plane { padding: clamp(20px, 3.2vw, 40px) 0 0; }
+.plane .sec-intro b { color: var(--ink); font-weight: 700; box-shadow: inset 0 -0.42em 0 rgba(var(--halo), 0.26); }
+.plane-grid { grid-template-columns: repeat(3, 1fr); }
+.plane .hood-card p b { color: var(--ink); font-weight: 700; }
+/* the map's own top hairline provides the seam; give it air above */
+.plane .same-garden { margin-top: clamp(20px, 3vw, 36px); border-top-color: var(--hairline-strong); }
+
+/* ==========================================================================
    ROOM 6 — CLOSER + INSTALL (NEW build)
 ========================================================================== */
 .finale { display: flex; flex-direction: column; }
@@ -969,6 +1047,8 @@ body::after {
   .io-card__go { flex-shrink: 0; white-space: nowrap; }
   /* hand the editor "paper" more of the narrow frame for a readable line length */
   .ed-doc { padding-inline: clamp(14px, 4vw, 30px); }
+  /* the gate strip wraps on phones — let the note start its own line cleanly */
+  .ed-gate__note { margin-left: 0; width: 100%; }
   /* NB: the closer's install command already wraps via the ≤760px block
      (`.install__code { white-space: pre-wrap; overflow-wrap: break-word }`);
      ≤600px is a subset of ≤760px, so no re-declaration is needed here. */
@@ -987,14 +1067,15 @@ body::after {
 /* ---- reduced motion ----------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .ed-pulse, .ed-block__shim, .ed-block.is-target::after, .ed-block--reworking::after,
-  .ed-block--changed, .ed-block--changed::before, .ed-say.is-open,
+  .ed-block--changed, .ed-block--changed::before, .ed-say.is-open, .ed-gate,
   .ed-cue__dot, .ed-judge.is-running .ed-judge__s, .ed-doc.is-retheming::before,
   .vid-rec-dot.is-on, .vid-cursor, .vpu-cursor, .vid-target-r.sel, .vid-target-rbtn,
   .vid-sb-thumb::after, #vS2.is-on .vid-log-line, .vid-finput .vc, .vc-sm { animation: none !important; }
   .ed-block--changed::before { opacity: 1; }
   #vS2.is-on .vid-log-line { opacity: 1; }
   .vid-cursor { opacity: 1; }
-  .step::after, .io-card, .hood-card::after, .ed-doc, .vid-fill { transition: none; }
+  .step::after, .io-card, .hood-card::after, .ed-doc, .vid-fill,
+  .ed-govern, .ed-govern__track, .ed-govern__knob { transition: none; }
   * { scroll-behavior: auto !important; }
   /* Soften snapping so it can never feel like a scroll trap when motion is reduced;
      mandatory remains the default for everyone else (line 32). */

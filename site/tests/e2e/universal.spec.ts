@@ -42,7 +42,9 @@ test.describe('shared chrome', () => {
     await btn.click();
     await expect(menu).toBeVisible();
     await expect(btn).toHaveAttribute('aria-expanded', 'true');
-    await expect(menu.locator('.dropdown-item')).toHaveCount(7);
+    // Four-plane nav taxonomy (wicked-web@61396e4): 5 products across 4 planes.
+    await expect(menu.locator('.dropdown-plane')).toHaveCount(4);
+    await expect(menu.locator('.dropdown-item')).toHaveCount(5);
     await expect(
       menu.locator('.dropdown-item', { hasText: 'interactive' }),
     ).toHaveAttribute('href', 'https://wi.wickedagile.com');
