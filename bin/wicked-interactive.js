@@ -161,12 +161,17 @@ async function main() {
     const { runValidate } = await import("../src/artifact/validate.js");
     process.exit((await runValidate(args)) ?? 0);
   }
+  if (cmd === "adopt") {
+    const { runAdopt } = await import("../src/artifact/adopt.js");
+    process.exit((await runAdopt(args)) ?? 0);
+  }
 
   if (cmd !== "serve") {
-    console.error("usage: wicked-interactive <create|publish|validate|serve> [options]");
-    console.error("  create   --from-crew <id> | --from-garden <id> | --from-file <path>  [--output <path>]");
+    console.error("usage: wicked-interactive <create|publish|validate|adopt|serve> [options]");
+    console.error("  create   --from-crew <id> | --from-garden <id> | --from-file <path>  [--output <path>] [--project <id>]");
     console.error("  publish  <artifact-path> [--api-key <key>]");
     console.error("  validate <artifact-path>");
+    console.error("  adopt    [--root <docs-dir>] [--crew-api <base-url>]   re-register doc→project breadcrumbs");
     console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart]");
     process.exit(1);
   }

@@ -12,7 +12,7 @@ import express from "express";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
@@ -26,6 +26,7 @@ import { exportPptx } from "./pptx.js";
 import { preflight } from "./preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive } from "./serve-bridge.mjs";
+import { bindDocToProject, projectIdFor } from "./project.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -336,7 +337,22 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // The service emit, bound to a doc's identity. Stamps document_id + producer so the
   // ownership table + loop-safety (consumers drop their own producer) hold.
   function serviceEmit(documentId) {
-    return (type, payload) => emitEvent(type, { document_id: documentId, ...payload }, { producer: PRODUCERS.SERVICE });
+    // Additive project enrichment (DES-PROJECT-001 §2.3): a doc bound to a crew project carries
+    // its `project_id` on every service-emitted payload (version.created, export.generated, …).
+    // The breadcrumb is the doc-side hint — advisory, read per emit (docs emit rarely); an
+    // unbound doc's payloads are byte-identical to before this field existed.
+    //
+    // DERIVED, never caller-supplied: the binding is a fact about the DOC, so a payload's own
+    // project_id is dropped — bound docs get the breadcrumb's id (applied after the spread so it
+    // cannot be overridden), unbound docs carry none. Anything else would let one emit site
+    // forge attribution into another project's activity feed.
+    return (type, payload) => {
+      const projectId = projectIdFor(docDir(documentId));
+      const enriched = { document_id: documentId, ...payload };
+      delete enriched.project_id;
+      if (projectId) enriched.project_id = projectId;
+      return emitEvent(type, enriched, { producer: PRODUCERS.SERVICE });
+    };
   }
 
   async function mountDoc(name) {
@@ -428,7 +444,15 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
     try {
       const correlationId = randomUUID();
-      const { event_id } = await emitEvent(type, payload, { producer: PRODUCERS.UI, correlationId, sessionId: SESSION_ID });
+      // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)
+      // for a project-bound doc carry its project_id (DES-PROJECT-001 §2.3). DERIVED ONLY — a
+      // browser-supplied project_id is dropped, bound or not, so a client cannot spoof a doc
+      // into (or out of) a project's activity feed; the breadcrumb is the one source.
+      const projectId = projectIdFor(docDir(name));
+      const enriched = { ...payload };
+      delete enriched.project_id;
+      if (projectId) enriched.project_id = projectId;
+      const { event_id } = await emitEvent(type, enriched, { producer: PRODUCERS.UI, correlationId, sessionId: SESSION_ID });
       res.json({ ok: true, event_id, correlation_id: correlationId });
     } catch (e) {
       res.status(400).json({ error: e.message });
@@ -449,6 +473,40 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
     if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
 
+    // Optional crew-project binding (DES-PROJECT-001 §2.3): registration is the AUTHORITY and it
+    // happens FIRST — a doc that cannot be filed (unknown/archived project, no daemon reachable)
+    // is a loud error with NO doc created, never a queued intent. A membership that briefly
+    // predates its doc dir is fine by contract (members may predate what they point to); the
+    // reverse — a doc the caller believes is filed but isn't — is the failure §2.2 forbids.
+    // No `project` field ⇒ none of this runs: the offline solo-creator loop is untouched.
+    const projectId = String(req.body?.project ?? "").trim();
+    // Binds through here so BOTH creation branches share one contract: the dir must exist for
+    // the breadcrumb, but a FAILED bind must leave no trace — the dir is removed again when
+    // this call (not a later step) created it. "Nothing created on a refused bind" is literal.
+    const bindProject = projectId
+      ? async (dir, title) => {
+          const existed = existsSync(dir);
+          mkdirSync(dir, { recursive: true });
+          try {
+            await bindDocToProject({ dir, docName: name, projectId, meta: { title } });
+          } catch (e) {
+            if (!existed) rmSync(dir, { recursive: true, force: true });
+            throw e;
+          }
+          return { project_id: projectId };
+        }
+      : null;
+    if (bindProject) {
+      // Validate reachability + attachability up-front (cheap GET) so the create fails BEFORE
+      // any disk write when the binding can never succeed.
+      try {
+        const { assertProjectAttachable, resolveCrewApi } = await import("./project.js");
+        await assertProjectAttachable(resolveCrewApi(), projectId);
+      } catch (e) {
+        return res.status(502).json({ error: e.message });
+      }
+    }
+
     // Demo (ADR-0018): seed a placeholder storyboard v0, emit wicked.interactive.doc.created(kind:demo).
     // The agent explores the app, authors demo.spec.mjs, then emits wicked.interactive.demo.requested.
     if (isDemo) {
@@ -457,10 +515,13 @@ export function createMultiServer({ root, frontendDir } = {}) {
       if (u.protocol !== "http:" && u.protocol !== "https:") return res.status(400).json({ error: "demo url must be http or https" });
       try {
         const dir = docDir(name);
+        // Registration precedes any doc content; bindProject owns the dir lifecycle (creates it
+        // for the breadcrumb, removes it again on a refused bind).
+        const bound = bindProject ? await bindProject(dir, name) : null;
         initWorkspace(dir, demoPlaceholder(name, demoUrl, brief), { kind: "demo" });
         await mountDoc(name);
-        await emitEvent("wicked.interactive.doc.created", { document_id: name, kind: "demo", url: demoUrl, brief }, { producer: PRODUCERS.SERVICE });
-        return res.json({ name, head: 0, kind: "demo", learning: true });
+        await emitEvent("wicked.interactive.doc.created", { document_id: name, kind: "demo", url: demoUrl, brief, ...(bound ?? {}) }, { producer: PRODUCERS.SERVICE });
+        return res.json({ name, head: 0, kind: "demo", learning: true, ...(bound ?? {}) });
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
@@ -476,6 +537,8 @@ export function createMultiServer({ root, frontendDir } = {}) {
 
     try {
       const dir = docDir(name);
+      // Registration (the authority) precedes content; bindProject owns the dir lifecycle.
+      const bound = bindProject ? await bindProject(dir, name) : null;
       initWorkspace(dir, html);
       await mountDoc(name);
       // Seed the original ask as the first conversation entry — the durable "intent" the Intent
@@ -483,9 +546,9 @@ export function createMultiServer({ root, frontendDir } = {}) {
       if (brief) appendConversation(dir, { role: "user", text: brief });
       const docKind = fromSource ? "source" : (kind || "html");
       await emitEvent("wicked.interactive.doc.created",
-        { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}), ...(style ? { style } : {}) },
+        { document_id: name, kind: docKind, ...(fromSource ? { source_paths: sourcePaths, brief } : {}), ...(style ? { style } : {}), ...(bound ?? {}) },
         { producer: PRODUCERS.SERVICE });
-      res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}) });
+      res.json({ name, head: 0, ...(fromSource ? { generating: true } : {}), ...(bound ?? {}) });
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
