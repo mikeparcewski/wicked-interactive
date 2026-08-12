@@ -33,6 +33,10 @@
     },
     "url": {
       "type": "string"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "ADDITIVE (DES-PROJECT-001 \u00a72.3): the crew project this doc is bound to. Absent for unbound docs; consumers that don't know the field ignore it."
     }
   },
   "additionalProperties": true
