@@ -2,31 +2,40 @@
 /**
  * index.astro — wicked-interactive landing (wi.wickedagile.com).
  *
- * A HYBRID of the two builds, on the family DARK ground:
- *   1. Hero              — the clean statement hero from the LIVE (f26d5fd) build.
- *   2. Point at anything — the live editor + style import + the four judges (NEW
- *                          build), moved into its own section; the "Demo video"
- *                          chip is gone from its selector — it's a section now.
- *   3. Demo video        — the interactive aim→explore→record→storyboard player
- *                          revived from the original LIVE build, rebuilt as an
- *                          auto-advancing + clickable stepper (no scroll-jack) so
- *                          it lives in one snapped viewport.
- *   4. Make anything / Send anything                              (NEW build).
- *   5. Under the hood    — the real feature surface                (NEW build).
- *   6. Closer "That's the whole product"                          (NEW build).
+ * THE EXPERIENCE DEEP-DIVE: interactive is the creator-facing skin of the
+ * wicked platform's experience plane. The soul stays "Point at the page. Say
+ * the change. Ship it tonight." — the rooms, on the family DARK ground:
+ *
+ *   1. Hero + live editor — the signature point-and-say engine, now with a
+ *                           GOVERNED toggle: full drafts route through the
+ *                           control plane (crew answers the bus with an
+ *                           evidence-backed, gated draft) while point-at-block
+ *                           edits stay instant. Off by default — solo/offline
+ *                           creation needs zero platform.
+ *   2. Demo video         — the interactive aim→explore→record→storyboard
+ *                           player (auto-advancing + clickable stepper).
+ *   3. Make anything / Send anything — IO cards that drive the editor.
+ *   4. Under the hood     — the doc model, unchanged and beloved.
+ *   5. The experience plane — two front doors (interactive = creator skin,
+ *                           studio = coder skin) over one project model, the
+ *                           governed route, and additive attach; then the
+ *                           shared four-plane SameGarden map.
+ *   6. Closer "That's the whole product" + install.
  *
  * Both demo engines are canned (repeatable, honest — see the notes under them);
  * the real product runs on the Claude Code session already in the visitor's
- * terminal over wicked-bus. Shared wicked-web chrome (Base/Topbar/Footer) owns
- * the header, footer, and fonts; this page styles + drives the studio, dark.
+ * terminal over wicked-bus. Shared wicked-web chrome (Base/Topbar/Footer/
+ * SameGarden) owns the header, footer, map, and fonts; this page styles +
+ * drives the studio, dark, with the experience plane's amber as its accent.
  */
 import Base from 'wicked-web/layouts/Base.astro';
 import Topbar from 'wicked-web/components/Topbar.astro';
 import Footer from 'wicked-web/components/Footer.astro';
+import SameGarden from 'wicked-web/components/SameGarden.astro';
 import '../styles/interactive.css';
 
 const title = 'wicked-interactive — Point at the page. Say the change. Ship it tonight.';
-const description = 'Describe a deck, doc, landing page, or demo video in plain language and watch it build in your browser. Then click any block and say the change — only that block reworks, everything else holds. Export self-contained HTML, PDF, PowerPoint, or video. No code, no design tickets — it runs on the Claude Code session already in your terminal.';
+const description = 'The creator skin of the wicked platform: describe a deck, doc, landing page, or demo video and watch it build in your browser, then point at any block and say the change — only that block reworks. Solo and offline works with zero platform; bind a project and full drafts route governed through the control plane — evidence-backed, gate-able, auditable — while your edits stay instant. Export self-contained HTML, PDF, PowerPoint, or video.';
 const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 ---
 
@@ -41,9 +50,9 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
        "the hero IS the editor" model on the current engine. ═══════════════ -->
   <section class="hero" id="top">
     <div class="wrap">
-      <div class="kicker">wicked-interactive · a creative surface on the wicked substrate</div>
+      <div class="kicker">wicked-interactive · the creator skin of the experience plane</div>
       <h1>Point at the page. Say the change. <span class="y">Ship it tonight.</span></h1>
-      <p class="lede">A creative surface on the same substrate: describe it, watch it build, ship HTML/PDF/deck. It composes the family's building blocks; it does not close the loop.</p>
+      <p class="lede">Describe it, watch it build in your browser, ship HTML/PDF/deck/video — <b>solo and offline, zero platform required</b>. When a doc has stakes, flip it governed: full drafts route through the control plane with evidence and a gate, while your edits stay instant.</p>
 
       <div class="editor" id="editor">
         <div class="ed-formats" role="group" aria-label="Point at any format">
@@ -51,6 +60,11 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           <button class="ed-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
           <button class="ed-fmt" type="button" data-fmt="deck">Investor deck</button>
           <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
+          <button class="ed-govern" id="edGovern" type="button" aria-pressed="false"
+                  title="Bind a project: full drafts route governed through the control plane — edits stay instant">
+            <span class="ed-govern__track" aria-hidden="true"><span class="ed-govern__knob"></span></span>
+            Governed
+          </button>
         </div>
 
         <div class="editor-stage">
@@ -70,6 +84,16 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
             </form>
 
             <div class="ed-doc" id="edDoc" aria-live="polite"></div>
+
+            <div class="ed-gate" id="edGate" hidden>
+              <span class="ed-gate__k">crew gate</span>
+              <span class="ed-gate__chips">
+                <span class="ed-gate__chip is-ok">evidence attached ✓</span>
+                <span class="ed-gate__chip is-ok">verdict: pass</span>
+                <span class="ed-gate__chip">audit trail saved</span>
+              </span>
+              <span class="ed-gate__note">instant edits skip the gate</span>
+            </div>
 
             <div class="ed-cue" id="edCue" data-state="idle">
               <span class="ed-cue__dot" aria-hidden="true"></span>
@@ -118,7 +142,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           </div>
         </div>
 
-        <p class="ed-note"><b>Real point-and-say editing, style import, and reviewers &mdash; canned for this tour.</b> The product itself runs on the Claude Code session already in your terminal; nothing leaves your machine.</p>
+        <p class="ed-note"><b>Real point-and-say editing, style import, reviewers, and the governed route &mdash; canned for this tour.</b> The product itself runs on the Claude Code session already in your terminal; in solo mode nothing leaves your machine, and a project binding is opt-in.</p>
       </div>
     </div>
   </section>
@@ -450,6 +474,43 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     </div>
   </section>
 
+  <!-- ════ ROOM 5b — THE EXPERIENCE PLANE (the platform story) ═══════════
+       Honest positioning: interactive is one of TWO front doors over the same
+       platform (studio is the coder skin; both drive the same projects through
+       crew — the Project model is landing now). Generation can run GOVERNED
+       through the control plane while instant edits stay instant, and none of
+       it is required: a project binding is additive, opt-in. The shared
+       SameGarden four-plane map closes the room. ═════════════════════════ -->
+  <section class="band plane" id="platform">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="sec-eyebrow"><b>04</b> The experience plane</span>
+        <h2 class="sec-title">Two front doors. <span class="y">One platform.</span></h2>
+        <p class="sec-intro">wicked-interactive is the <b>creator skin</b> of the wicked platform's experience plane &mdash; and everything above works with no platform at all. Attach one when a doc has stakes.</p>
+      </div>
+
+      <ul class="hood-grid plane-grid">
+        <li class="hood-card">
+          <span class="hood-card__k">Two front doors</span>
+          <h3>Creator skin, coder skin &mdash; one project model</h3>
+          <p>This is where creators live; <b>studio</b> is the run board where coders live. Both are pure clients of crew's API, driving the <em>same projects</em> &mdash; the shared Project model is landing now.</p>
+        </li>
+        <li class="hood-card hood-card--feature">
+          <span class="hood-card__k">Governed generation</span>
+          <h3>Flip a build governed and it earns its way out</h3>
+          <p>A governed build routes over the bus to <b>crew</b>, which answers with a real draft &mdash; <em>evidence-backed, gate-able, auditable</em>. Instant point-at-block edits never wait on a gate.</p>
+        </li>
+        <li class="hood-card">
+          <span class="hood-card__k">Additive attach</span>
+          <h3>Zero platform required &mdash; binding is opt-in</h3>
+          <p>Solo and offline creation works with <em>nothing else installed</em>. A project binding is additive: attach one for governance and a shared record &mdash; the doc model doesn't change at all.</p>
+        </li>
+      </ul>
+    </div>
+
+    <SameGarden current="wicked-interactive" />
+  </section>
+
   <!-- ════ ROOM 6 — CLOSER + INSTALL (NEW build) ═════════════════════════ -->
   <div class="finale">
     <section class="closer">
@@ -457,7 +518,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         <div class="closer-intro">
           <div class="kicker">That's the whole product</div>
           <h2>One block changed. <span class="y">Everything else held.</span></h2>
-          <p>Every part of this page &mdash; the point-and-say edits, the style import, the four reviewers, the demo-video recorder, the version timeline &mdash; runs on the Claude Code session <em>already open in your terminal</em>. A creative surface on the same substrate: describe it, watch it build, ship HTML/PDF/deck. It <em>composes the family's building blocks</em>; it does not close the loop. Nothing to host, nothing to learn. Install it and your next deck is a conversation, not a weekend.</p>
+          <p>Every part of this page &mdash; the point-and-say edits, the style import, the four reviewers, the demo-video recorder, the version timeline &mdash; runs on the Claude Code session <em>already open in your terminal</em>. Zero platform required: solo and offline creation just works. And when a doc has stakes, bind a project &mdash; full drafts route <em>governed through the control plane</em> with evidence and an audit trail, while your edits stay instant. Nothing to host, nothing to learn. Install it and your next deck is a conversation, not a weekend.</p>
           <div class="closer-cta">
             <a class="gh-pill" href="https://github.com/mikeparcewski/wicked-interactive#readme" target="_blank" rel="noopener">
               <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.02-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -586,7 +647,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     var THEMES = {
-      _default: { label: "the studio default", paper: "#fbf7ec", ink: "#23303a", muted: "#5f6f78", accent: "#ffda19", halo: "255,218,25" },
+      _default: { label: "the studio default", paper: "#fbf7ec", ink: "#23303a", muted: "#5f6f78", accent: "#f0a868", halo: "240,168,104" },
       stripe:   { label: "stripe.com",         paper: "#ffffff", ink: "#0a2540", muted: "#425466", accent: "#635bff", halo: "99,91,255" },
       linear:   { label: "linear.app",         paper: "#f6f7fb", ink: "#16182d", muted: "#5b5f6e", accent: "#5e6ad2", halo: "94,106,210" },
       sunset:   { label: "sunset.studio",       paper: "#fff5ec", ink: "#3a1f1a", muted: "#8a5a4a", accent: "#ff6b3d", halo: "255,107,61" }
@@ -611,6 +672,8 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var styleForm = document.getElementById("edStyleForm");
     var styleUrl = document.getElementById("edStyleUrl");
     var verdictsEl = document.getElementById("edVerdicts");
+    var governBtn = document.getElementById("edGovern");
+    var gateEl = document.getElementById("edGate");
     var fmtBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-fmt"));
     var exBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-ex"));
     var brandBtns = Array.prototype.slice.call(document.querySelectorAll(".ed-brand"));
@@ -624,6 +687,7 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
     var active = 0;
     var selected = null;
     var building = false;
+    var governed = false;
     var curTheme = "_default";
     var userActed = false;
     var autoStarted = false;
@@ -751,6 +815,9 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
           doc.classList.remove("is-focusing");
         }, reduced ? 400 : 1500);
         pushVersion(KIND_NAME[def.kind], INSTR[key]);
+        // The governed contract's other half: point-at-block edits are
+        // deterministic and land instantly — only full drafts route to crew.
+        if (governed) setCue("ready", "Instant edit &mdash; deterministic, no gate. Only full drafts route through <b>crew</b>.");
       }, wait);
     }
 
@@ -799,17 +866,41 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       fmt = f; selected = null; live = {};
       curTheme = "_default"; applyTheme("_default", true);
       DOCS[f].blocks.forEach(function (b) { live[b.id] = { key: "base", text: b.text }; });
-      history = [{ vlabel: "v0", whatHTML: "First draft", blocks: clone(live), theme: "_default" }];
+      history = [{
+        vlabel: "v0",
+        whatHTML: governed ? 'Governed draft &rarr; <em>via crew</em>' : "First draft",
+        blocks: clone(live), theme: "_default"
+      }];
       active = 0;
       urlEl.textContent = DOCS[f].url;
       if (!fromPrompt) input.value = DOCS[f].prompt;
       resetExport();
       resetReviews();
+      resetGate();
       render(true);
       renderPips();
       fmtBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-fmt") === f); });
-      setCue("build", "Building your first draft&hellip;");
-      setTimeout(function () { if (userActed) cueReady(); }, reduced ? 300 : 1400);
+      if (governed) {
+        // GOVERNED BUILD — the draft routes over the bus to the control plane;
+        // crew answers with an evidence-backed draft and the gate strip lands.
+        setCue("govern", "Routed over the bus &mdash; <b>crew</b> is drafting with evidence&hellip;");
+        setTimeout(openGate, reduced ? 350 : 1900);
+      } else {
+        setCue("build", "Building your first draft&hellip;");
+        setTimeout(function () { if (userActed) cueReady(); }, reduced ? 300 : 1400);
+      }
+    }
+
+    function openGate() {
+      if (!governed || !gateEl) return;
+      gateEl.hidden = false;
+      frame.classList.add("is-governed");
+      setCue("ready", "Draft answered by <b>crew</b> &mdash; evidence attached, gate green, fully audited. Edits stay instant.");
+    }
+    function resetGate() {
+      if (!gateEl) return;
+      gateEl.hidden = true;
+      frame.classList.remove("is-governed");
     }
 
     function applyTheme(key, silent) {
@@ -932,6 +1023,25 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
 
     promptForm.addEventListener("submit", function (e) { e.preventDefault(); markUserActed(); loadFormat(fmt, true); });
     fmtBtns.forEach(function (b) { b.addEventListener("click", function () { markUserActed(); loadFormat(b.getAttribute("data-fmt"), false); }); });
+
+    // The GOVERNED toggle — additive attach, made tangible. ON binds a canned
+    // project and rebuilds the draft through the control plane (gate strip +
+    // "Governed draft" version); OFF returns to solo mode. Point-at-block
+    // edits behave identically either way — that's the pitch.
+    if (governBtn) {
+      governBtn.addEventListener("click", function () {
+        markUserActed();
+        governed = !governed;
+        governBtn.setAttribute("aria-pressed", governed ? "true" : "false");
+        governBtn.classList.toggle("is-on", governed);
+        if (governed) {
+          loadFormat(fmt, true);
+        } else {
+          resetGate();
+          setCue("ready", "Solo mode &mdash; no platform attached. Everything still works exactly the same.");
+        }
+      });
+    }
 
     styleForm.addEventListener("submit", function (e) {
       e.preventDefault(); markUserActed();
