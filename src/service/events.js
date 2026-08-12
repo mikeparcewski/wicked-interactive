@@ -16,10 +16,11 @@ export const DOMAIN = "wicked-interactive";
 // The producers in the loop. The service bridge stamps UI-originated events with
 // producer UI so consumers can drop their own emissions (loop safety).
 //
-// CREW (wi-crew) is the governed answerer: a wicked-crew daemon subscribing to doc.created and
-// answering with draft.completed through a governed workflow run, in place of an ad-hoc assist
-// session (Phase 7c spike). It is an ADDITIVE vocabulary row — same events, same payloads, one
-// more allowed producer — so the service needs no other change to accept crew-produced drafts.
+// CREW (wi-crew) is the governed answerer: a wicked-crew daemon subscribing to doc.created /
+// feedback.processed and answering with draft.completed / edit.completed through governed
+// workflow runs, in place of an ad-hoc assist session (Phase 7c). These are ADDITIVE vocabulary
+// rows — same events, same payloads, one more allowed producer — so the service needs no other
+// change to accept crew-produced drafts and structural edits.
 export const PRODUCERS = Object.freeze({
   SERVICE: "wi-service",
   AGENT: "wi-agent",
@@ -36,7 +37,7 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.doc.created":         { subdomain: "docs",       owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.feedback.submitted":  { subdomain: "feedback",   owners: [UI],            uiEmittable: true  },
   "wicked.interactive.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
-  "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT, CREW],   uiEmittable: false },
   "wicked.interactive.draft.completed":     { subdomain: "generation", owners: [AGENT, CREW],   uiEmittable: false },
   "wicked.interactive.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.interactive.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
