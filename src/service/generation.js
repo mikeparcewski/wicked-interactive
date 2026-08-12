@@ -1,8 +1,8 @@
 // generation.js — land "build a document from my content" drafts (ADR-0019). The service is
 // model-free: it cannot index files or generate HTML. So when a doc is created with
 // kind:"source", the service seeds a placeholder v0 and emits wicked.interactive.doc.created; the agent
-// reads the source materials, drives the estate knowledge stack (wicked-garden mem) + the craft
-// references, and emits
+// reads the source materials, drives the estate knowledge stack (the `wicked-garden-mem` skill)
+// + the craft references, and emits
 // wicked.interactive.draft.completed with the full first draft. The service instruments + themes it and
 // lands it as a follow-on version.
 //

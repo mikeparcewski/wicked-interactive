@@ -74,6 +74,10 @@ dependency and the db is initialized at serve time; the brain check is upgraded 
 *mechanical* guidance — idempotent handlers, explicit acks, ≥ 250 ms polls — because those are
 correctness, not optionality.
 
+*(Historical note, 2026-08-12: everything this section says about the brain — the requirement
+and its preflight check — no longer applies; wicked-brain was retired and grounding moved to
+wicked-estate via wicked-garden, ADR-0026. Only the bus half of this ADR remains in force.)*
+
 **The bus is transport, not storage.** wicked-bus TTL-sweeps (24 h delete / 72 h visibility), so
 durable state **always** lives in workspace files the service materializes from events. An agent
 offline past the TTL recovers via `wicked-bus replay` + reconcile-from-files (versions.json /
