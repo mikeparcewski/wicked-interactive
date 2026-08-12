@@ -41,6 +41,21 @@ test("ownership table gates emits by producer", () => {
   assert.deepEqual(ownerOf("wicked.unknown.thing"), []);
 });
 
+test("crew (wi-crew) is a governed answerer: drafts + status only (Phase 7c spike)", () => {
+  // THE one list: the additive row lets crew land first drafts and narrate progress —
+  // and NOTHING else. The structural leg (edit.completed) comes with the Project-model
+  // ADR, not this spike; the browser can never impersonate crew (no uiEmittable widening).
+  const crewOwned = new Set(["wicked.interactive.draft.completed", "wicked.interactive.status.posted"]);
+  for (const [type, def] of Object.entries(EVENT_TYPES)) {
+    assert.equal(def.owners.includes(PRODUCERS.CREW), crewOwned.has(type), `${type} crew ownership`);
+  }
+  for (const type of crewOwned) assert.ok(canEmit(type, PRODUCERS.CREW), `${type} crew emit`);
+  // The existing owners kept their rights — the row widened, nothing narrowed.
+  assert.ok(canEmit("wicked.interactive.draft.completed", PRODUCERS.AGENT));
+  assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.AGENT));
+  assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.SERVICE));
+});
+
 test("UI may only originate the conversational/intent events", () => {
   // Hand-maintained whitelist — POST /api/events accepts ONLY uiEmittable types,
   // so this is a security boundary. The set is pinned by hand (not derived from

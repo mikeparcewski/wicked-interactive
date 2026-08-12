@@ -13,15 +13,21 @@
 
 export const DOMAIN = "wicked-interactive";
 
-// The three producers in the loop. The service bridge stamps UI-originated events with
+// The producers in the loop. The service bridge stamps UI-originated events with
 // producer UI so consumers can drop their own emissions (loop safety).
+//
+// CREW (wi-crew) is the governed answerer: a wicked-crew daemon subscribing to doc.created and
+// answering with draft.completed through a governed workflow run, in place of an ad-hoc assist
+// session (Phase 7c spike). It is an ADDITIVE vocabulary row — same events, same payloads, one
+// more allowed producer — so the service needs no other change to accept crew-produced drafts.
 export const PRODUCERS = Object.freeze({
   SERVICE: "wi-service",
   AGENT: "wi-agent",
   UI: "wi-ui",
+  CREW: "wi-crew",
 });
 
-const { SERVICE, AGENT, UI } = PRODUCERS;
+const { SERVICE, AGENT, UI, CREW } = PRODUCERS;
 
 // The vocabulary. `owners` is the type-ownership table: who is allowed to emit each type.
 // `uiEmittable` gates POST /api/events — the browser may only originate these. `subdomain`
@@ -31,10 +37,10 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.feedback.submitted":  { subdomain: "feedback",   owners: [UI],            uiEmittable: true  },
   "wicked.interactive.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT],         uiEmittable: false },
-  "wicked.interactive.draft.completed":     { subdomain: "generation", owners: [AGENT],         uiEmittable: false },
+  "wicked.interactive.draft.completed":     { subdomain: "generation", owners: [AGENT, CREW],   uiEmittable: false },
   "wicked.interactive.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.interactive.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
-  "wicked.interactive.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE],uiEmittable: false },
+  "wicked.interactive.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE, CREW], uiEmittable: false },
   "wicked.interactive.status.requested":    { subdomain: "status",     owners: [UI],            uiEmittable: true  },
   "wicked.interactive.source.attached":     { subdomain: "sources",    owners: [UI],            uiEmittable: true  },
   "wicked.interactive.source.updated":      { subdomain: "sources",    owners: [AGENT],         uiEmittable: false },
