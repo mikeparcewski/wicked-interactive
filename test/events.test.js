@@ -42,15 +42,14 @@ test("ownership table gates emits by producer", () => {
 });
 
 test("crew (wi-crew) is a governed answerer: drafts + status only (Phase 7c spike)", () => {
-  // The additive row: crew may land first drafts and narrate progress…
-  assert.ok(canEmit("wicked.interactive.draft.completed", PRODUCERS.CREW));
-  assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.CREW));
-  // …and NOTHING else. The structural leg (edit.completed) comes with the Project-model ADR,
-  // not this spike; the browser can never impersonate crew (no uiEmittable widening).
+  // THE one list: the additive row lets crew land first drafts and narrate progress —
+  // and NOTHING else. The structural leg (edit.completed) comes with the Project-model
+  // ADR, not this spike; the browser can never impersonate crew (no uiEmittable widening).
+  const crewOwned = new Set(["wicked.interactive.draft.completed", "wicked.interactive.status.posted"]);
   for (const [type, def] of Object.entries(EVENT_TYPES)) {
-    const allowed = type === "wicked.interactive.draft.completed" || type === "wicked.interactive.status.posted";
-    assert.equal(def.owners.includes(PRODUCERS.CREW), allowed, `${type} crew ownership`);
+    assert.equal(def.owners.includes(PRODUCERS.CREW), crewOwned.has(type), `${type} crew ownership`);
   }
+  for (const type of crewOwned) assert.ok(canEmit(type, PRODUCERS.CREW), `${type} crew emit`);
   // The existing owners kept their rights — the row widened, nothing narrowed.
   assert.ok(canEmit("wicked.interactive.draft.completed", PRODUCERS.AGENT));
   assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.AGENT));
