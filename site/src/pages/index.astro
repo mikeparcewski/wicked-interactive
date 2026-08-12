@@ -55,11 +55,13 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
       <p class="lede">Describe it, watch it build in your browser, ship HTML/PDF/deck/video — <b>solo and offline, zero platform required</b>. When a doc has stakes, flip it governed: full drafts route through the control plane with evidence and a gate, while your edits stay instant.</p>
 
       <div class="editor" id="editor">
-        <div class="ed-formats" role="group" aria-label="Point at any format">
+        <div class="ed-formats">
           <span class="ed-formats__lbl">Point at anything</span>
-          <button class="ed-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
-          <button class="ed-fmt" type="button" data-fmt="deck">Investor deck</button>
-          <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
+          <span class="ed-fmts" role="group" aria-label="Point at any format">
+            <button class="ed-fmt is-active" type="button" data-fmt="brief">Launch brief</button>
+            <button class="ed-fmt" type="button" data-fmt="deck">Investor deck</button>
+            <button class="ed-fmt" type="button" data-fmt="page">Landing page</button>
+          </span>
           <button class="ed-govern" id="edGovern" type="button" aria-pressed="false"
                   title="Bind a project: full drafts route governed through the control plane — edits stay instant">
             <span class="ed-govern__track" aria-hidden="true"><span class="ed-govern__knob"></span></span>
@@ -1037,8 +1039,14 @@ const repo = 'https://github.com/mikeparcewski/wicked-interactive';
         if (governed) {
           loadFormat(fmt, true);
         } else {
+          // Unbinding keeps the doc AND its history — versions are a truthful
+          // ledger, so a draft that came via crew stays labeled that way. The
+          // cue narrates it so the mixed state reads as intent, not a bug.
           resetGate();
-          setCue("ready", "Solo mode &mdash; no platform attached. Everything still works exactly the same.");
+          var governedPips = history.some(function (h) { return /via crew/.test(h.whatHTML); });
+          setCue("ready", governedPips
+            ? "Project unbound &mdash; solo mode. Earlier governed versions stay in your history; new drafts skip the gate."
+            : "Solo mode &mdash; no platform attached. Everything still works exactly the same.");
         }
       });
     }

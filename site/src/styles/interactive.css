@@ -259,6 +259,9 @@ body::after {
 
 /* "Point at anything" format switcher */
 .ed-formats { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-bottom: 8px; }
+/* the a11y group wraps ONLY the format buttons (the governed toggle is its own
+   control) — inline-flex keeps the row's visual rhythm identical */
+.ed-fmts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 9px; }
 .ed-formats__lbl {
   font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em;
   text-transform: uppercase; color: var(--muted); margin-right: 3px;
