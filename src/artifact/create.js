@@ -257,7 +257,7 @@ export async function runCreate(args) {
     const projectId = String(args.project);
     const { bindDocToProject } = await import('../service/project.js');
     const { initWorkspace } = await import('../service/workspace.js');
-    const { mkdirSync, existsSync } = await import('node:fs');
+    const { mkdirSync, existsSync, rmSync } = await import('node:fs');
     const { homedir } = await import('node:os');
     const root = args.root ? resolve(String(args.root)) : resolve(homedir(), 'wicked-interactive', 'docs');
     const docName = String(args.name || titleToSlug(wiContent.title));
@@ -267,14 +267,23 @@ export async function runCreate(args) {
       return 1;
     }
     try {
+      // The dir exists for the breadcrumb's sake, but a refused bind removes it again (when it
+      // did not pre-exist) — "offline this is a loud error and NOTHING is created" is literal.
+      const dirExisted = existsSync(dir);
       mkdirSync(dir, { recursive: true });
-      const crumb = await bindDocToProject({
-        dir,
-        docName,
-        projectId,
-        ...(args['crew-api'] ? { crewApi: String(args['crew-api']) } : {}),
-        meta: { title: wiContent.title },
-      });
+      let crumb;
+      try {
+        crumb = await bindDocToProject({
+          dir,
+          docName,
+          projectId,
+          ...(args['crew-api'] ? { crewApi: String(args['crew-api']) } : {}),
+          meta: { title: wiContent.title },
+        });
+      } catch (e) {
+        if (!dirExisted) rmSync(dir, { recursive: true, force: true });
+        throw e;
+      }
       initWorkspace(dir, wiContentToStaticHtml(wiContent));
       // Announce the doc on the bus with its binding (best-effort — the membership and the doc
       // are already durable; a bus hiccup must not fail the create).

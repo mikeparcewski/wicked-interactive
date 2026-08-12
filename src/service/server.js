@@ -12,7 +12,7 @@ import express from "express";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
@@ -341,13 +341,17 @@ export function createMultiServer({ root, frontendDir } = {}) {
     // its `project_id` on every service-emitted payload (version.created, export.generated, …).
     // The breadcrumb is the doc-side hint — advisory, read per emit (docs emit rarely); an
     // unbound doc's payloads are byte-identical to before this field existed.
+    //
+    // DERIVED, never caller-supplied: the binding is a fact about the DOC, so a payload's own
+    // project_id is dropped — bound docs get the breadcrumb's id (applied after the spread so it
+    // cannot be overridden), unbound docs carry none. Anything else would let one emit site
+    // forge attribution into another project's activity feed.
     return (type, payload) => {
       const projectId = projectIdFor(docDir(documentId));
-      return emitEvent(
-        type,
-        { document_id: documentId, ...(projectId ? { project_id: projectId } : {}), ...payload },
-        { producer: PRODUCERS.SERVICE },
-      );
+      const enriched = { document_id: documentId, ...payload };
+      delete enriched.project_id;
+      if (projectId) enriched.project_id = projectId;
+      return emitEvent(type, enriched, { producer: PRODUCERS.SERVICE });
     };
   }
 
@@ -441,10 +445,13 @@ export function createMultiServer({ root, frontendDir } = {}) {
     try {
       const correlationId = randomUUID();
       // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)
-      // for a project-bound doc carry its project_id (DES-PROJECT-001 §2.3).
+      // for a project-bound doc carry its project_id (DES-PROJECT-001 §2.3). DERIVED ONLY — a
+      // browser-supplied project_id is dropped, bound or not, so a client cannot spoof a doc
+      // into (or out of) a project's activity feed; the breadcrumb is the one source.
       const projectId = projectIdFor(docDir(name));
-      const enriched =
-        projectId && payload.project_id === undefined ? { ...payload, project_id: projectId } : payload;
+      const enriched = { ...payload };
+      delete enriched.project_id;
+      if (projectId) enriched.project_id = projectId;
       const { event_id } = await emitEvent(type, enriched, { producer: PRODUCERS.UI, correlationId, sessionId: SESSION_ID });
       res.json({ ok: true, event_id, correlation_id: correlationId });
     } catch (e) {
@@ -473,9 +480,19 @@ export function createMultiServer({ root, frontendDir } = {}) {
     // reverse — a doc the caller believes is filed but isn't — is the failure §2.2 forbids.
     // No `project` field ⇒ none of this runs: the offline solo-creator loop is untouched.
     const projectId = String(req.body?.project ?? "").trim();
+    // Binds through here so BOTH creation branches share one contract: the dir must exist for
+    // the breadcrumb, but a FAILED bind must leave no trace — the dir is removed again when
+    // this call (not a later step) created it. "Nothing created on a refused bind" is literal.
     const bindProject = projectId
       ? async (dir, title) => {
-          await bindDocToProject({ dir, docName: name, projectId, meta: { title } });
+          const existed = existsSync(dir);
+          mkdirSync(dir, { recursive: true });
+          try {
+            await bindDocToProject({ dir, docName: name, projectId, meta: { title } });
+          } catch (e) {
+            if (!existed) rmSync(dir, { recursive: true, force: true });
+            throw e;
+          }
           return { project_id: projectId };
         }
       : null;
@@ -498,9 +515,8 @@ export function createMultiServer({ root, frontendDir } = {}) {
       if (u.protocol !== "http:" && u.protocol !== "https:") return res.status(400).json({ error: "demo url must be http or https" });
       try {
         const dir = docDir(name);
-        // The dir exists before the bind so the breadcrumb has somewhere to land (initWorkspace
-        // re-mkdirs idempotently); registration still precedes any doc content.
-        mkdirSync(dir, { recursive: true });
+        // Registration precedes any doc content; bindProject owns the dir lifecycle (creates it
+        // for the breadcrumb, removes it again on a refused bind).
         const bound = bindProject ? await bindProject(dir, name) : null;
         initWorkspace(dir, demoPlaceholder(name, demoUrl, brief), { kind: "demo" });
         await mountDoc(name);
@@ -521,8 +537,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
 
     try {
       const dir = docDir(name);
-      // Dir first (breadcrumb target), then registration (the authority), then content.
-      mkdirSync(dir, { recursive: true });
+      // Registration (the authority) precedes content; bindProject owns the dir lifecycle.
       const bound = bindProject ? await bindProject(dir, name) : null;
       initWorkspace(dir, html);
       await mountDoc(name);

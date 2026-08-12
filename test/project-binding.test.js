@@ -97,8 +97,19 @@ test("offline/no-project: doc create + iterate is untouched — no breadcrumb, n
     });
     assert.equal(fork.status, 200);
 
+    // A browser trying to SPOOF a binding is stripped: project_id is derived from the
+    // breadcrumb only (Copilot #148) — an unbound doc's events carry none, ever.
+    const spoof = await fetch(`${base}/api/events`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_type: "wicked.interactive.feedback.submitted",
+        payload: { document_id: "solo-doc", version_target: 0, items: [], project_id: "proj_forged" },
+      }),
+    });
+    assert.equal(spoof.status, 200);
+
     const events = await busEvents();
-    assert.ok(events.length >= 2, "doc.created + version.created emitted locally");
+    assert.ok(events.length >= 3, "doc.created + version.created + feedback emitted locally");
     for (const e of events) {
       assert.equal(e.payload.project_id, undefined, `${e.event_type} must carry NO project_id`);
     }
@@ -119,7 +130,10 @@ test("project set but crew unreachable: LOUD error, nothing created (never a que
     assert.equal(create.status, 502);
     const body = await create.json();
     assert.match(body.error, /unreachable/);
-    assert.ok(!existsSync(join(root, "wants-a-home")), "no doc dir on a refused bind");
+    assert.ok(
+      !existsSync(join(root, "wants-a-home")),
+      "no doc dir on a refused bind — not even an empty one (Copilot #148)",
+    );
   } finally {
     delete process.env.WICKED_CREW_API;
     await cleanup();
