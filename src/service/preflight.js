@@ -1,9 +1,8 @@
-// preflight.js — detect required sibling tools (ADR-0016; prezzie absorbed in ADR-0020).
+// preflight.js — detect required sibling tools (ADR-0016; prezzie absorbed in ADR-0020;
+// wicked-brain retired into wicked-estate in ADR-0026, so garden is the one remaining sibling).
 //
-// Each tool has its own detection rule because they install differently:
-//   wicked-garden  → Claude Code plugin cache (a directory per plugin)
-//   wicked-brain   → npm package; the on-disk signal is the brain dir under ~/.wicked-brain
-//                    (or its Windows equivalent).
+//   wicked-garden  → Claude Code plugin cache (a directory per plugin). Its plugin brings the
+//                    wicked-estate MCP server, which now backs grounding (assist Steps 6 + 9).
 // (wicked-bus is a hard npm dependency opened fail-fast at serve time — ADR-0021 — so it isn't
 //  a preflight gate here; if it can't open, the service refuses to start.)
 //
@@ -52,24 +51,14 @@ function inPluginCache(name) {
   return false;
 }
 
-function brainInstalled() {
-  // npm package: the durable signal is the brain directory (created by `wicked-brain:init`).
-  // resolveHome() honors a HOME/USERPROFILE override on every platform, so this is a reliable
-  // test seam (the redirected temp dir is consulted) AND correct in production.
-  return existsSync(join(resolveHome(), ".wicked-brain")) || inPluginCache("wicked-brain");
-}
-
 const DETECTORS = {
   "wicked-garden":  () => inPluginCache("wicked-garden"),
-  "wicked-brain":   brainInstalled,
 };
 
-// Each sibling installs differently, so a single command can't cover them. The hint shown
-// in the install gate maps each MISSING tool to its real install step (garden is a Claude
-// Code plugin; brain is an npm package run via npx).
+// The hint shown in the install gate maps each MISSING tool to its real install step
+// (garden is a Claude Code plugin).
 const INSTALL_CMD = {
   "wicked-garden":  "/plugin marketplace add mikeparcewski/wicked-garden\n/plugin install wicked-garden",
-  "wicked-brain":   "npx wicked-brain",
 };
 
 // Playwright (ADR-0018) is the demo recorder. Unlike the sibling plugins it's an npm

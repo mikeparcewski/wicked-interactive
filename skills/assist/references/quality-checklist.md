@@ -15,7 +15,7 @@ improve on the next pass. Don't block a user's edit on a knowledge miss or a sty
   sentence, it's notes, not a document. **(FAIL)**
 - **Each section earns the next.** If you could shuffle the sections with no loss, the arc is weak.
   **(WARN)**
-- **Every number grounded** in the source or wicked-brain — never invented to fill a slot. **(FAIL)**
+- **Every number grounded** in the source or the estate knowledge store (wicked-garden-mem) — never invented to fill a slot. **(FAIL)**
 - **A single ask.** A deck that asks for three things gets none. **(WARN)**
 - **Right altitude** for the audience — an exec update isn't an engineering deep-dive. **(WARN)**
 

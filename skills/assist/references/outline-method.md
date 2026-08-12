@@ -36,8 +36,8 @@ deeper they read, the more evidence they get — never the reverse.
   "Revenue".
 - **Assertion–evidence.** Heading asserts; body proves (a chart, a number, a short list).
 - **Tight body.** 3–5 bullets max, or one short paragraph. If it's dense, split it.
-- **Ground every number.** Use the figures the source supports; if wicked-brain has the
-  canonical value, use that and say so. Never invent a statistic to fill a slot.
+- **Ground every number.** Use the figures the source supports; if the estate knowledge store
+  (wicked-garden-mem) has the canonical value, use that and say so. Never invent a statistic to fill a slot.
 
 ## Length
 

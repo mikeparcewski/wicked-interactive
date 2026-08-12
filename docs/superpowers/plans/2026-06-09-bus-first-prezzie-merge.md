@@ -1,5 +1,9 @@
 # Bus-First Transport + Prezzie Merge Implementation Plan
 
+> **Historical note (2026-08-12):** wicked-brain has since been retired into wicked-estate
+> (ADR-0026); the brain references below are period-accurate for the 2026-06-09 migration and
+> intentionally left as-is.
+
 > **STATUS: COMPLETE (2026-06-09, branch `bus-first-migration`).** All six phases shipped across
 > 9 commits. 143 unit tests + the browser e2e pass over a real wicked-bus; both service
 > subscribers register with advancing cursors and an empty DLQ; ADR-0019/0020/0021 are tagged at

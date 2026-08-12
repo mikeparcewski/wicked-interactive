@@ -53,9 +53,11 @@ test("preflight reports all-missing when no sibling plugin directories exist", (
   try {
     const out = preflight();
     assert.equal(out.ok, false);
-    assert.deepEqual(out.missing.sort(), ["wicked-brain", "wicked-garden"]);
+    assert.deepEqual(out.missing, ["wicked-garden"]);
     assert.match(out.install_hint, /\/plugin install wicked-garden/);
-    assert.match(out.install_hint, /npx wicked-brain/);
+    // wicked-brain is retired (ADR-0026) — it must never reappear as a gate.
+    assert.ok(!("wicked-brain" in out.required), "retired wicked-brain must not be probed");
+    assert.doesNotMatch(out.install_hint, /wicked-brain/);
   } finally {
     process.env.WI_PLUGIN_PATHS = prev;
     restoreHome();
@@ -64,38 +66,28 @@ test("preflight reports all-missing when no sibling plugin directories exist", (
 });
 
 test("preflight detects plugin presence via WI_PLUGIN_PATHS", () => {
-  const restore = withFakePluginRoot(["wicked-garden", "wicked-brain"]);
+  const restore = withFakePluginRoot(["wicked-garden"]);
   try {
     const out = preflight();
     assert.equal(out.ok, true);
     assert.deepEqual(out.missing, []);
     assert.equal(out.install_hint, null);
-  } finally { restore(); }
-});
-
-test("preflight reports the gap when only some plugins are installed", () => {
-  const restore = withFakePluginRoot(["wicked-garden"]);
-  try {
-    const out = preflight();
-    assert.equal(out.ok, false);
-    assert.deepEqual(out.missing.sort(), ["wicked-brain"]);
     assert.equal(out.required["wicked-garden"].detected, true);
   } finally { restore(); }
 });
 
-test("wicked-brain is detected via ~/.wicked-brain even without a plugin-cache entry", () => {
-  // Plugin cache has garden but NOT brain; ~/.wicked-brain exists in the fake home.
+test("wicked-garden is detected via the home plugin-cache defaults", () => {
+  // WI_PLUGIN_PATHS empty → the detector must fall back to the home-dir cache paths.
   const home = mkdtempSync(join(tmpdir(), "wi-home-"));
   // Build the cache path segment-by-segment so it is correct on every OS (no hardcoded '/').
   mkdirSync(join(home, ".claude", "plugins", "cache", "wicked-garden"), { recursive: true });
-  mkdirSync(join(home, ".wicked-brain"), { recursive: true });
   const restoreHome = setHome(home);
   const prevPaths = process.env.WI_PLUGIN_PATHS;
   process.env.WI_PLUGIN_PATHS = "";   // force the detector to rely on home-dir defaults
   try {
     const out = preflight();
     assert.equal(out.ok, true, JSON.stringify(out, null, 2));
-    assert.equal(out.required["wicked-brain"].detected, true);
+    assert.equal(out.required["wicked-garden"].detected, true);
   } finally {
     restoreHome();
     process.env.WI_PLUGIN_PATHS = prevPaths;
@@ -104,7 +96,7 @@ test("wicked-brain is detected via ~/.wicked-brain even without a plugin-cache e
 });
 
 test("multi-server exposes GET /api/preflight", async () => {
-  const restore = withFakePluginRoot(["wicked-garden", "wicked-brain"]);
+  const restore = withFakePluginRoot(["wicked-garden"]);
   const root = mkdtempSync(join(tmpdir(), "wi-pf-srv-"));
   const svc = createMultiServer({ root });
   const port = await svc.start(0);
@@ -171,11 +163,12 @@ test("home-derived search paths use the OS separator (no hardcoded '/')", () => 
 });
 
 test("home is resolvable via USERPROFILE alone (Windows: os.homedir ignores HOME)", () => {
-  // On Windows os.homedir() reads USERPROFILE, not HOME. brainInstalled() must follow the same
-  // env the OS would, so a brain dir under a USERPROFILE-only home is detected. This is the exact
-  // condition that broke "wicked-brain is detected via ~/.wicked-brain" on windows-latest.
+  // On Windows os.homedir() reads USERPROFILE, not HOME. The home-derived plugin-cache defaults
+  // must follow the same env the OS would, so a plugin cache under a USERPROFILE-only home is
+  // detected. This pins the exact class of failure that broke detection on windows-latest
+  // (v0.5.29 — back then via the retired wicked-brain probe; the seam is the same).
   const home = mkdtempSync(join(tmpdir(), "wi-up-home-"));
-  mkdirSync(join(home, ".wicked-brain"), { recursive: true });
+  mkdirSync(join(home, ".claude", "plugins", "cache", "wicked-garden"), { recursive: true });
   const prevHome = process.env.HOME;
   const prevProfile = process.env.USERPROFILE;
   const prevPaths = process.env.WI_PLUGIN_PATHS;
@@ -184,7 +177,7 @@ test("home is resolvable via USERPROFILE alone (Windows: os.homedir ignores HOME
   process.env.WI_PLUGIN_PATHS = "";
   try {
     const out = preflight();
-    assert.equal(out.required["wicked-brain"].detected, true, JSON.stringify(out, null, 2));
+    assert.equal(out.required["wicked-garden"].detected, true, JSON.stringify(out, null, 2));
   } finally {
     if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
     if (prevProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prevProfile;
