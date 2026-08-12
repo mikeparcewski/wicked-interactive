@@ -43,7 +43,7 @@ Key test suites and their scope:
 | `pptx.test.js` | PPTX pipeline preflight and invocation |
 | `instances.test.js` | Multi-document workspace management |
 | `multidoc.test.js` | Multiple concurrent documents in one workspace |
-| `preflight.test.js` | Bus and brain liveness checks; Playwright browser binary detection |
+| `preflight.test.js` | Sibling install-gate detection (wicked-garden, cross-platform home/path seams); Playwright browser binary detection |
 | `instrument.test.js` | `data-wid` injection via cheerio (INV-2) |
 | `from-garden.test.js` | wicked-garden council adapter integration points |
 | `frontend-*.test.js` | Frontend logic (feedbackStore, SSE client, selection, apiPath) — run in Node with jsdom |

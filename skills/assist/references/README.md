@@ -20,7 +20,7 @@ Read them as a pipeline — each stage builds on the last:
    Narrative, content, visual, and export-safety checks with FAIL/WARN/INFO severities.
 
 These are guidance, not gates. The one hard rule lives in the skill (preserve every `data-wid`;
-ground claims in wicked-brain). Use judgment, and keep it proportional — a quick chat tweak
+ground claims in the estate knowledge store via wicked-garden-mem). Use judgment, and keep it proportional — a quick chat tweak
 doesn't need the full sweep; a first draft or whole-document change does.
 
 ## Operating policy

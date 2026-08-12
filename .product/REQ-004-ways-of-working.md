@@ -18,7 +18,7 @@ Dev-time conventions for working on this repo. Runtime behavior (how the supervi
 
 - Node.js >= 20.0.0
 - wicked-bus running (required — the service fails fast if the bus is unreachable)
-- wicked-brain server running (required for the agent loop; auto-start hint is shown on failure)
+- wicked-garden installed (required — brings the estate-backed grounding stack the agent loop uses; ADR-0026)
 - Playwright browsers installed separately if testing PDF/video export
 
 ## Starting the service
@@ -103,7 +103,7 @@ The CI smoke test deliberately installs from the packed tarball (not the source 
 
 ## Stopping the service
 
-Kill the `serve` process when done so nothing is left bound to the port. The lockfile (`<root>/.wi-serve.json`) is deleted on clean exit (SIGINT/SIGTERM). Leave the shared wicked-bus and wicked-brain servers running.
+Kill the `serve` process when done so nothing is left bound to the port. The lockfile (`<root>/.wi-serve.json`) is deleted on clean exit (SIGINT/SIGTERM). Leave the shared wicked-bus server running.
 
 ## Branch and PR protocol
 

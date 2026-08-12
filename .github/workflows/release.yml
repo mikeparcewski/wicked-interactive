@@ -1,7 +1,7 @@
 name: Release
 
 # Tag-driven release, aligned with the rest of the wicked ecosystem
-# (testing/loom/vault/bus/brain). A `vX.Y.Z` tag push is the ONLY trigger:
+# (testing/loom/vault/bus). A `vX.Y.Z` tag push is the ONLY trigger:
 # the shared reusable workflow SETS the version from the tag
 # (`npm version <X.Y.Z> --no-git-tag-version --allow-same-version`, which runs
 # this repo's `version` lifecycle hook in package.json — syncing

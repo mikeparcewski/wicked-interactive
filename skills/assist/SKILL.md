@@ -166,7 +166,7 @@ live under `<BASE>/d/<doc>/…`. From each delivered line, **skip the noise and 
 | `wicked.interactive.question.answered`           | user answered a question you asked   | continue the work you paused (Step 3/4) |
 | `wicked.interactive.theme.learned`               | the service grabbed a URL to a PDF, OR the user pointed at a local PDF/image | read its design, synthesize + apply a theme (Step 8.5) |
 | `wicked.interactive.review.requested`            | user clicked a reviewer on the right-edge tool-rail | run the named review pass (non-blocking), post the verdict (Step 8.6) |
-| `wicked.interactive.source.attached`             | reference material attached          | index it into a brain, live (Step 9) |
+| `wicked.interactive.source.attached`             | reference material attached          | index it into the estate knowledge store, live (Step 9) |
 | `wicked.interactive.status.requested`            | UI heartbeat — you've been quiet while working | post a real `working` status now, naming the current step (Step 3d) |
 
 After you've handled an event, the Monitor stays armed — no re-arm needed mid-batch. When all
@@ -260,7 +260,7 @@ wibus wicked.interactive.status.posted status '{"document_id":"<doc>","state":"c
 
 **Cadence — never go silent while you work.** A long step with no status reads as a frozen UI. Post a
 `working` status *before* every multi-second step (dispatching a crew, rendering, verifying, re-rendering
-a PDF, a long brain query) and at each checkpoint — not just at the end. Rule of thumb: if a stretch of
+a PDF, a long knowledge recall) and at each checkpoint — not just at the end. Rule of thumb: if a stretch of
 work runs past ~20s with no status, post one. The browser also fires a **`wicked.interactive.status.requested`**
 heartbeat (~every 20s while the doc is in a working state); when you see one, reply immediately with a
 `working` status naming what you're doing **right now**. Make it real and specific — the app shows playful
@@ -350,8 +350,9 @@ wibus wicked.interactive.status.posted status '{"document_id":"<doc>","state":"p
   - `ppt` → fixed landscape slide layout, no animations, export-safe for PPTX
   - `brochure` → **landscape** multi-page PDF, stylized pages, print-ready
   - `doc` → minimal formatting, readable prose, content-first (like a Word doc)
-- **Ground it in knowledge** — consult/ingest **wicked-brain** so the draft uses the user's real
-  numbers and prior decisions (Step 6). Don't invent figures the source doesn't support.
+- **Ground it in knowledge** — consult/ingest the estate knowledge store via **wicked-garden-mem**
+  so the draft uses the user's real numbers and prior decisions (Step 6). Don't invent figures
+  the source doesn't support.
 - **Generate the document** — work the craft references under `skills/assist/references/` as a
   pipeline: format rules (formats/<style>.md) → structure (outline-method) → narrative
   (story-arc) → visual design (design-principles) → export-safe HTML (html-craft). For a
@@ -378,18 +379,21 @@ wibus wicked.interactive.status.posted status '{"document_id":"<doc>","state":"c
 
 From here the normal click-to-edit loop (Steps 3–4) takes over.
 
-## Step 6 — Consult project knowledge before you rewrite (wicked-brain)
+## Step 6 — Consult project knowledge before you rewrite (wicked-garden-mem)
 
 Before any **structural** edit or first-draft generation (Step 3, Step 5, or the change branch
-of Step 4), check whether the project's brain knows something the document should respect — prior
-decisions, terminology, the customer's positioning, numbers that must stay accurate. This keeps
-agent-authored content grounded instead of plausibly-wrong (ADR-0016 Slice E).
+of Step 4), check whether the project's knowledge store knows something the document should
+respect — prior decisions, terminology, the customer's positioning, numbers that must stay
+accurate. This keeps agent-authored content grounded instead of plausibly-wrong (ADR-0016
+Slice E). The engine is **wicked-estate** (memory + knowledge stores); the agent surface is
+wicked-garden's `mem` skill (the retired wicked-brain's replacement — ADR-0026).
 
 - Post `{"state":"processing","message":"Checking project knowledge…"}` so the beat reads as work.
-- Query the brain for the topic (`wicked-brain:search` / `wicked-brain:query`) with a stable
-  `session_id`.
+- Recall what's stored on the topic: invoke the **`wicked-garden-mem`** skill — the `recall`
+  action for memories ("what do we know about X"), or the `answer` action for a cited synthesis
+  across the knowledge + memory stores.
 - Fold any **citable** facts into the markup, and when a fact drove a choice, say so in your chat
-  reply ("kept the ARR figure at $4.2M per the Q3 board deck"). If the brain returns nothing
+  reply ("kept the ARR figure at $4.2M per the Q3 board deck"). If recall returns nothing
   relevant, proceed — never block an edit on a knowledge miss.
 
 Skip this for deterministic tweaks; those carry no authorship risk.
@@ -554,7 +558,7 @@ the URL to a PDF and announced it as `wicked.interactive.theme.learned` with `re
 workspace). **The judgment — reading the design — is yours.** Do **not** re-grab the URL.
 
 1. **Read the rendered PDF with vision.** Use the SAME technique Step 9 uses to ingest binary
-   sources (wicked-brain reads pdf/images "via LLM vision") — except here you read the design
+   sources (`wicked-garden-mem` ingest reads pdf/images "via LLM vision") — except here you read the design
    system directly off `render_path`: the **palette** (dominant background/surface, primary,
    secondary/accent, text colors, borders), the **type** (heading vs body font family, the size
    scale, weight), the **spacing** rhythm, **card/surface treatment** (radius, padding, shadow),
@@ -631,22 +635,25 @@ pass creates **no new version** unless the user then asks you to apply a fix.
 ## Step 9 — Index attached reference sources (ADR-0017)
 
 A `wicked.interactive.source.attached` event carries `added: [{ path, note }]` — reference material to index
-into a wicked-brain knowledge base, **with live progress narrated to the browser**. This is a
-standing part of the loop.
+into the wicked-estate knowledge store via the **`wicked-garden-mem`** skill's `ingest` action,
+**with live progress narrated to the browser**. This is a standing part of the loop.
 
 1. **Flip to indexing.** `wibus wicked.interactive.source.updated sources '{"document_id":"<doc>","path":"<abs>","status":"indexing"}'`.
 2. **Stream progress** with `wicked.interactive.status.posted` (`state:"working"` — a non-lock state, so the
    doc isn't covered by the overlay) at each milestone: kickoff → scope → ingesting → done.
-3. **Check coverage AND freshness before ingesting.** Query the target brain first — already-indexed
-   ≠ current. Compare the brain's last index time against the source's real state (`git log -1` for a
-   repo, file mtimes otherwise); re-ingest if it moved.
+3. **Check coverage AND freshness before ingesting.** Recall against the store first
+   (`wicked-garden-mem` `recall`/`answer`) — already-indexed ≠ current. Compare the store's last
+   ingest against the source's real state (`git log -1` for a repo, file mtimes otherwise);
+   re-ingest if it moved.
 4. **Scope sanely.** Skip `node_modules`, build artifacts, binaries, vendored deps; index the
    high-signal surface (docs, READMEs, source). Name the scope decision in chat.
 5. **Land it.** `wibus wicked.interactive.source.updated sources '{"document_id":"<doc>","path":"<abs>","status":"indexed"}'`
-   (or `"error"`), with a final `complete` status. Then draw on that brain when generating/updating.
+   (or `"error"`), with a final `complete` status. Then draw on that knowledge (Step 6) when
+   generating/updating.
 
-Brain choice: index into the source's natural project brain when one exists; otherwise this doc's
-project brain.
+Scope choice: ingest under the source's natural project scope when one exists (e.g.
+`project:<repo-name>`); otherwise this doc's project scope. The mem skill's scopes reference
+documents the `kind:id` conventions.
 
 ## Step 10 — Recover a stale cursor (WB-003)
 

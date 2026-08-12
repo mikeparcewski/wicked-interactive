@@ -4,7 +4,8 @@
 //   1. blank   — name only → empty doc → brainstorm in chat (the default).
 //   2. html    — paste exact HTML to seed v0 (power users).
 //   3. source  — "From my content": point at files/a folder + an optional brief; the
-//                supervising agent indexes them (wicked-brain) and builds the first draft.
+//                supervising agent indexes them into the estate knowledge store
+//                (via the `wicked-garden-mem` skill) and builds the first draft.
 //                Most people arrive with material, not finished HTML.
 import { useEffect, useState } from "react";
 

@@ -10,8 +10,6 @@ export default function InstallGate({ preflight, onRetry }) {
   const hint = preflight.install_hint || [
     "/plugin marketplace add mikeparcewski/wicked-garden",
     "/plugin install wicked-garden",
-    "",
-    "npx wicked-brain",
   ].join("\n");
 
   return (

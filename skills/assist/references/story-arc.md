@@ -27,7 +27,7 @@ Whatever the arc, most strong documents have:
 ## Validation lenses (quick self-check before you hand back a draft)
 
 - **Clarity** — could a stranger state the main message after one read?
-- **Evidence** — is every claim backed, and every number grounded (wicked-brain)?
+- **Evidence** — is every claim backed, and every number grounded (the estate knowledge store — wicked-garden-mem)?
 - **Flow** — does each section earn the next, or could you shuffle them with no loss? (If you
   could, the arc is weak.)
 - **Audience fit** — right altitude for who's reading? An exec update isn't an engineering
