@@ -321,12 +321,14 @@ On a `wicked.interactive.chat.posted` event with `role: "user"`:
 ## Step 5 — Build a document from the wizard brief and/or user content
 
 A `wicked.interactive.doc.created` event with `kind: "source"` means the user spec'd the document in the
-creation wizard. Its payload carries:
-- `document_id` — the doc name
-- `brief` — what the user described (may be present without source files)
-- `source_paths` — files/folders the user attached (may be empty if brief-only)
-- `style` — the output format: `"web"` (default), `"ppt"`, `"brochure"`, or `"doc"`
-- `project_id` — present only for project-bound docs (DES-PROJECT-001 §2.3)
+creation wizard. Its payload carries (required fields first, then optional):
+- `document_id` — the doc name _(required by schema)_
+- `ts` — ISO-8601 timestamp set by the bus infrastructure _(required by schema)_
+- `kind` — always `"source"` in this step's context _(required by schema)_
+- `brief` — what the user described _(optional; may be absent if source files alone are the spec)_
+- `source_paths` — files/folders the user attached _(optional; absent or empty for brief-only docs)_
+- `style` — the output format _(optional; defaults to `"web"` when absent)_: `"ppt"`, `"brochure"`, or `"doc"` otherwise
+- `project_id` — present only for project-bound docs _(optional; DES-PROJECT-001 §2.3)_
 
 ### 5a — Governed-mode yield (project-bound docs)
 
