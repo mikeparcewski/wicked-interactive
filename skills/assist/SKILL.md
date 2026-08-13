@@ -347,7 +347,7 @@ The crew run will emit `wicked.interactive.draft.completed` (producer `wi-crew`)
 service lands it as `_v1` and the browser hot-reloads exactly as in the solo path. Your
 click-to-edit loop (Steps 3–4) takes over from there once the version lands.
 
-> **Known limitation (follow-up tracked):** if the governed crew run fails, no `draft.completed`
+> **Known limitation (follow-up tracked):** if the governed crew run fails, no `wicked.interactive.draft.completed`
 > is emitted and the document stays at the `_v0` placeholder indefinitely. The user can check the
 > crew dashboard for the failed run; cross-product error bridging (crew session failed → interactive
 > error event) is a planned improvement.
