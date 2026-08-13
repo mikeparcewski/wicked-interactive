@@ -159,7 +159,7 @@ live under `<BASE>/d/<doc>/…`. From each delivered line, **skip the noise and 
 
 | event_type | when | your action |
 |------------|------|-------------|
-| `wicked.interactive.doc.created` (kind `source`) | user gave a brief and/or files in the wizard | generate the first draft (Step 5) |
+| `wicked.interactive.doc.created` (kind `source`) | user gave a brief and/or files in the wizard | if `project_id` present → yield to crew (Step 5a); otherwise generate solo (Step 5b) |
 | `wicked.interactive.doc.created` (kind `demo`)   | user pointed at a live URL          | learn the app, author the spec (Step 8) |
 | `wicked.interactive.feedback.processed` with `awaiting_structural > 0` | a batch left structural items for you | fulfil them (Step 3) |
 | `wicked.interactive.chat.posted` (role `user`)   | user typed in chat                   | reply / make the change (Step 4) |
@@ -322,9 +322,32 @@ On a `wicked.interactive.chat.posted` event with `role: "user"`:
 
 A `wicked.interactive.doc.created` event with `kind: "source"` means the user spec'd the document in the
 creation wizard. Its payload carries:
+- `document_id` — the doc name
 - `brief` — what the user described (may be present without source files)
 - `source_paths` — files/folders the user attached (may be empty if brief-only)
 - `style` — the output format: `"web"` (default), `"ppt"`, `"brochure"`, or `"doc"`
+- `project_id` — present only for project-bound docs (DES-PROJECT-001 §2.3)
+
+### 5a — Governed-mode yield (project-bound docs)
+
+If the event payload includes a `project_id` field, the document is project-bound and the crew
+daemon (started with `--interactive-draft-events`) has already subscribed to this event and will
+produce the first draft as a governed crew run. **Do not generate a competing draft.**
+
+Instead, post a single `working` status to narrate crew's activity, then return to the monitor
+loop:
+
+```bash
+wibus wicked.interactive.status.posted status '{"document_id":"<doc>","state":"working","message":"A governed crew run is building this draft — the editor will open when it lands."}'
+```
+
+The crew run will emit `wicked.interactive.draft.completed` (producer `wi-crew`) when done; the
+service lands it as `_v1` and the browser hot-reloads exactly as in the solo path. Your
+click-to-edit loop (Steps 3–4) takes over from there once the version lands.
+
+**Only proceed to step 5b if `project_id` is absent.**
+
+### 5b — Solo draft generation (unbound docs)
 
 The service is model-free, so building the draft is **yours**.
 
