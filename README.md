@@ -73,6 +73,14 @@ And from then on, the only thing you ever type is:
 
 That's genuinely it. The first time, it sets up a few helper tools behind the scenes — it'll show you exactly what it's installing, nothing sneaky — then your browser pops open and you're off. (Rather install the helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.)
 
+## Requirements
+
+- [Claude Code](https://claude.com/claude-code) ≥ 1.0 (the plugin surface)
+- Node.js ≥ 20.0.0 (for the wicked-bus peer)
+- [wicked-bus](https://github.com/mikeparcewski/wicked-bus) ≥ 2.3.0 — the event backbone the UI, service, and agent all share (`npm i -g wicked-bus`); auto-installed on first run if not already present
+- macOS, Linux, or Windows
+- A modern browser (Chrome, Edge, Firefox, Safari)
+
 ---
 
-MIT licensed — see [LICENSE](LICENSE). [wicked-bus](https://github.com/mikeparcewski/wicked-bus) is the required control plane — the one event vocabulary the UI, the service, and the agent all speak (SSE down, POST up). Part of the [wicked-*](https://wickedagile.com) family of local-first, AI-native developer tools. Presentation craft is built in.
+MIT licensed — see [LICENSE](LICENSE). Part of the [wicked-*](https://wickedagile.com) family of local-first, AI-native developer tools — a creative surface on the same substrate as wicked-crew and wicked-estate. Presentation craft is built in.
