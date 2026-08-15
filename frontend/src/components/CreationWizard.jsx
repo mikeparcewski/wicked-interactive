@@ -173,6 +173,10 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   // ---- submit ----
   function submitInteractive(e) {
     e.preventDefault();
+    // Held while the new-project row is open — the disabled submit button already blocks
+    // implicit submission, but guard the handler itself so requestSubmit()/future buttons
+    // can't bind the stale previously-selected project either (Copilot, PR#170).
+    if (newProjectOpen) return;
     const trimName = name.trim();
     const trimBrief = brief.trim();
     if (!trimName) return;
