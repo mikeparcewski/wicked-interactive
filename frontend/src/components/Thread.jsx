@@ -54,7 +54,7 @@ function Markdown({ text }) {
   });
 }
 
-export default function Thread({ log, open, forceOpen, lockOpen, working, realStatusAt, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle, hasDoc }) {
+export default function Thread({ log, open, forceOpen, lockOpen, working, realStatusAt, liveStatus, onHeartbeat, question, onAnswer, renderReady, onClose, onToggle, hasDoc }) {
   const scrollRef = useRef(null);
   useEffect(() => {
     const el = scrollRef.current;
@@ -177,7 +177,8 @@ export default function Thread({ log, open, forceOpen, lockOpen, working, realSt
         {working && (
           <div className="wi-whimsy" aria-hidden="true">
             <span className="wi-typing"><span></span><span></span><span></span></span>
-            <span className="wi-whimsy__text">{WHIMSY[whimsyIdx]}</span>
+            {/* The run's live pulse (#164) — real narration owns the line; whimsy only fills silence. */}
+            <span className="wi-whimsy__text">{liveStatus || WHIMSY[whimsyIdx]}</span>
           </div>
         )}
       </div>

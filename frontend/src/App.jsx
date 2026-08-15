@@ -50,6 +50,7 @@ export default function App() {
   const [newDocBrief, setNewDocBrief] = useState("");    // seeded when the launch-state chat starts a doc
   const [themeUrlError, setThemeUrlError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
+  const [liveStatus, setLiveStatus] = useState(null);    // transient pulse line (#164)
   const [gateDismissed, setGateDismissed] = useState(false); // "Continue anyway" (#159)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
@@ -309,7 +310,16 @@ export default function App() {
       // braces fallback we also treat a "working" status as review-only when a review is in flight
       // and no edit/question is active. A review status routes its message into the review thread.
       const isReview = payload.review === true || payload.kind === "review";
-      if (payload.message || payload.question) { appendChat({ role: isReview ? "review" : "agent", text: payload.question || payload.message }); setRealStatusAt(Date.now()); }
+      const isPulse = payload.state === "working" && !isReview && !payload.question;
+      // Pulse statuses (#164) live in the Thread's transient indicator line — only major
+      // transitions become durable bubbles.
+      if (isPulse) {
+        if (payload.message) { setLiveStatus(payload.message); setRealStatusAt(Date.now()); }
+      } else if (payload.message || payload.question) {
+        appendChat({ role: isReview ? "review" : "agent", text: payload.question || payload.message });
+        setLiveStatus(null);
+        setRealStatusAt(Date.now());
+      }
       if (payload.state === "asking") {
         setQuestion({ text: payload.question, options: payload.options || [], requestId: payload.request_id });
         setProcMsg(payload.message || "A quick question");
@@ -776,6 +786,7 @@ export default function App() {
           lockOpen={working}
           working={working}
           realStatusAt={realStatusAt}
+          liveStatus={liveStatus}
           onHeartbeat={() => { emitStatusRequested("ui-heartbeat").catch(() => {}); }}
           question={question}
           onAnswer={answerQuestion}
