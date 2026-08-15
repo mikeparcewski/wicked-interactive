@@ -385,6 +385,12 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // ── Bus handlers ──────────────────────────────────────────────────────────
   // Bridge: fan every event to SSE clients, and persist chat/status to the doc transcript
   // (single logger, so no double-logging). Best-effort — never throws into the subscribe loop.
+  // Last durably-appended status text per doc (#160): crew HEARTBEATS its narration on an
+  // interval to keep the liveness window fed, so identical consecutive status.posted frames are
+  // a pulse, not new conversation — the SSE bridge above still relays every frame (the canvas
+  // indicator stays live), but the transcript and thread record each narration once. In-memory
+  // on purpose: a restart forgetting the last line costs at most one duplicate entry.
+  const lastStatusText = new Map();
   function onBridge(event) {
     bridgeSend(event);
     const name = event.payload?.document_id;
@@ -393,9 +399,18 @@ export function createMultiServer({ root, frontendDir } = {}) {
     try {
       if (event.event_type === "wicked.interactive.chat.posted") {
         appendConversation(dir, { role: event.payload.role, text: event.payload.text });
+        lastStatusText.delete(name); // real conversation separates status repeats
       } else if (event.event_type === "wicked.interactive.status.posted") {
         const { message, question, state } = event.payload;
-        if (message || question) appendConversation(dir, { role: "agent", text: question || message, state });
+        const text = question || message;
+        if (text && lastStatusText.get(name) !== text) {
+          appendConversation(dir, { role: "agent", text, state });
+          lastStatusText.set(name, text);
+          // Bounded (Copilot): evict oldest past 500 docs — insertion order is Map order.
+          if (lastStatusText.size > 500) {
+            lastStatusText.delete(lastStatusText.keys().next().value);
+          }
+        }
       }
     } catch { /* transcript logging is best-effort */ }
   }
@@ -420,6 +435,24 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // Identity probe (ADR-0022): says WHICH instance this is (the docs root it serves) so a
   // launching agent can tell "my bridge is already up" from "someone else is on this port".
   top.get("/api/health", (_req, res) => res.json({ ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null }));
+  // Crew projects for the creation wizard's picker (#162): docs must be project-bound to route
+  // through the governed crew, and the ONLY place a browser user can bind is at creation. Proxied
+  // here (same-origin) because the frontend cannot call the crew API cross-origin. `available:
+  // false` (crew down/absent) renders the wizard without a picker — the assist-only path.
+  top.get("/api/crew/projects", async (_req, res) => {
+    const base = (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+    try {
+      const r = await fetch(`${base}/api/v1/projects`, { signal: AbortSignal.timeout(750) });
+      if (!r.ok) return res.json({ available: false, projects: [] });
+      const body = await r.json();
+      const projects = (body.projects || [])
+        .filter((p) => p.status !== "archived" && p.id !== "default")
+        .map((p) => ({ id: p.id, name: p.name }));
+      return res.json({ available: true, projects });
+    } catch {
+      return res.json({ available: false, projects: [] });
+    }
+  });
   // The running instances the UI's project switcher can jump between (ADR-0025 follow-up). Live
   // pids only; the current root is flagged + sorted first. Each `serve` registers itself on start.
   top.get("/api/projects", (_req, res) => {

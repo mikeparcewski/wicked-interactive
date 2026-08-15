@@ -105,6 +105,9 @@ export async function getPreflight() {
 // meta: { kind: "blank"|"html"|"source"|"demo", sourcePaths?, brief?, url?, style? }.
 export async function createDoc(name, html, meta = {}) {
   const body = { name, html };
+  // Governed routing needs the binding for EVERY kind (#162): a blank doc's later structural
+  // edits route through crew only if the doc is project-bound, not just brief-based drafts.
+  if (meta.project) body.project = meta.project;
   if (meta.kind === "source") {
     body.kind = "source";
     body.source_paths = Array.isArray(meta.sourcePaths) ? meta.sourcePaths : [];
@@ -124,4 +127,11 @@ export async function createDoc(name, html, meta = {}) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || "couldn't create doc");
   return data;
+}
+
+/** Crew projects for the creation wizard's picker (#162). `available:false` ⇒ no picker. */
+export async function getCrewProjects() {
+  const res = await fetch(`/api/crew/projects`);
+  if (!res.ok) return { available: false, projects: [] };
+  return res.json();
 }
