@@ -6,7 +6,11 @@
 //
 // Renders inside the canvas (not a modal) when open=true. The caller decides where to mount it.
 import { useEffect, useRef, useState } from "react";
-import { getCrewProjects } from "../lib/api.js";
+import { createCrewProject, getCrewProjects } from "../lib/api.js";
+
+// Sentinel option value for "New project…" (#167). Not a project id — picking it reveals the
+// inline creator instead of binding, so it must never reach onCreateDoc as a `project`.
+const NEW_PROJECT = "__new__";
 
 const TRANSITION_PRESETS = [
   { id: "dark",    label: "Dark",    bg: "#1a1a1b", fg: "#ffffff" },
@@ -40,6 +44,14 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   // null = not-yet-chosen (default may fill it); "" = the user's EXPLICIT "No project" choice,
   // which the async default must never overwrite (Copilot).
   const [project, setProject] = useState(null);
+  // Inline project creation (#167): a first-run user with an empty crew had no way out of the
+  // picker. The row lives INSIDE the wizard — a failure only sets newProjectError, so the name,
+  // brief, format and sources the user already typed all survive.
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectBusy, setNewProjectBusy] = useState(false);
+  const [newProjectError, setNewProjectError] = useState("");
+  const newProjectRef = useRef(null);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -76,6 +88,10 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
     setCustomFg("#ffffff");
     setCustomColors(false);
     setRecordingMode("continuous");
+    setNewProjectOpen(false);
+    setNewProjectName("");
+    setNewProjectBusy(false);
+    setNewProjectError("");
   }, [open, initialPath, initialBrief]);
 
   // Focus the name input when the first real step appears.
@@ -91,6 +107,48 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   function choosePath(p) {
     setPath(p);
     setStep(1);
+  }
+
+  // ---- project picker (#167) ----
+  function onProjectChange(value) {
+    if (value === NEW_PROJECT) {
+      setNewProjectOpen(true);
+      setNewProjectError("");
+      setTimeout(() => newProjectRef.current?.focus(), 50);
+      return;   // the sentinel never becomes the binding — the created project's id does
+    }
+    dismissNewProject();
+    setProject(value);
+  }
+
+  // Closing the row also drops its error — a failure the user walked away from must not keep
+  // shouting next to a picker it no longer describes.
+  function dismissNewProject() {
+    setNewProjectOpen(false);
+    setNewProjectError("");
+  }
+
+  async function submitNewProject() {
+    const trimmed = newProjectName.trim();
+    if (!trimmed || newProjectBusy) return;
+    setNewProjectBusy(true);
+    setNewProjectError("");
+    try {
+      const created = await createCrewProject(trimmed);
+      // Crew is the authority on the id/name — echo exactly what it returned into the list.
+      setCrewProjects((prev) => ({
+        available: true,
+        projects: [...(prev?.projects || []), { id: created.id, name: created.name }],
+      }));
+      setProject(created.id);
+      setNewProjectOpen(false);
+      setNewProjectName("");
+    } catch (e) {
+      // Inline only: the wizard keeps every other answer, and the typed name stays for a retry.
+      setNewProjectError(e.message || "couldn't create the project");
+    } finally {
+      setNewProjectBusy(false);
+    }
   }
 
   // ---- scenes management ----
@@ -115,6 +173,10 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   // ---- submit ----
   function submitInteractive(e) {
     e.preventDefault();
+    // Held while the new-project row is open — the disabled submit button already blocks
+    // implicit submission, but guard the handler itself so requestSubmit()/future buttons
+    // can't bind the stale previously-selected project either (Copilot, PR#170).
+    if (newProjectOpen) return;
     const trimName = name.trim();
     const trimBrief = brief.trim();
     if (!trimName) return;
@@ -249,18 +311,59 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
                 <select
                   id="wi-wiz-project"
                   className="wi-wiz-field__select"
-                  value={project ?? ""}
-                  onChange={(e) => setProject(e.target.value)}
+                  value={newProjectOpen ? NEW_PROJECT : (project ?? "")}
+                  onChange={(e) => onProjectChange(e.target.value)}
                 >
                   {crewProjects.projects.map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
+                  <option value={NEW_PROJECT}>New project…</option>
                   <option value="">No project — assist agent only</option>
                 </select>
+                {newProjectOpen && (
+                  <div className="wi-wiz-newproj">
+                    <input
+                      ref={newProjectRef}
+                      className="wi-wiz-field__input"
+                      // The <label> above names the SELECT; this row needs its own name so a
+                      // screen reader announces more than the placeholder.
+                      aria-label="New project name"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      // Enter must create the PROJECT, not submit the whole wizard (no nested forms).
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); submitNewProject(); }
+                        else if (e.key === "Escape") { e.preventDefault(); dismissNewProject(); }
+                      }}
+                      placeholder="keystone"
+                      spellCheck={false}
+                      disabled={newProjectBusy}
+                    />
+                    <button
+                      type="button"
+                      className="wi-btn wi-btn--primary"
+                      onClick={submitNewProject}
+                      disabled={!newProjectName.trim() || newProjectBusy}
+                    >
+                      {newProjectBusy ? "Creating…" : "Create"}
+                    </button>
+                    <button
+                      type="button"
+                      className="wi-btn wi-btn--ghost"
+                      onClick={dismissNewProject}
+                      disabled={newProjectBusy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {newProjectError && <div className="wi-wiz-error">{newProjectError}</div>}
                 <span className="wi-wiz-field__hint">
-                  {project
-                    ? "A governed crew picks this up and builds it — progress shows in the studio too."
-                    : "Without a project, only an attached assist agent will build this — the crew won't see it."}
+                  {newProjectOpen
+                    ? "Name the project — create it, or cancel, to carry on with the document."
+                    : project
+                      ? "A governed crew picks this up and builds it — progress shows in the studio too."
+                      : "Without a project, only an attached assist agent will build this — the crew won't see it."}
                 </span>
               </div>
             )}
@@ -286,7 +389,9 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
             {docError && <div className="wi-wiz-error">{docError}</div>}
 
             <div className="wi-wizard__actions">
-              <button type="submit" className="wi-btn wi-btn--primary wi-btn--lg" disabled={!name.trim()}>
+              {/* Held while the new-project row is open: the select reads "New project…", so
+                  submitting there would silently bind the PREVIOUS project. Create or cancel first. */}
+              <button type="submit" className="wi-btn wi-btn--primary wi-btn--lg" disabled={!name.trim() || newProjectOpen}>
                 {(brief.trim() || sourcePaths.length > 0) ? "Generate document" : "Create blank document"}
               </button>
               <button type="button" className="wi-btn wi-btn--ghost" onClick={onCancel}>Cancel</button>

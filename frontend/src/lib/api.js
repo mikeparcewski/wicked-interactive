@@ -135,3 +135,14 @@ export async function getCrewProjects() {
   if (!res.ok) return { available: false, projects: [] };
   return res.json();
 }
+
+/** Create a crew project from the wizard (#167). Resolves to `{id, name}`, throws crew's reason. */
+export async function createCrewProject(name) {
+  const res = await fetch(`/api/crew/projects`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "couldn't create the project");
+  return data;
+}
