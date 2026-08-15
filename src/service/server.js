@@ -119,9 +119,11 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   // absolute path with a dot-segment — e.g. a docs root under ~/.local/share or a .wicked/ worktree.
   app.get("/api/export/file/:name", (req, res) => {
     const name = req.params.name;
-    if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
+    // Leading dots rejected: with dotfiles:"allow" below, "." / ".." / ".hidden" would otherwise
+    // reach sendFile ("." and ".." pass the charset test and resolve to DIRECTORIES).
+    if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith(".")) return res.status(400).send("invalid name");
     const filePath = join(dir, "exports", name);
-    if (!existsSync(filePath)) return res.status(404).send("not found");
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) return res.status(404).send("not found");
     const lower = name.toLowerCase();
     const type = lower.endsWith(".pdf") ? "application/pdf"
       : lower.endsWith(".pptx") ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"

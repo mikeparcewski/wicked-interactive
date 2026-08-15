@@ -124,6 +124,14 @@ test("GET /api/export/file rejects path-traversal attempts", async () => {
   const { base, cleanup } = await boot();
   try {
     assert.equal((await fetch(`${base}/api/export/file/${encodeURIComponent("../_v0.html")}`)).status, 400);
+    // With dotfiles:"allow" on this route (#169), leading-dot names must be rejected up front:
+    // "." and ".." pass the charset test and resolve to DIRECTORIES, and ".hidden" would be served.
+    // "." / ".." may be swallowed by express's own URL normalization (404, never reaching the
+    // handler) or rejected by the handler (400) — either way, NOT served and NOT a 500.
+    for (const dotted of ["..", ".", ".hidden"]) {
+      const st = (await fetch(`${base}/api/export/file/${encodeURIComponent(dotted)}`)).status;
+      assert.ok(st === 400 || st === 404, `dotted name ${dotted} must be refused, got ${st}`);
+    }
   } finally { await cleanup(); }
 });
 
