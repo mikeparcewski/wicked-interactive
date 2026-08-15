@@ -4,8 +4,12 @@
 // Props:
 //   preflight — { ok, missing[], required:{name:{detected}}, install_hint }
 //   onRetry   — re-runs the preflight check (after the user installs the plugins)
-export default function InstallGate({ preflight, onRetry }) {
+export default function InstallGate({ preflight, onRetry, onDismiss }) {
   if (!preflight || preflight.ok) return null;
+  // A reachable crew daemon answers the governed path itself — the garden plugin is not
+  // required for it, so a missing plugin must not BLOCK the editor (#159). Render nothing;
+  // grounded-assist features simply stay dark until the plugin is installed.
+  if (preflight.crew_available) return null;
   const required = preflight.required || {};
   const hint = preflight.install_hint || [
     "/plugin marketplace add mikeparcewski/wicked-garden",
@@ -34,6 +38,9 @@ export default function InstallGate({ preflight, onRetry }) {
         <pre className="wi-gate__cmd"><code>{hint}</code></pre>
         <div className="wi-gate__actions">
           <button className="wi-btn wi-btn--primary" onClick={onRetry}>I've installed them — check again</button>
+          {onDismiss && (
+            <button className="wi-btn" onClick={onDismiss}>Continue anyway</button>
+          )}
         </div>
         {preflight.unreachable && (
           <p className="wi-gate__warn">Couldn't reach the preflight endpoint — the service may be restarting.</p>

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join, delimiter, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { preflight, pluginSearchPaths } from "../src/service/preflight.js";
+import { preflight, pluginSearchPaths, crewAvailable, preflightWithCrew } from "../src/service/preflight.js";
 import { createMultiServer } from "../src/service/server.js";
 
 process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-pf-"));
@@ -183,5 +183,71 @@ test("home is resolvable via USERPROFILE alone (Windows: os.homedir ignores HOME
     if (prevProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prevProfile;
     process.env.WI_PLUGIN_PATHS = prevPaths;
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("detects a plugin installed DIRECTLY under a plugins root (modern layout, #159)", () => {
+  // Live-observed layout: ~/.claude/plugins/wicked-garden (no cache/ segment). Seed a fake
+  // HOME with exactly that shape; WI_PLUGIN_PATHS points at an empty dir so only the
+  // home-derived roots can satisfy detection.
+  const home = mkdtempSync(join(tmpdir(), "wi-home-root-"));
+  mkdirSync(join(home, ".claude", "plugins", "wicked-garden"), { recursive: true });
+  const empty = mkdtempSync(join(tmpdir(), "wi-empty2-"));
+  const prev = process.env.WI_PLUGIN_PATHS;
+  const restoreHome = setHome(home);
+  process.env.WI_PLUGIN_PATHS = empty;
+  try {
+    const out = preflight();
+    assert.equal(out.ok, true, "plugins/<name> layout must be detected");
+    assert.deepEqual(out.missing, []);
+  } finally {
+    process.env.WI_PLUGIN_PATHS = prev;
+    restoreHome();
+    rmSync(home, { recursive: true, force: true });
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test("detects a plugin nested one level under a marketplace dir (#159)", () => {
+  // cache/<marketplace>/<name> — the marketplace-nested layout the flat lookup missed.
+  const root = mkdtempSync(join(tmpdir(), "wi-mp-"));
+  mkdirSync(join(root, "some-marketplace", "wicked-garden"), { recursive: true });
+  const prev = process.env.WI_PLUGIN_PATHS;
+  const restoreHome = setHome(mkdtempSync(join(tmpdir(), "wi-home-empty-")));
+  process.env.WI_PLUGIN_PATHS = root;
+  try {
+    const out = preflight();
+    assert.equal(out.ok, true, "cache/<marketplace>/<name> must be detected");
+  } finally {
+    process.env.WI_PLUGIN_PATHS = prev;
+    restoreHome();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("crewAvailable reflects a live daemon and preflightWithCrew carries it (#159)", async () => {
+  const { createServer } = await import("node:http");
+  const srv = createServer((req, res) => {
+    if (req.url === "/api/v1/runs") { res.writeHead(200, {"content-type":"application/json"}); res.end("{\"runs\":[]}"); }
+    else { res.writeHead(404); res.end(); }
+  });
+  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+  const prev = process.env.WICKED_CREW_API;
+  process.env.WICKED_CREW_API = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    assert.equal(await crewAvailable(), true, "answering daemon → available");
+    const out = await preflightWithCrew();
+    assert.equal(out.crew_available, true);
+  } finally {
+    srv.close();
+    try {
+      // An unreachable port → unavailable (fail-closed toward the BLOCKING gate).
+      process.env.WICKED_CREW_API = "http://127.0.0.1:1";
+      assert.equal(await crewAvailable(200), false, "unreachable daemon → not available");
+    } finally {
+      // Env restoration must survive the assertion above failing (Copilot) — a leaked
+      // WICKED_CREW_API cascades bogus failures into unrelated tests.
+      if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    }
   }
 });
