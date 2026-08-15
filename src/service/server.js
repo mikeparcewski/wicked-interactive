@@ -114,19 +114,23 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   });
 
   // Download the actual exported file. Filenames are restricted to the slug charset, so this
-  // can't path-traverse. Content-Disposition forces a save dialog.
+  // can't path-traverse. Content-Disposition forces a save dialog. dotfiles:"allow" because the
+  // path is server-derived (docs root + validated name), and send's default "ignore" 404s any
+  // absolute path with a dot-segment — e.g. a docs root under ~/.local/share or a .wicked/ worktree.
   app.get("/api/export/file/:name", (req, res) => {
     const name = req.params.name;
-    if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
+    // Leading dots rejected: with dotfiles:"allow" below, "." / ".." / ".hidden" would otherwise
+    // reach sendFile ("." and ".." pass the charset test and resolve to DIRECTORIES).
+    if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith(".")) return res.status(400).send("invalid name");
     const filePath = join(dir, "exports", name);
-    if (!existsSync(filePath)) return res.status(404).send("not found");
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) return res.status(404).send("not found");
     const lower = name.toLowerCase();
     const type = lower.endsWith(".pdf") ? "application/pdf"
       : lower.endsWith(".pptx") ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
       : "text/html; charset=utf-8";
     res.setHeader("Content-Type", type);
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
-    res.sendFile(filePath);
+    res.sendFile(filePath, { dotfiles: "allow" });
   });
 
   // Convert a recorded version's webm -> animated GIF (embeddable where video isn't). Lazy +

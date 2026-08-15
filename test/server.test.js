@@ -5,15 +5,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
 import { pptxReady } from "../src/service/pptx.js";
 
-async function boot() {
-  const dir = mkdtempSync(join(tmpdir(), "wi-srv-"));
+async function boot(parent = tmpdir()) {
+  const dir = mkdtempSync(join(parent, "wi-srv-"));
   initWorkspace(dir, "<h1>Q2 Results</h1><p>body</p>");
   const events = [];
   const svc = createServer({ dir, emit: (type, payload) => events.push({ type, payload }) });
@@ -94,10 +94,44 @@ test("POST /api/export returns a download URL + GET /api/export/file serves the 
   } finally { await cleanup(); }
 });
 
+// Regression (#169): send's default dotfiles:"ignore" 404s any absolute path carrying a
+// dot-segment, so a docs root under e.g. ~/.local/share or a .wicked/ worktree broke downloads
+// while every other route kept working. The download endpoint passes dotfiles:"allow".
+test("GET /api/export/file serves the bytes when the docs root sits under a dotted directory", async () => {
+  const outer = mkdtempSync(join(tmpdir(), "wi-dot-"));
+  const dotted = join(outer, ".wicked-hidden");
+  mkdirSync(dotted);
+  const { base, cleanup } = await boot(dotted);
+  try {
+    const post = await fetch(`${base}/api/export`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 0, format: "html" }),
+    });
+    assert.equal(post.status, 200);
+    const body = await post.json();
+    assert.ok(body.path.includes(`${sep}.wicked-hidden${sep}`), "export really lives under the dotted segment");
+
+    const dl = await fetch(`${base}${body.download}`);
+    assert.equal(dl.status, 200);
+    assert.ok((await dl.text()).includes("<html"), "downloaded content is HTML");
+  } finally {
+    await cleanup();
+    rmSync(outer, { recursive: true, force: true });
+  }
+});
+
 test("GET /api/export/file rejects path-traversal attempts", async () => {
   const { base, cleanup } = await boot();
   try {
     assert.equal((await fetch(`${base}/api/export/file/${encodeURIComponent("../_v0.html")}`)).status, 400);
+    // With dotfiles:"allow" on this route (#169), leading-dot names must be rejected up front:
+    // "." and ".." pass the charset test and resolve to DIRECTORIES, and ".hidden" would be served.
+    // "." / ".." may be swallowed by express's own URL normalization (404, never reaching the
+    // handler) or rejected by the handler (400) — either way, NOT served and NOT a 500.
+    for (const dotted of ["..", ".", ".hidden"]) {
+      const st = (await fetch(`${base}/api/export/file/${encodeURIComponent(dotted)}`)).status;
+      assert.ok(st === 400 || st === 404, `dotted name ${dotted} must be refused, got ${st}`);
+    }
   } finally { await cleanup(); }
 });
 
