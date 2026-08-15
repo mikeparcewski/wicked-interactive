@@ -240,9 +240,14 @@ test("crewAvailable reflects a live daemon and preflightWithCrew carries it (#15
     assert.equal(out.crew_available, true);
   } finally {
     srv.close();
-    // An unreachable port → unavailable (fail-closed toward the BLOCKING gate).
-    process.env.WICKED_CREW_API = "http://127.0.0.1:1";
-    assert.equal(await crewAvailable(200), false, "unreachable daemon → not available");
-    if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    try {
+      // An unreachable port → unavailable (fail-closed toward the BLOCKING gate).
+      process.env.WICKED_CREW_API = "http://127.0.0.1:1";
+      assert.equal(await crewAvailable(200), false, "unreachable daemon → not available");
+    } finally {
+      // Env restoration must survive the assertion above failing (Copilot) — a leaked
+      // WICKED_CREW_API cascades bogus failures into unrelated tests.
+      if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    }
   }
 });

@@ -98,10 +98,10 @@ export function playwrightInstalled() {
 export async function crewAvailable(timeoutMs = 750) {
   const base = (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
   try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), timeoutMs);
-    const res = await fetch(`${base}/api/v1/runs`, { signal: ctl.signal });
-    clearTimeout(t);
+    // AbortSignal.timeout (same idiom as project.js): the timer is owned by the signal, so a
+    // fast failure (connection refused) leaves no dangling handle to accumulate under
+    // repeated /api/preflight polling (Copilot).
+    const res = await fetch(`${base}/api/v1/runs`, { signal: AbortSignal.timeout(timeoutMs) });
     return res.ok;
   } catch {
     return false;
