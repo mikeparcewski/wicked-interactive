@@ -12,7 +12,7 @@ import DemoStoryboard from "./components/DemoStoryboard.jsx";
 import ThemeFromUrlModal from "./components/ThemeFromUrlModal.jsx";
 import InstallGate from "./components/InstallGate.jsx";
 import { useSse } from "./hooks/useSse.js";
-import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitSourceRemoved, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested, getProjects } from "./lib/api.js";
+import { docUrl, getVersions, postFork, postExport, getConversation, listDocs, createDoc, postDemoGif, getPreflight, getSources, getDocActivity, emitFeedback, emitChat, emitAnswer, emitSourceAttached, emitSourceRemoved, emitDemoRecord, emitThemeFromUrl, emitThemeFromFile, emitReviewRequested, emitStatusRequested, getProjects } from "./lib/api.js";
 import { getCurrentDoc, navigateToDoc, eventsUrl, apiPath } from "./lib/apiPath.js";
 import { buildItem } from "./lib/feedbackStore.js";
 import { nearestReviewable, describe } from "./lib/selection.js";
@@ -157,6 +157,29 @@ export default function App() {
     listDocs().then(setDocs).catch(() => setDocs([]));
     getSources().then((r) => setSources(r.sources || [])).catch(() => setSources([]));
     getProjects().then((r) => { setProjects(r.projects || []); setProjectRoot(r.root || null); }).catch(() => {});
+    // Reconnect/rehydrate (#165): if a build is already in flight for this doc (nav back /
+    // reload / new tab mid-run), restore the working surface immediately instead of waiting
+    // for the next bus frame. The SSE bridge is (re)attached by useSse on every mount, so
+    // subsequent pulses keep the line fresh; skip when a live frame beat this read to it.
+    if (currentDoc) {
+      getDocActivity().then((a) => {
+        if (!a?.active || busyRef.current || renderReadyRef.current) return;
+        setAgentBusy(true);
+        setThreadOpen(true);
+        const s = a.status || {};
+        if (s.state === "asking" && s.question) {
+          // The run is parked on a question — restore it so the user can answer right away.
+          setQuestion({ text: s.question, options: s.options || [], requestId: s.request_id });
+          setProcMsg(s.message || "A quick question");
+          setProcessing(true);
+        } else if (s.message) {
+          // Re-seed the transient pulse line (#164) as if the frame had just arrived.
+          setLiveStatus(s.message);
+          setRealStatusAt(Date.now());
+          setProcMsg(s.message);
+        }
+      }).catch(() => {});
+    }
   }, [refreshVersions, checkPreflight]);
 
   async function attachSources(paths, note) {

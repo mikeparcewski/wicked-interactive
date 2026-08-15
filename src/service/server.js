@@ -395,6 +395,12 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // indicator stays live), but the transcript and thread record each narration once. In-memory
   // on purpose: a restart forgetting the last line costs at most one duplicate entry.
   const lastStatusText = new Map();
+  // Last FULL status frame per doc (#165) — pulses included, unlike the transcript above. A
+  // remounting frontend (nav back / reload mid-build) reads it via GET /api/docs/:doc/activity
+  // to rehydrate the working indicator instead of waiting for the next bus frame. In-memory on
+  // purpose (same contract as lastStatusText): a restart forgetting it degrades to the crew-run
+  // probe below, never to a wrong answer.
+  const lastStatus = new Map();
   function onBridge(event) {
     bridgeSend(event);
     const name = event.payload?.document_id;
@@ -406,6 +412,16 @@ export function createMultiServer({ root, frontendDir } = {}) {
         lastStatusText.delete(name); // real conversation separates status repeats
       } else if (event.event_type === "wicked.interactive.status.posted") {
         const { message, question, state } = event.payload;
+        lastStatus.set(name, {
+          state: state ?? null,
+          message: message ?? null,
+          question: question ?? null,
+          options: Array.isArray(event.payload.options) ? event.payload.options : [],
+          request_id: event.payload.request_id ?? null,
+          at: typeof event.payload.ts === "string" ? event.payload.ts : new Date().toISOString(),
+        });
+        // Bounded like lastStatusText: evict oldest past 500 docs (insertion order is Map order).
+        if (lastStatus.size > 500) lastStatus.delete(lastStatus.keys().next().value);
         // 'working' statuses are the run's PULSE (#164) — they render in the live indicator via
         // SSE and never enter the durable transcript; only major transitions (pickup, questions,
         // errors, completion) are conversation.
@@ -490,6 +506,40 @@ export function createMultiServer({ root, frontendDir } = {}) {
     } catch {
       return res.status(502).json({ error: "crew is unreachable — create the doc without a project, or start crew" });
     }
+  });
+  // Doc build activity (#165): is a build in flight for this doc? A frontend that remounts
+  // mid-build (nav back, reload, new tab) asks this on doc open and rehydrates the working
+  // indicator instead of waiting for the next bus frame. Two additive sources:
+  //  • the last status.posted frame this service bridged (lastStatus — pulses included), and
+  //  • crew's run list: the doc→run association is the problem-statement marker BOTH crew
+  //    seams stamp verbatim (`the wicked-interactive document "<name>"` — draft-events.ts /
+  //    edit-events.ts), scanned for a run in a non-terminal state.
+  // Crew down/absent/slow degrades to the status snapshot alone — never an error (same silent
+  // contract as GET /api/crew/projects): this read happens on every doc open.
+  const RUN_ACTIVE_STATUSES = new Set(["planning", "distributing", "executing", "awaiting_human"]);
+  const PULSE_FRESH_MS = 60_000; // crew heartbeats narration every ≤15s — a fresh pulse means live work
+  top.get("/api/docs/:doc/activity", async (req, res) => {
+    const name = String(req.params.doc || "");
+    if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
+    const status = lastStatus.get(name) || null;
+    let run = null;
+    try {
+      const r = await fetch(`${crewApiBase()}/api/v1/runs`, { signal: AbortSignal.timeout(750) });
+      if (r.ok) {
+        const body = await r.json();
+        const marker = `the wicked-interactive document "${name}"`;
+        const hit = (body.runs || []).find((v) =>
+          typeof v?.session?.problem === "string" && v.session.problem.includes(marker) &&
+          RUN_ACTIVE_STATUSES.has(v.session.status));
+        if (hit) run = { id: hit.session.id, workflow_id: hit.session.workflow_id, status: hit.session.status };
+      }
+    } catch { /* crew unreachable — the status snapshot is still the honest answer */ }
+    // Active = crew reports a live run, OR the last pulse is fresh (covers the assist-skill
+    // answerer, which has no crew run, and a crew API the service can't reach).
+    const at = status ? Date.parse(status.at) : NaN;
+    const pulseFresh = !!status && status.state === "working" &&
+      Number.isFinite(at) && Date.now() - at < PULSE_FRESH_MS;
+    res.json({ document_id: name, active: !!run || pulseFresh, status, run });
   });
   // The running instances the UI's project switcher can jump between (ADR-0025 follow-up). Live
   // pids only; the current root is flagged + sorted first. Each `serve` registers itself on start.
