@@ -114,7 +114,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   });
 
   // Download the actual exported file. Filenames are restricted to the slug charset, so this
-  // can't path-traverse. Content-Disposition forces a save dialog.
+  // can't path-traverse. Content-Disposition forces a save dialog. dotfiles:"allow" because the
+  // path is server-derived (docs root + validated name), and send's default "ignore" 404s any
+  // absolute path with a dot-segment — e.g. a docs root under ~/.local/share or a .wicked/ worktree.
   app.get("/api/export/file/:name", (req, res) => {
     const name = req.params.name;
     if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
@@ -126,7 +128,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       : "text/html; charset=utf-8";
     res.setHeader("Content-Type", type);
     res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
-    res.sendFile(filePath);
+    res.sendFile(filePath, { dotfiles: "allow" });
   });
 
   // Convert a recorded version's webm -> animated GIF (embeddable where video isn't). Lazy +
