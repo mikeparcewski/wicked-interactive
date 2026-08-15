@@ -6,14 +6,16 @@
 // (`the wicked-interactive document "<name>"`). A stub crew (plain node:http, like
 // crew-projects.test.js) stands in for the daemon so the tests are deterministic and offline.
 
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-activity-"));
+const busDir = mkdtempSync(join(tmpdir(), "wi-bus-activity-"));
+process.env.WICKED_BUS_DATA_DIR = busDir;
+after(() => rmSync(busDir, { recursive: true, force: true }));
 const { createMultiServer } = await import("../src/service/server.js");
 const { emitEvent } = await import("../src/service/bus-client.js");
 const { PRODUCERS } = await import("../src/service/events.js");

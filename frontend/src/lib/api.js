@@ -106,7 +106,8 @@ export async function getDocActivity() {
   if (!doc) return NO_ACTIVITY;
   try {
     const r = await fetch(`/api/docs/${encodeURIComponent(doc)}/activity`);
-    return r.ok ? r.json() : NO_ACTIVITY;
+    // await INSIDE the try — an unawaited r.json() would let a parse failure escape the catch.
+    return r.ok ? await r.json() : NO_ACTIVITY;
   } catch { return NO_ACTIVITY; }
 }
 
