@@ -37,14 +37,18 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   // creation is the one moment a browser user can bind. Defaults to the first project so the
   // out-of-the-box path is the one that actually answers.
   const [crewProjects, setCrewProjects] = useState(null); // null = probing; {available, projects}
-  const [project, setProject] = useState("");
+  // null = not-yet-chosen (default may fill it); "" = the user's EXPLICIT "No project" choice,
+  // which the async default must never overwrite (Copilot).
+  const [project, setProject] = useState(null);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     getCrewProjects().then((r) => {
       if (cancelled) return;
       setCrewProjects(r);
-      if (r.available && r.projects.length > 0) setProject((p) => p || r.projects[0].id);
+      if (r.available && r.projects.length > 0) {
+        setProject((p) => (p === null ? r.projects[0].id : p));
+      }
     }).catch(() => { if (!cancelled) setCrewProjects({ available: false, projects: [] }); });
     return () => { cancelled = true; };
   }, [open]);
@@ -245,7 +249,7 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
                 <select
                   id="wi-wiz-project"
                   className="wi-wiz-field__select"
-                  value={project}
+                  value={project ?? ""}
                   onChange={(e) => setProject(e.target.value)}
                 >
                   {crewProjects.projects.map((p) => (

@@ -105,12 +105,14 @@ export async function getPreflight() {
 // meta: { kind: "blank"|"html"|"source"|"demo", sourcePaths?, brief?, url?, style? }.
 export async function createDoc(name, html, meta = {}) {
   const body = { name, html };
+  // Governed routing needs the binding for EVERY kind (#162): a blank doc's later structural
+  // edits route through crew only if the doc is project-bound, not just brief-based drafts.
+  if (meta.project) body.project = meta.project;
   if (meta.kind === "source") {
     body.kind = "source";
     body.source_paths = Array.isArray(meta.sourcePaths) ? meta.sourcePaths : [];
     body.brief = meta.brief || "";
     if (meta.style) body.style = meta.style;
-    if (meta.project) body.project = meta.project; // governed routing needs the binding (#162)
   } else if (meta.kind === "demo") {
     body.kind = "demo";
     body.url = meta.url || "";

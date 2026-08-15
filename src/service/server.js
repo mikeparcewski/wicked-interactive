@@ -406,6 +406,10 @@ export function createMultiServer({ root, frontendDir } = {}) {
         if (text && lastStatusText.get(name) !== text) {
           appendConversation(dir, { role: "agent", text, state });
           lastStatusText.set(name, text);
+          // Bounded (Copilot): evict oldest past 500 docs — insertion order is Map order.
+          if (lastStatusText.size > 500) {
+            lastStatusText.delete(lastStatusText.keys().next().value);
+          }
         }
       }
     } catch { /* transcript logging is best-effort */ }
