@@ -402,6 +402,10 @@ export function createMultiServer({ root, frontendDir } = {}) {
         lastStatusText.delete(name); // real conversation separates status repeats
       } else if (event.event_type === "wicked.interactive.status.posted") {
         const { message, question, state } = event.payload;
+        // 'working' statuses are the run's PULSE (#164) — they render in the live indicator via
+        // SSE and never enter the durable transcript; only major transitions (pickup, questions,
+        // errors, completion) are conversation.
+        if (state === "working") return;
         const text = question || message;
         if (text && lastStatusText.get(name) !== text) {
           appendConversation(dir, { role: "agent", text, state });
