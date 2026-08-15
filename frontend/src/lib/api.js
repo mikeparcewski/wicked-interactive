@@ -110,6 +110,7 @@ export async function createDoc(name, html, meta = {}) {
     body.source_paths = Array.isArray(meta.sourcePaths) ? meta.sourcePaths : [];
     body.brief = meta.brief || "";
     if (meta.style) body.style = meta.style;
+    if (meta.project) body.project = meta.project; // governed routing needs the binding (#162)
   } else if (meta.kind === "demo") {
     body.kind = "demo";
     body.url = meta.url || "";
@@ -124,4 +125,11 @@ export async function createDoc(name, html, meta = {}) {
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || "couldn't create doc");
   return data;
+}
+
+/** Crew projects for the creation wizard's picker (#162). `available:false` ⇒ no picker. */
+export async function getCrewProjects() {
+  const res = await fetch(`/api/crew/projects`);
+  if (!res.ok) return { available: false, projects: [] };
+  return res.json();
 }

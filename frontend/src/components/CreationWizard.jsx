@@ -6,6 +6,7 @@
 //
 // Renders inside the canvas (not a modal) when open=true. The caller decides where to mount it.
 import { useEffect, useRef, useState } from "react";
+import { getCrewProjects } from "../lib/api.js";
 
 const TRANSITION_PRESETS = [
   { id: "dark",    label: "Dark",    bg: "#1a1a1b", fg: "#ffffff" },
@@ -32,6 +33,21 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
   const [name, setName] = useState("");
   const [brief, setBrief] = useState("");
   const [style, setStyle] = useState("web");
+  // Crew project binding (#162): docs route through the governed crew ONLY when bound, and
+  // creation is the one moment a browser user can bind. Defaults to the first project so the
+  // out-of-the-box path is the one that actually answers.
+  const [crewProjects, setCrewProjects] = useState(null); // null = probing; {available, projects}
+  const [project, setProject] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getCrewProjects().then((r) => {
+      if (cancelled) return;
+      setCrewProjects(r);
+      if (r.available && r.projects.length > 0) setProject((p) => p || r.projects[0].id);
+    }).catch(() => { if (!cancelled) setCrewProjects({ available: false, projects: [] }); });
+    return () => { cancelled = true; };
+  }, [open]);
   const [url, setUrl] = useState("");
   const [scenes, setScenes] = useState([emptyScene()]);
   const [transPreset, setTransPreset] = useState("dark");
@@ -100,7 +116,7 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
     if (!trimName) return;
     const hasSources = sourcePaths.length > 0;
     const kind = (trimBrief || hasSources) ? "source" : "blank";
-    onCreateDoc(trimName, "", { kind, brief: trimBrief, style, sourcePaths: hasSources ? sourcePaths : undefined });
+    onCreateDoc(trimName, "", { kind, brief: trimBrief, style, sourcePaths: hasSources ? sourcePaths : undefined, project: project || undefined });
   }
 
   function submitDemo(e) {
@@ -222,6 +238,28 @@ export default function CreationWizard({ open, initialPath, initialBrief, source
               />
               <span className="wi-wiz-field__hint">Leave blank to start with an empty doc and build it in the chat.</span>
             </div>
+
+            {crewProjects?.available && (
+              <div className="wi-wiz-field">
+                <label className="wi-wiz-field__label" htmlFor="wi-wiz-project">File it into a project</label>
+                <select
+                  id="wi-wiz-project"
+                  className="wi-wiz-field__select"
+                  value={project}
+                  onChange={(e) => setProject(e.target.value)}
+                >
+                  {crewProjects.projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                  <option value="">No project — assist agent only</option>
+                </select>
+                <span className="wi-wiz-field__hint">
+                  {project
+                    ? "A governed crew picks this up and builds it — progress shows in the studio too."
+                    : "Without a project, only an attached assist agent will build this — the crew won't see it."}
+                </span>
+              </div>
+            )}
 
             <div className="wi-wiz-field">
               <label className="wi-wiz-field__label">Ground it in your content <span className="wi-wiz-field__opt">optional</span></label>
