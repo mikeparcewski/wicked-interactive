@@ -1102,6 +1102,10 @@ h1, h2, h3, h4, .wi-modal__title, .wi-logo__word, .wi-gate__title {
 .wi-wiz-field__textarea:focus { border-color: var(--wi-accent); box-shadow: 0 0 0 3px var(--wi-ring); outline: none; }
 .wi-wiz-field__hint { font-size: var(--wi-text-xs); color: var(--wi-ink-faint); line-height: 1.4; }
 .wi-wiz-field__hint--err { color: var(--wi-danger); }
+/* Inline "New project…" creator inside the wizard's project picker (#167) */
+.wi-wiz-newproj { display: flex; align-items: center; gap: 6px; }
+.wi-wiz-newproj .wi-wiz-field__input { flex: 1 1 auto; min-width: 0; }
+.wi-wiz-newproj .wi-btn { flex: 0 0 auto; }
 .wi-wiz-error { padding: 9px 12px; border-radius: 9px; background: color-mix(in oklab, var(--wi-danger) 12%, transparent); border: 1px solid color-mix(in oklab, var(--wi-danger) 35%, transparent); color: var(--wi-danger); font-size: var(--wi-text-sm); }
 .wi-wiz-intro { margin: 0; font-size: var(--wi-text-sm); color: var(--wi-ink-soft); line-height: 1.55; }
 .wi-wiz-brief-recap { background: var(--wi-field); border: 1px solid var(--wi-line-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }

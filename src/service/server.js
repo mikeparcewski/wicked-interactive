@@ -443,8 +443,9 @@ export function createMultiServer({ root, frontendDir } = {}) {
   // through the governed crew, and the ONLY place a browser user can bind is at creation. Proxied
   // here (same-origin) because the frontend cannot call the crew API cross-origin. `available:
   // false` (crew down/absent) renders the wizard without a picker — the assist-only path.
+  const crewApiBase = () => (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
   top.get("/api/crew/projects", async (_req, res) => {
-    const base = (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+    const base = crewApiBase();
     try {
       const r = await fetch(`${base}/api/v1/projects`, { signal: AbortSignal.timeout(750) });
       if (!r.ok) return res.json({ available: false, projects: [] });
@@ -455,6 +456,35 @@ export function createMultiServer({ root, frontendDir } = {}) {
       return res.json({ available: true, projects });
     } catch {
       return res.json({ available: false, projects: [] });
+    }
+  });
+  // Create a project from the wizard (#167). The picker can only bind to projects that already
+  // exist, so a first-run user with an empty crew had nowhere to file a doc. Pure passthrough —
+  // crew stays the authority on the id, the name rules, and the lifecycle; we mint nothing and
+  // forward its refusal verbatim so the wizard can show the real reason.
+  top.post("/api/crew/projects", async (req, res) => {
+    const name = String(req.body?.name || "").trim();
+    if (!name) return res.status(400).json({ error: "a project name is required" });
+    const base = crewApiBase();
+    try {
+      const r = await fetch(`${base}/api/v1/projects`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        signal: AbortSignal.timeout(750),
+      });
+      const body = await r.json().catch(() => ({}));
+      // A 4xx is crew judging the REQUEST (bad name, duplicate) — keep its status so the user
+      // sees "you" not "us"; anything else is crew failing, which is a 502 from here.
+      if (!r.ok) {
+        const status = r.status >= 400 && r.status < 500 ? r.status : 502;
+        return res.status(status).json({ error: body.error || `crew rejected the project (${r.status})` });
+      }
+      const project = body.project || body;
+      if (!project?.id) return res.status(502).json({ error: "crew returned no project id" });
+      return res.json({ id: project.id, name: project.name || name });
+    } catch {
+      return res.status(502).json({ error: "crew is unreachable — create the doc without a project, or start crew" });
     }
   });
   // The running instances the UI's project switcher can jump between (ADR-0025 follow-up). Live
