@@ -177,8 +177,14 @@ export default function Thread({ log, open, forceOpen, lockOpen, working, realSt
         {working && (
           <div className="wi-whimsy" aria-hidden="true">
             <span className="wi-typing"><span></span><span></span><span></span></span>
-            {/* The run's live pulse (#164) — real narration owns the line; whimsy only fills silence. */}
-            <span className="wi-whimsy__text">{liveStatus || WHIMSY[whimsyIdx]}</span>
+            {/* The run's live pulse (#164) — real narration owns the line while FRESH; a quiet
+                agent hands the line back to whimsy (staleness > heartbeat interval, Copilot).
+                The whimsy rotation interval re-renders this often enough to expire it. */}
+            <span className="wi-whimsy__text">
+              {liveStatus && realStatusAt && Date.now() - realStatusAt < 30000
+                ? liveStatus
+                : WHIMSY[whimsyIdx]}
+            </span>
           </div>
         )}
       </div>
