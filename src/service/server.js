@@ -23,7 +23,7 @@ import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { exportPptx } from "./pptx.js";
-import { preflight } from "./preflight.js";
+import { preflightWithCrew } from "./preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive } from "./serve-bridge.mjs";
 import { bindDocToProject, projectIdFor } from "./project.js";
@@ -63,7 +63,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   }
 
   // Plugin install-gate (ADR-0016): which sibling tools are present.
-  app.get("/api/preflight", (_req, res) => res.json(preflight()));
+  app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
 
   app.get("/api/versions", (_req, res) => {
     try { res.json(loadManifest(dir)); } catch (e) { res.status(404).json({ error: e.message }); }
@@ -430,7 +430,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
       .sort((a, b) => (a.current === b.current ? a.name.localeCompare(b.name) : a.current ? -1 : 1));
     res.json({ root: here, projects });
   });
-  top.get("/api/preflight", (_req, res) => res.json(preflight()));
+  top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
   top.get("/api/docs", (_req, res) => res.json(listDocs()));
 
   // UI emit bridge (up): the browser may only originate the whitelisted intent events. We

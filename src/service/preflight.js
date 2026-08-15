@@ -12,7 +12,7 @@
 // Windows a single absolute path already contains a colon ("C:\Users\..."), so splitting on
 // ':' would shred each entry into garbage. (Cross-platform mandate — see CLAUDE.md.)
 
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -38,15 +38,33 @@ export function pluginSearchPaths() {
   return [
     ...env,
     // Build with path.join segment-by-segment so separators are correct on every OS.
+    // BOTH layouts per root (issue #159): Claude Code installs plugins DIRECTLY under
+    // `plugins/<name>` (observed live: `~/.claude/plugins/wicked-garden`), while `plugins/cache/`
+    // holds MARKETPLACES (`cache/<marketplace>/…`). The old cache-only list made an installed
+    // plugin undetectable, and the gate's "check again" could never succeed.
+    join(home, ".claude", "plugins"),
     join(home, ".claude", "plugins", "cache"),
+    join(home, "alt-configs", ".claude", "plugins"),
     join(home, "alt-configs", ".claude", "plugins", "cache"),
+    join(home, ".claude-code", "plugins"),
     join(home, ".claude-code", "plugins", "cache"),
   ];
 }
 
 function inPluginCache(name) {
   for (const base of pluginSearchPaths()) {
+    // Direct child: `<base>/<name>` — covers both `plugins/<name>` and legacy `cache/<name>`.
     if (existsSync(join(base, name))) return true;
+    // One level deep: `<base>/<marketplace>/<name>` — marketplace-nested cache entries.
+    let entries = [];
+    try {
+      entries = readdirSync(base, { withFileTypes: true });
+    } catch {
+      continue; // base absent — nothing nested to scan
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && existsSync(join(base, e.name, name))) return true;
+    }
   }
   return false;
 }
@@ -69,6 +87,32 @@ const INSTALL_CMD = {
 export const PLAYWRIGHT_INSTALL = "npx playwright install\nplaywright-cli install --skills";
 export function playwrightInstalled() {
   try { require.resolve("playwright"); return true; } catch { return false; }
+}
+
+/**
+ * Is a wicked-crew daemon answering? When it is, the garden plugin is NOT required for the
+ * governed path (crew answers doc.created/feedback.processed itself — issue #159), so the
+ * install gate softens to non-blocking. Uses the SAME crew-api resolution as the project
+ * bridge so the two seams cannot disagree about where crew lives.
+ */
+export async function crewAvailable(timeoutMs = 750) {
+  const base = (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    const res = await fetch(`${base}/api/v1/runs`, { signal: ctl.signal });
+    clearTimeout(t);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Async preflight for the HTTP route: the sync snapshot plus crew reachability. */
+export async function preflightWithCrew() {
+  const out = preflight();
+  out.crew_available = await crewAvailable();
+  return out;
 }
 
 /** Snapshot the install state of every required plugin. */

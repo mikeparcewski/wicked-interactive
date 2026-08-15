@@ -50,6 +50,7 @@ export default function App() {
   const [newDocBrief, setNewDocBrief] = useState("");    // seeded when the launch-state chat starts a doc
   const [themeUrlError, setThemeUrlError] = useState(null);
   const [preflight, setPreflight] = useState(null);      // install-gate state (ADR-0016)
+  const [gateDismissed, setGateDismissed] = useState(false); // "Continue anyway" (#159)
   const [sources, setSources] = useState([]);            // attached reference material (ADR-0017)
   const [showPicker, setShowPicker] = useState(false);
   const [pickMode, setPickMode] = useState("sources");   // FsPicker routes results: "sources" | "theme"
@@ -805,7 +806,11 @@ export default function App() {
         onCancel={() => setShowThemeUrl(false)}
       />
 
-      <InstallGate preflight={preflight} onRetry={checkPreflight} />
+      <InstallGate
+        preflight={gateDismissed ? null : preflight}
+        onRetry={checkPreflight}
+        onDismiss={() => setGateDismissed(true)}
+      />
     </div>
   );
 }
