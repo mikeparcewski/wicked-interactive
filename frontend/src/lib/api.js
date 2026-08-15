@@ -96,6 +96,21 @@ export async function listDocs() {
   return r.json();
 }
 
+// Doc build activity (#165): is a governed run / live build in flight for this doc? Called on
+// doc open so a remount mid-build (nav back, reload, new tab) rehydrates the working indicator
+// instead of waiting for the next SSE frame. Never throws — any failure reads as "nothing in
+// flight" (the SSE stream self-heals on the next pulse anyway).
+const NO_ACTIVITY = { active: false, status: null, run: null };
+export async function getDocActivity() {
+  const doc = getCurrentDoc();
+  if (!doc) return NO_ACTIVITY;
+  try {
+    const r = await fetch(`/api/docs/${encodeURIComponent(doc)}/activity`);
+    // await INSIDE the try — an unawaited r.json() would let a parse failure escape the catch.
+    return r.ok ? await r.json() : NO_ACTIVITY;
+  } catch { return NO_ACTIVITY; }
+}
+
 export async function getPreflight() {
   const r = await fetch("/api/preflight");
   if (!r.ok) return { ok: false, missing: [], required: {}, install_hint: null, unreachable: true };
