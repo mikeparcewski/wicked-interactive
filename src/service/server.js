@@ -25,10 +25,47 @@ import { exportHtml, exportPdf } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
 import { listInstances } from "./instances.mjs";
-import { pidAlive } from "./serve-bridge.mjs";
+import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
 import { bindDocToProject, projectIdFor } from "./project.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+// The standalone SPA shell is retired (DES-MERGE-001 §6.4/§7.13): the bridge is API-only and the
+// UI lives in the merged wicked-studio app. `--standalone` / WI_STANDALONE=1 keeps the old shell
+// for development. Read per call so the CLI and tests can flip it without reloading the module.
+const standaloneDefault = () => process.env.WI_STANDALONE === "1";
+
+// Loopback check for the endpoints that are a LOCAL trust decision (the filesystem browser, the
+// studio-origin record) — not something any origin that can reach the port gets to drive.
+function isLocalRequest(req) {
+  const ip = (req.ip || req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
+  return ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || ip === "";
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// GET / with no studio origin recorded. The honest page: what this port is, where the UI went,
+// and how to get the old shell back — never a bare 404 at someone who just wanted the UI.
+function noStudioOriginPage(root) {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>wicked-interactive — API-only bridge</title><style>
+body{margin:0;padding:3rem 1.5rem;background:#0b1020;color:#e6e9f5;font:16px/1.6 system-ui,sans-serif}
+main{max-width:44rem;margin:0 auto}h1{font-size:1.5rem;margin:0 0 1rem}
+code{background:#1b2340;padding:.15rem .4rem;border-radius:4px}
+a{color:#8fb4ff}p{margin:0 0 1rem}
+</style></head><body><main>
+<h1>This is the wicked-interactive bridge — it serves the API, not the UI.</h1>
+<p>The standalone builder UI has moved into the merged <strong>wicked-studio</strong> app; open your
+document there. This service still answers every <code>/api/*</code> route (start at
+<a href="/api/docs">/api/docs</a>), serving <code>${escapeHtml(root)}</code>.</p>
+<p>No studio origin has been recorded in <code>${LOCK_NAME}</code> yet, so there is nothing to
+redirect you to. wicked-crew records it when it starts or adopts this bridge; you can also record
+it yourself with <code>POST /api/studio-origin {"origin":"http://localhost:4200"}</code> or start
+the bridge with <code>--studio-origin &lt;url&gt;</code>.</p>
+<p>Need the old shell for development? Start the service with <code>--standalone</code> (or
+<code>WI_STANDALONE=1</code>).</p>
+</main></body></html>`;
+}
 
 // Command events a per-doc workspace materializes (everything else on the bus — facts, chat,
 // status, question.answered — is handled by the bridge or another subscriber, not here).
@@ -47,8 +84,9 @@ const COMMAND_TYPES = new Set([
  * @param {string} [opts.documentId]
  * @param {(type:string, payload:object)=>any} [opts.emit]  service emit bound to this doc
  * @param {string} [opts.frontendDir]
+ * @param {boolean} [opts.standalone]  serve the retired SPA shell (dev only, DES-MERGE-001 §7.13)
  */
-export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir } = {}) {
+export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault() } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
 
@@ -226,10 +264,6 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
   });
 
   // Local filesystem browser for the path picker (localhost-only; dotfiles hidden).
-  function isLocalRequest(req) {
-    const ip = (req.ip || req.socket?.remoteAddress || "").replace(/^::ffff:/, "");
-    return ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || ip === "";
-  }
   app.get("/api/fs", (req, res) => {
     if (!isLocalRequest(req)) return res.status(403).json({ error: "local only" });
     const home = homedir();
@@ -271,9 +305,12 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     }
   }
 
-  // Serve the built React app at / (production). Mounted after API routes.
-  const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
-  if (existsSync(staticDir)) app.use(express.static(staticDir));
+  // The retired SPA shell, dev-only behind --standalone (DES-MERGE-001 §7.13). Mounted after
+  // the API routes; without the flag this sub-app serves its API surface and nothing else.
+  if (standalone) {
+    const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
+    if (existsSync(staticDir)) app.use(express.static(staticDir));
+  }
 
   let server;
   async function start(port = 0) {
@@ -300,7 +337,7 @@ function slugify(name) {
 }
 
 /** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
-export function createMultiServer({ root, frontendDir } = {}) {
+export function createMultiServer({ root, frontendDir, standalone = standaloneDefault() } = {}) {
   if (!root) throw new Error("createMultiServer: root is required");
   mkdirSync(root, { recursive: true });
   const top = express();
@@ -363,7 +400,7 @@ export function createMultiServer({ root, frontendDir } = {}) {
     if (docs.has(name)) return docs.get(name);
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
     const dir = docDir(name);
-    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null });
+    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone });
     top.use(`/d/${name}`, svc.app);
     docs.set(name, { svc, dir });
     return docs.get(name);
@@ -554,6 +591,20 @@ export function createMultiServer({ root, frontendDir } = {}) {
   top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
   top.get("/api/docs", (_req, res) => res.json(listDocs()));
 
+  // Studio origin (DES-MERGE-001 §7.13). The shell is retired, so GET / redirects to the merged
+  // studio app — and the bridge owns .wi-serve.json, so crew records the origin it serves that
+  // app from THROUGH here, on start or when it adopts an already-running bridge. Loopback-only:
+  // the redirect target is a local trust decision, not one any reachable client gets to make.
+  top.get("/api/studio-origin", (_req, res) => res.json({ studio_origin: readStudioOrigin(root) }));
+  top.post("/api/studio-origin", (req, res) => {
+    if (!isLocalRequest(req)) return res.status(403).json({ error: "local only" });
+    const wanted = normalizeOrigin(req.body?.origin);
+    if (!wanted) return res.status(400).json({ error: "origin must be an http(s) URL" });
+    const stored = recordStudioOrigin(root, wanted);
+    if (!stored) return res.status(409).json({ error: `no ${LOCK_NAME} to record into — is this bridge serving a writable root?` });
+    res.json({ ok: true, studio_origin: stored });
+  });
+
   // UI emit bridge (up): the browser may only originate the whitelisted intent events. We
   // enrich with the UI producer + a fresh correlation id (per user action) + session id.
   top.post("/api/events", async (req, res) => {
@@ -682,9 +733,30 @@ export function createMultiServer({ root, frontendDir } = {}) {
     }
   }
 
-  // Static frontend (SPA) at /, mounted LAST so /api/* and /d/* take precedence.
-  const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
-  if (existsSync(staticDir)) top.use(express.static(staticDir));
+  // Where a `?doc=` bookmark lands in the merged app: a project-bound doc has a home in studio's
+  // route map (DES-MERGE-001 §1.5); an unbound (or unknown) one lands on the board.
+  function studioPathFor(doc) {
+    const name = String(doc ?? "");
+    if (!DOC_NAME.test(name) || !isExistingDoc(name)) return "/";
+    const projectId = projectIdFor(docDir(name));
+    return projectId ? `/p/${encodeURIComponent(projectId)}/document/${encodeURIComponent(name)}` : "/";
+  }
+
+  // The root, mounted LAST so /api/* and /d/* take precedence. API-only by default
+  // (DES-MERGE-001 §6.4/§7.13): GET / redirects to the studio origin recorded in the lockfile,
+  // and with none recorded it says so in plain words rather than 404ing at someone who wanted a
+  // UI. --standalone restores the retired SPA shell for development.
+  if (standalone) {
+    const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
+    if (existsSync(staticDir)) top.use(express.static(staticDir));
+  } else {
+    top.get("/", (req, res) => {
+      res.set("Cache-Control", "no-store");   // never cache a hop to an origin that can move
+      const origin = readStudioOrigin(root);
+      if (!origin) return res.type("html").send(noStudioOriginPage(root));
+      res.redirect(302, origin + studioPathFor(req.query?.doc));
+    });
+  }
 
   async function start(port = 0) {
     await bootstrap();

@@ -30,6 +30,35 @@ export function removeLock(root) {
   try { unlinkSync(lockPath(root)); } catch { /* already gone */ }
 }
 
+// ── Studio origin (DES-MERGE-001 §7.13) ──────────────────────────────────────────────────
+// The standalone shell is retired: GET / on the bridge redirects to the merged wicked-studio
+// app. The bridge OWNS this lockfile, so the origin is recorded THROUGH the bridge (POST
+// /api/studio-origin, or `serve --studio-origin`) rather than by a second writer racing it —
+// crew calls that when it starts or adopts a bridge. Nothing recorded ⇒ null, and GET /
+// explains the situation instead of redirecting nowhere.
+
+/** Normalize to a bare http(s) origin ("https://host:port"), or null when it isn't one. */
+export function normalizeOrigin(value) {
+  try {
+    const u = new URL(String(value ?? "").trim());
+    return u.protocol === "http:" || u.protocol === "https:" ? u.origin : null;
+  } catch { return null; }
+}
+
+/** The studio origin recorded for `root`, or null (absent lock / absent / unusable field). */
+export function readStudioOrigin(root) {
+  const lock = readLock(root);
+  return lock ? normalizeOrigin(lock.studio_origin) : null;
+}
+
+/** Merge a studio origin into the live lockfile. Returns the stored origin, else null. */
+export function recordStudioOrigin(root, origin) {
+  const normalized = normalizeOrigin(origin);
+  const lock = readLock(root);
+  if (!normalized || !lock) return null;   // not an origin, or no bridge lock to annotate
+  return writeLock(root, { ...lock, studio_origin: normalized }) ? normalized : null;
+}
+
 // A pid we can signal-0 without ESRCH is alive (EPERM still means "exists"). pid<=0 → unknown.
 export function pidAlive(pid) {
   if (!pid || pid <= 0) return false;

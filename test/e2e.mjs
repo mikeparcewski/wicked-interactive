@@ -24,7 +24,9 @@ const chrome = findChrome();
 if (!chrome) { console.error("SKIP: no Chrome/Chromium found (set WI_CHROME)"); process.exit(2); }
 
 const root = mkdtempSync(join(tmpdir(), "wi-e2e-"));
-const svc = createMultiServer({ root, frontendDir: FRONTEND_DIST });
+// standalone: the browser acceptance drives the retired SPA shell, which is dev-only now
+// (DES-MERGE-001 §7.13) — the default bridge serves no HTML at / for the browser to open.
+const svc = createMultiServer({ root, frontendDir: FRONTEND_DIST, standalone: true });
 const port = await svc.start(0);
 const base = `http://localhost:${port}`;
 
