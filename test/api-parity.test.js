@@ -16,17 +16,23 @@ import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
 
 function freshBus() {
-  process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-parity-"));
+  const dir = mkdtempSync(join(tmpdir(), "wi-bus-parity-"));
+  process.env.WICKED_BUS_DATA_DIR = dir;
+  return dir;
 }
 
 async function boot() {
-  freshBus();
+  const busDir = freshBus();
   const root = mkdtempSync(join(tmpdir(), "wi-parity-"));
   const svc = createMultiServer({ root });   // default = API-only, exactly what studio talks to
   const port = await svc.start(0);
   return {
     root, svc, base: `http://localhost:${port}`,
-    cleanup: async () => { await svc.stop(); rmSync(root, { recursive: true, force: true }); },
+    cleanup: async () => {
+      await svc.stop();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(busDir, { recursive: true, force: true });
+    },
   };
 }
 

@@ -14,17 +14,23 @@ import { writeBreadcrumb } from "../src/service/project.js";
 // Isolated bus per boot (same contract as multidoc.test.js): bus-client memoizes per process
 // and releases on svc.stop(), so a fresh data dir per boot = a fresh bus.
 function freshBus() {
-  process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-shell-"));
+  const dir = mkdtempSync(join(tmpdir(), "wi-bus-shell-"));
+  process.env.WICKED_BUS_DATA_DIR = dir;
+  return dir;
 }
 
 async function boot({ standalone, frontendDir } = {}) {
-  freshBus();
+  const busDir = freshBus();
   const root = mkdtempSync(join(tmpdir(), "wi-shell-"));
   const svc = createMultiServer({ root, standalone, frontendDir });
   const port = await svc.start(0);
   return {
     root, svc, base: `http://localhost:${port}`,
-    cleanup: async () => { await svc.stop(); rmSync(root, { recursive: true, force: true }); },
+    cleanup: async () => {
+      await svc.stop();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(busDir, { recursive: true, force: true });
+    },
   };
 }
 
