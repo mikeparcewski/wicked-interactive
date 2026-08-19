@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.8.0] — 2026-08-19
+
 ### Changed
 - **BREAKING — the standalone SPA shell is retired; the bridge is API-only** (DES-MERGE-001 slice 18, §7.13). The builder UI lives in the merged wicked-studio app. `GET /` now redirects (302) to the studio origin recorded in `<root>/.wi-serve.json`, or — with none recorded — returns a short page naming the situation and the escape hatch (never a bare 404). A `?doc=<name>` bookmark resolves to that document's studio route when the doc is project-bound. **Every `/api/*` route is unchanged**, and a parity smoke suite (`test/api-parity.test.js`) pins the surface the merged app drives.
 
