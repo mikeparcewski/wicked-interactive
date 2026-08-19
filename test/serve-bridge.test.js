@@ -11,6 +11,7 @@ import { createServer as httpServer } from "node:http";
 import {
   LOCK_NAME, lockPath, readLock, writeLock, removeLock,
   pidAlive, isPortFree, pickPort, bridgeHealthy, bridgeIdentity, stopDaemon,
+  normalizeOrigin, readStudioOrigin, recordStudioOrigin,
 } from "../src/service/serve-bridge.mjs";
 
 function tmpRoot() {
@@ -160,5 +161,37 @@ test("stopDaemon: a wedged daemon that ignores SIGTERM is escalated to SIGKILL",
     assert.deepEqual(res, { stopped: true, pid: 4243, forced: true });
     assert.deepEqual(sigs, ["SIGTERM", "SIGKILL"], "SIGTERM first, then SIGKILL when it wouldn't die");
     assert.equal(readLock(root), null, "lock removed even after a forced kill");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// ── Studio origin in the lockfile (DES-MERGE-001 §7.13) ─────────────────────────────────────
+
+test("normalizeOrigin keeps http(s) origins and refuses everything else", () => {
+  assert.equal(normalizeOrigin("http://localhost:4200"), "http://localhost:4200");
+  assert.equal(normalizeOrigin("  https://studio.example.com/runs/7?x=1#z  "), "https://studio.example.com");
+  assert.equal(normalizeOrigin("http://127.0.0.1:4200/"), "http://127.0.0.1:4200");
+  for (const bad of ["", null, undefined, "localhost:4200", "file:///etc/passwd", "javascript:alert(1)", "//evil.example", {}]) {
+    assert.equal(normalizeOrigin(bad), null, `refused: ${JSON.stringify(bad)}`);
+  }
+});
+
+test("recordStudioOrigin merges into the live lock; readStudioOrigin reads it back", () => {
+  const root = tmpRoot();
+  try {
+    assert.equal(readStudioOrigin(root), null, "no lockfile → no origin");
+    assert.equal(recordStudioOrigin(root, "http://localhost:4200"), null, "nothing to merge into → refused");
+
+    writeLock(root, { port: 4400, host: "127.0.0.1", pid: 99 });
+    assert.equal(recordStudioOrigin(root, "http://localhost:4200/board"), "http://localhost:4200");
+    assert.equal(readStudioOrigin(root), "http://localhost:4200");
+    const lock = readLock(root);
+    assert.equal(lock.port, 4400, "the bridge's own fields survive the merge");
+    assert.equal(lock.pid, 99);
+
+    assert.equal(recordStudioOrigin(root, "ftp://nope/"), null, "a non-http(s) origin is refused");
+    assert.equal(readStudioOrigin(root), "http://localhost:4200", "...and leaves the recorded one alone");
+
+    writeLock(root, { port: 4400, studio_origin: "not a url" });
+    assert.equal(readStudioOrigin(root), null, "an unusable recorded value reads as absent");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
