@@ -15,6 +15,16 @@ _Nothing yet._
 - **`serve --standalone` (or `WI_STANDALONE=1`)** — keeps serving the retired SPA shell, for local development.
 - **`serve --studio-origin <url>` and `POST /api/studio-origin`** (loopback-only) — record the origin `GET /` redirects to; wicked-crew calls the endpoint when it starts or adopts a bridge. `GET /api/studio-origin` reads it back. The origin is stored in the bridge's own `.wi-serve.json`, so there is no second writer.
 
+## [0.7.1] — 2026-08-05
+
+### Changed
+- Dependency maintenance only (js-yaml 5, vite plugin/react 6.0.5, playwright 1.62.1). Released without a changelog entry at the time; recorded here for continuity.
+
+## [0.7.0] — 2026-07-30
+
+### Changed
+- Dependency maintenance and evidence/acceptance-test hardening (version.created + rewind verified in the DoD gate). Released without a changelog entry at the time; recorded here for continuity.
+
 ## [0.6.0] — 2026-07-21
 
 ### Added
