@@ -135,8 +135,22 @@ it has a hard 2.5s shutdown cap so a held-open SSE connection can't wedge it.)
 
 ## Step 4 — Open the browser
 
+**The bridge is API-only now (DES-MERGE-001 §7.13).** The builder UI lives in the merged
+**wicked-studio** app; this service serves the `/api/*` surface and no HTML shell. `GET /`
+redirects to the studio origin recorded in `<root>/.wi-serve.json` — wicked-crew records it
+when it starts or adopts this bridge, so opening the printed base URL lands the user in
+studio. Read what the banner printed after `studio:`:
+
+- **an origin** → open the base URL as below; the redirect carries the user to studio.
+- **`not recorded yet`** → there is no UI to open. Either start crew/studio (it records its
+  origin on adoption), or, for local development only, restart the bridge with `--standalone`
+  to serve the retired shell: `serve --root "$DOCS" --daemon --restart --standalone`.
+
+The rest of this step applies to the studio redirect and to `--standalone`:
+
 Open the printed base URL. If documents already exist, open `/?doc=<name>`; otherwise
-open `/` so the user lands on the empty screen.
+open `/` so the user lands on the empty screen. (`?doc=<name>` on a project-bound doc
+redirects straight to that document in studio.)
 
 ```bash
 # macOS: open   | Linux: xdg-open   | Windows: start

@@ -2,8 +2,15 @@
 // wicked-interactive CLI — the one command a business user runs (INV-6).
 //
 //   wicked-interactive serve [--root <docs-dir>] [--port N] [--daemon] [--restart]
+//                            [--standalone] [--studio-origin <url>]
 //       Multi-document mode (ADR-0015). Hosts every workspace under <docs-dir>; new docs are
 //       created from the UI. The control plane is wicked-bus (ADR-0019).
+//
+//   API-ONLY BY DEFAULT (DES-MERGE-001 §7.13). The standalone SPA shell is retired — the UI is
+//   the merged wicked-studio app, and GET / redirects to the studio origin recorded in
+//   <root>/.wi-serve.json (crew records it when it starts or adopts this bridge; --studio-origin
+//   seeds it). Every /api/* route is unchanged. --standalone (or WI_STANDALONE=1) keeps serving
+//   the old shell for development.
 //
 //   ONE SHARED INSTANCE by default (ADR-0022 amended). With no --root, every session uses the
 //   canonical root ~/wicked-interactive/docs — so `serve --daemon` from any session REUSES the one
@@ -28,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import { createMultiServer } from "../src/service/server.js";
 import {
   readLock, writeLock, removeLock, pidAlive, pickPort, bridgeIdentity, stopDaemon,
+  normalizeOrigin, readStudioOrigin,
 } from "../src/service/serve-bridge.mjs";
 import { registerInstance, deregisterInstance } from "../src/service/instances.mjs";
 
@@ -53,10 +61,12 @@ function pkgVersion() {
   catch { return null; }
 }
 
-function printBanner(prefix, root, base) {
+function printBanner(prefix, root, base, standalone = false) {
   console.log(`${prefix} ${root} on ${base}`);
   console.log(`  docs:   ${base}/api/docs`);
-  console.log(`  open:   ${base}/?doc=<name>`);
+  console.log(standalone
+    ? `  open:   ${base}/?doc=<name>   (--standalone: the retired SPA shell)`
+    : `  ui:     the merged wicked-studio app — this bridge is API-only, GET / redirects there`);
   console.log(`  loop:   wicked-bus subscribe --plugin wi-agent --filter '*@wicked-interactive' --cursor-init latest`);
 }
 
@@ -80,13 +90,16 @@ async function liveBridgeFor(root) {
 }
 
 // Run the actual server inline (foreground or the detached daemon child).
-async function runServer(root, requested, restart = false) {
+async function runServer(root, requested, { restart = false, standalone = false, studioOrigin = null } = {}) {
   if (restart) await stopDaemon(root);   // upgrade/restart: stop any existing daemon for this root first
   const reused = await liveBridgeFor(root);
-  if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused); process.exit(0); }
+  if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused, standalone); process.exit(0); }
 
+  // Carry a previously-recorded studio origin (DES-MERGE-001 §7.13) across a restart so GET /
+  // keeps redirecting; --studio-origin wins. Read BEFORE writeLock overwrites the lockfile.
+  const origin = studioOrigin || readStudioOrigin(root);
   const port = await pickPort(requested);
-  const svc = createMultiServer({ root });
+  const svc = createMultiServer({ root, standalone });
   let actualPort;
   try {
     actualPort = await svc.start(port);
@@ -95,9 +108,10 @@ async function runServer(root, requested, restart = false) {
     else throw e;
   }
   const base = `http://localhost:${actualPort}`;
-  const wrote = writeLock(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, startedAt: new Date().toISOString(), version: pkgVersion() });
+  const wrote = writeLock(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, startedAt: new Date().toISOString(), version: pkgVersion(), ...(origin ? { studio_origin: origin } : {}) });
   registerInstance(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, version: pkgVersion() }); // cross-instance registry (the UI project switcher)
-  printBanner("wicked-interactive (multi-doc) serving", root, base);
+  printBanner("wicked-interactive (multi-doc) serving", root, base, standalone);
+  if (!standalone) console.log(`  studio: ${origin || "not recorded yet — crew records it on start/adopt (POST /api/studio-origin)"}`);
   if (requested && requested !== actualPort) console.log(`  note:   port ${requested} was taken — using ${actualPort} instead`);
   if (!wrote) console.log(`  note:   could not write .wi-serve.json — other sessions won't auto-discover this bridge`);
 
@@ -118,15 +132,16 @@ async function runServer(root, requested, restart = false) {
 
 // Parent of --daemon: reuse a live bridge, else spawn the server DETACHED, wait for it to answer,
 // print the URL, and exit — so the bridge outlives this call without nohup/disown.
-async function daemonize(root, requested, restart = false) {
+async function daemonize(root, requested, { restart = false, standalone = false, studioOrigin = null } = {}) {
   if (restart) await stopDaemon(root);   // upgrade/restart: stop the old daemon, then spawn fresh (no reuse)
   const reused = await liveBridgeFor(root);
-  if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused); return 0; }
+  if (reused) { printBanner("wicked-interactive (multi-doc) — reusing live bridge for", root, reused, standalone); return 0; }
 
   const logPath = join(root, ".wi-serve.log");
   let stdio = ["ignore", "ignore", "ignore"];
   try { const fd = openSync(logPath, "a"); stdio = ["ignore", fd, fd]; } catch { /* unwritable root — run silent */ }
-  const childArgs = ["serve", "--root", root, ...(requested ? ["--port", String(requested)] : [])];
+  const childArgs = ["serve", "--root", root, ...(requested ? ["--port", String(requested)] : []),
+    ...(standalone ? ["--standalone"] : []), ...(studioOrigin ? ["--studio-origin", studioOrigin] : [])];
   const child = spawn(process.execPath, [SELF, ...childArgs], { detached: true, stdio, env: { ...process.env, WI_DAEMON_CHILD: "1" } });
   child.unref();
 
@@ -134,7 +149,7 @@ async function daemonize(root, requested, restart = false) {
   while (Date.now() < deadline) {
     const base = await liveBridgeFor(root);
     if (base) {
-      printBanner("wicked-interactive (multi-doc) serving", root, base);
+      printBanner("wicked-interactive (multi-doc) serving", root, base, standalone);
       console.log(`  daemon: pid ${child.pid} (detached) · logs → ${logPath}`);
       return 0;
     }
@@ -172,7 +187,7 @@ async function main() {
     console.error("  publish  <artifact-path> [--api-key <key>]");
     console.error("  validate <artifact-path>");
     console.error("  adopt    [--root <docs-dir>] [--crew-api <base-url>]   re-register doc→project breadcrumbs");
-    console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart]");
+    console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart] [--standalone] [--studio-origin <url>]");
     process.exit(1);
   }
   // ONE shared instance by default (ADR-0022 amended): every session converges on the canonical
@@ -182,12 +197,22 @@ async function main() {
   try { mkdirSync(root, { recursive: true }); } catch { /* unwritable — serve surfaces it */ }
   const requested = args.port ? Number(args.port) : null;
   const restart = !!args.restart;   // stop any existing daemon for this root before starting (clean upgrade)
+  // The bridge is API-only (DES-MERGE-001 §7.13): the UI lives in the merged wicked-studio app.
+  // --standalone / WI_STANDALONE=1 keeps the retired SPA shell for development; --studio-origin
+  // seeds the redirect target crew normally records itself.
+  const standalone = !!args.standalone || process.env.WI_STANDALONE === "1";
+  const studioOrigin = normalizeOrigin(args["studio-origin"]);
+  if (args["studio-origin"] && !studioOrigin) {
+    console.error(`wicked-interactive: --studio-origin must be an http(s) URL (got ${args["studio-origin"]})`);
+    process.exit(1);
+  }
+  const opts = { restart, standalone, studioOrigin };
 
   // --daemon (and we're the parent, not the spawned child) → detach and return.
   if (args.daemon && !process.env.WI_DAEMON_CHILD) {
-    process.exit(await daemonize(root, requested, restart));
+    process.exit(await daemonize(root, requested, opts));
   }
-  await runServer(root, requested, restart);
+  await runServer(root, requested, opts);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
