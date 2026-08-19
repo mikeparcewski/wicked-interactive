@@ -73,6 +73,41 @@ And from then on, the only thing you ever type is:
 
 That's genuinely it. The first time, it sets up a few helper tools behind the scenes — it'll show you exactly what it's installing, nothing sneaky — then your browser pops open and you're off. (Rather install the helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.)
 
+## Moving? The builder UI now lives in wicked-studio
+
+If you used the standalone builder UI — the page this service served at `http://localhost:<port>/` —
+here's what changed and where things went.
+
+**The UI moved, the documents didn't.** Everything you've made stays exactly where it was (your
+docs root, versions and all). The builder is now a mode inside the merged **wicked-studio** app,
+which is where you point, comment, rewind, fork, export and record from. Nothing was dropped in the
+move: the [merge design](https://github.com/mikeparcewski/wicked-studio)'s parity ledger had to be
+green before this landed.
+
+**This service is API-only now.** It still runs, still owns your documents, and still answers every
+`/api/*` route — it just doesn't serve a UI:
+
+- `GET /` **redirects** to the studio origin recorded in `<docs-root>/.wi-serve.json`. wicked-crew
+  records that origin when it starts or adopts this bridge; you can also record it yourself with
+  `POST /api/studio-origin {"origin":"http://localhost:4200"}` or start the service with
+  `--studio-origin <url>`.
+- With no origin recorded, `GET /` returns a short page saying so — never a blank 404.
+- A `?doc=<name>` bookmark still works: a document that belongs to a project lands on that
+  document in studio; anything else lands on the board.
+
+**Want the old shell back?** It's still in the box, for local development:
+
+```bash
+wicked-interactive serve --root ~/wicked-interactive/docs --standalone   # or WI_STANDALONE=1
+```
+
+That serves the retired SPA exactly as before. It is a development escape hatch, not the
+supported path — the merged app is where the UI is maintained.
+
+**One capability has no button in studio yet:** *analyze / review* (the reviewer pass over a
+document). It remains fully reachable over the API — `POST /api/events` with
+`wicked.interactive.review.requested` — and the affordance for it belongs to the studio side.
+
 ## Requirements
 
 - [Claude Code](https://claude.com/claude-code) ≥ 1.0 (the plugin surface)
