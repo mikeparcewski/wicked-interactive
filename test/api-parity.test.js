@@ -10,7 +10,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
@@ -106,6 +106,20 @@ test("API parity smoke: every capability the merged app drives is reachable on a
     // ...and the whitelist still holds: a service-owned fact can't be forged from a client.
     assert.equal((await postJson(`${base}/api/events`, { event_type: "wicked.interactive.version.created", payload: { document_id: "parity-doc" } })).status, 403);
     assert.equal((await postJson(`${base}/api/events`, { event_type: "wicked.interactive.nope", payload: {} })).status, 400);
+
+    // ── learned-theme readback (#180) ─────────────────────────────────────
+    // The read half of the learn loop: studio's brand-learn mapper emits theme.requested above,
+    // then polls THIS for what the learn produced. 404 until the agent lands
+    // <doc>/theme/learned.theme.json; the file's tokens verbatim afterwards.
+    assert.equal((await fetch(`${doc}/api/theme/learned`)).status, 404, "no learn yet → clean 404");
+    mkdirSync(join(root, "parity-doc", "theme"), { recursive: true });
+    writeFileSync(join(root, "parity-doc", "theme", "learned.theme.json"),
+      JSON.stringify({ name: "parity-learned", colors: { primary: "#123456" } }));
+    const learned = await fetch(`${doc}/api/theme/learned`);
+    assert.equal(learned.status, 200);
+    const learnedBody = await learned.json();
+    assert.equal(learnedBody.document_id, "parity-doc");
+    assert.equal(learnedBody.tokens.name, "parity-learned", "the learned tokens are readable over HTTP");
 
     // ── demo docs: spec + player (§4.5) ───────────────────────────────────
     const demo = await postJson(`${base}/api/docs`, { name: "parity-demo", kind: "demo", url: "http://127.0.0.1:9/app", brief: "show sign-up" });
