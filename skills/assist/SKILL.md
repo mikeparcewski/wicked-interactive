@@ -612,6 +612,12 @@ workspace). **The judgment — reading the design — is yours.** Do **not** re-
    re-theme). The service lands a new version themed with the learned tokens and the browser
    hot-reloads. Close with a `complete` status.
 
+Once written, the learned theme is also **readable over HTTP**:
+`GET <BASE>/d/<doc>/api/theme/learned` → `{document_id, learned_at, tokens}` (404 until a learn
+completes). That's the wire other surfaces ride to see what the learn produced — e.g. studio's
+brand-learn accent mapper — so never move or rename `learned.theme.json`; the write path here and
+that read surface are one contract.
+
 The deterministic grab (service) → vision read (you) → token apply (theming seam) all ride the one
 bus, reusing every existing seam. **There is nothing model-driven in the service half and nothing
 deterministic in the read half** — keep that line clean (ADR-0010).
