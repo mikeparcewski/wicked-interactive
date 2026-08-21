@@ -15,18 +15,28 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
 
-// Each boot gets an isolated wicked-bus DB (ADR-0019), same pattern as multidoc.test.js.
+// Each boot gets an isolated wicked-bus DB (ADR-0019), same pattern as api-parity.test.js —
+// including removing the bus dir on cleanup so runs leave no temp residue behind.
 function freshBus() {
-  process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-readback-"));
+  const dir = mkdtempSync(join(tmpdir(), "wi-bus-readback-"));
+  process.env.WICKED_BUS_DATA_DIR = dir;
+  return dir;
 }
 
 async function boot() {
-  freshBus();
+  const busDir = freshBus();
   const root = mkdtempSync(join(tmpdir(), "wi-readback-"));
   const svc = createMultiServer({ root });
   const port = await svc.start(0);
   const base = `http://localhost:${port}`;
-  return { root, svc, base, cleanup: async () => { await svc.stop(); rmSync(root, { recursive: true, force: true }); } };
+  return {
+    root, svc, base,
+    cleanup: async () => {
+      await svc.stop();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(busDir, { recursive: true, force: true });
+    },
+  };
 }
 
 async function createDoc(base, name) {
