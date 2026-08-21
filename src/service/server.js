@@ -27,6 +27,7 @@ import { preflightWithCrew } from "./preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
 import { bindDocToProject, projectIdFor } from "./project.js";
+import { resolveLearnedTheme, learnedThemePath } from "./theme-source.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -261,6 +262,24 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       const parsed = existsSync(f) ? JSON.parse(readFileSync(f, "utf-8")) : { sources: [] };
       res.json({ sources: Array.isArray(parsed?.sources) ? parsed.sources : [] });
     } catch { res.json({ sources: [] }); }
+  });
+
+  // Learned-theme readback (#180): what did "learn a theme" produce for this doc? The agent
+  // writes <dir>/theme/learned.theme.json (assist Step 8.5) and the version-creation seam
+  // re-applies it silently — but nothing could READ it over HTTP, which is why studio's
+  // brand-learn accent mapper was retracted (studio#73). Read-only, no side effects: serve the
+  // CURRENT file through the same resolver the apply seam uses (resolveLearnedTheme), so what
+  // this returns is exactly what version-creation will apply — a corrupt/absent file is a 404
+  // here precisely because the apply seam degrades to the named/default theme for it.
+  // `learned_at` is the file's mtime — when the learn last landed; advisory, null if unstattable.
+  app.get("/api/theme/learned", (_req, res) => {
+    res.set("Cache-Control", "no-store");   // consumers poll this right after a learn — never stale
+    const tokens = resolveLearnedTheme(dir);
+    if (!tokens) return res.status(404).json({ error: "no learned theme" });
+    let learned_at = null;
+    try { learned_at = statSync(learnedThemePath(dir)).mtime.toISOString(); }
+    catch { /* mtime is advisory — the tokens are the contract */ }
+    res.json({ document_id: documentId, learned_at, tokens });
   });
 
   // Local filesystem browser for the path picker (localhost-only; dotfiles hidden).
