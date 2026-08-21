@@ -31,16 +31,22 @@ export function resolveThemeTokens(name = "corporate-light", opts = {}) {
   return DEFAULT_THEME;
 }
 
+/** Where a doc's learned theme lives: `<docDir>/theme/learned.theme.json`. One definition —
+ *  the writer (assist Step 8.5), the apply seam below, and the readback route (#180) all agree. */
+export function learnedThemePath(docDir) {
+  return join(docDir, "theme", "learned.theme.json");
+}
+
 /**
  * A LEARNED theme (from "learn a theme from a URL") lives in the doc workspace at
- * `<docDir>/theme/learned.theme.json` — written by the agent after it reads the grabbed page's
+ * `learnedThemePath(docDir)` — written by the agent after it reads the grabbed page's
  * design. When present it is applied at EVERY version-creation for that doc, so the learned brand
  * sticks without threading tokens through each event. Returns the token object, or null if absent
  * or unreadable (degrade to the named/default theme — never throw).
  */
 export function resolveLearnedTheme(docDir) {
   try {
-    const file = join(docDir, "theme", "learned.theme.json");
+    const file = learnedThemePath(docDir);
     if (existsSync(file)) {
       const tokens = JSON.parse(readFileSync(file, "utf-8"));
       if (tokens && typeof tokens === "object") return tokens;
