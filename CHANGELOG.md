@@ -6,6 +6,22 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 _Nothing yet._
 
+## [0.8.1] — 2026-08-24
+
+### Added
+- **Learned-theme readback: `GET /d/:docId/api/theme/learned`** (#180, #181). Serves the doc's
+  learned brand tokens — `{document_id, learned_at, tokens}` — so a client can confirm that a
+  "learn a theme from this URL" run actually landed, instead of inferring it from a later render.
+  `learnedThemePath(docDir)` is now the single definition of where that file lives, shared by the
+  writer, the version-creation apply seam, and the new route.
+
+### Fixed
+- This release closes a real gap rather than adding a nicety: wicked-studio's brand-learn readback
+  (`theming/learnPoll.ts`, `learnedTheme.ts`, `brandMapper.ts`, `BrandLearn.tsx`, `ThemesMenu.tsx`,
+  `ThemePage.tsx`) has shipped against this route since interactive#181 merged, while the registry
+  still served 0.8.0 without it. On any machine that resolved wicked-interactive from npm, brand
+  learn polled and silently never landed.
+
 ## [0.8.0] — 2026-08-19
 
 ### Changed
