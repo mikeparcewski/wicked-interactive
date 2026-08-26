@@ -8,6 +8,12 @@ import { test, expect } from '@playwright/test';
  * page that sends visitors to a front door which does not open: the service itself answers a direct
  * visitor with "This is the wicked-interactive bridge — it serves the API, not the UI."
  *
+ * The shared `fixtures.ts` went with them. It existed to stub fonts.googleapis.com and gstatic
+ * for pages built on the Base layout, because `page.goto` waits for load and a slow font CDN ate
+ * the budget. This page has no Base layout and loads zero external assets — importing a
+ * font-stubbing fixture into a test for a page with no fonts is ceremony, and it was imported by
+ * nothing. Git history has it if a Base-layout page ever returns here.
+ *
  * What must hold now is narrower and load-bearing: the page states where the thing went, sends you
  * there by more than one mechanism, and does NOT imply the package was retired — it is still the
  * engine wicked-crew spawns, and telling people otherwise would strand a live dependency.
@@ -20,8 +26,11 @@ test.describe('the redirect page', () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', TARGET);
     // A meta-refresh alone strands anyone who blocks it, and a link alone strands anyone who
     // does not read. Both, plus canonical so the old URL stops competing in search.
+    // Exact string, not a regex: `new RegExp('url=' + TARGET + '$')` lets the dots in the URL
+    // match any character, so `https://wsXwickedagileXcom` would have passed. The expected value
+    // is fully known, so there is nothing for a pattern to buy here.
     const refresh = page.locator('meta[http-equiv="refresh"]');
-    await expect(refresh).toHaveAttribute('content', new RegExp(`url=${TARGET}$`));
+    await expect(refresh).toHaveAttribute('content', `3; url=${TARGET}`);
     await expect(page.locator('a.go')).toHaveAttribute('href', TARGET);
   });
 
