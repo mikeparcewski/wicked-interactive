@@ -35,7 +35,7 @@ WI_VER="$(node -p "require('$WI_HOME/package.json').version")"
 ## Step 1 — Set up the helper tools (auto-install)
 
 The editor needs one sibling tool — `wicked-garden` (ADR-0016; prezzie was absorbed into
-wicked-interactive itself, ADR-0020; wicked-brain was retired into wicked-estate, ADR-0026).
+wicked-interactive itself, ADR-0020; wicked-brain was retired into wicked-estate, ADR-0026). <!-- historical -->
 Don't make the user install it by hand. Run the setup script (builtin-only — runs straight from
 the plugin dir, no deps needed), which installs **only what's missing** and prints every command
 before it runs (transparency — nothing installed silently):

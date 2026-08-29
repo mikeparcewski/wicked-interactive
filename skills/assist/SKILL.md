@@ -416,7 +416,7 @@ of Step 4), check whether the project's knowledge store knows something the docu
 respect — prior decisions, terminology, the customer's positioning, numbers that must stay
 accurate. This keeps agent-authored content grounded instead of plausibly-wrong (ADR-0016
 Slice E). The engine is **wicked-estate** (memory + knowledge stores); the agent surface is
-wicked-garden's `mem` skill (the retired wicked-brain's replacement — ADR-0026).
+wicked-garden's `mem` skill (the retired wicked-brain's replacement — ADR-0026). <!-- historical -->
 
 - Post `{"state":"processing","message":"Checking project knowledge…"}` so the beat reads as work.
 - Recall what's stored on the topic: invoke the **`wicked-garden-mem`** skill — the `recall`

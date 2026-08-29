@@ -1,5 +1,7 @@
 # Bus-First Transport + Prezzie Merge Implementation Plan
 
+<!-- historical-doc -->
+
 > **Historical note (2026-08-12):** wicked-brain has since been retired into wicked-estate
 > (ADR-0026); the brain references below are period-accurate for the 2026-06-09 migration and
 > intentionally left as-is.

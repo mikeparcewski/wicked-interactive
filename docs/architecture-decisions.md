@@ -50,7 +50,7 @@ deleted.
 
 **Context.** wicked-prezzie was a *required sibling plugin*: themes were read off its plugin
 cache and the agent "drove its skills." Of its 40 skills / 25 Python modules, most are
-superseded by the browser loop (collaborate/feedback/start), wicked-brain (learn/search/index —
+superseded by the browser loop (collaborate/feedback/start), wicked-brain (learn/search/index — <!-- historical -->
 itself since retired into wicked-estate, ADR-0026), or wicked-garden crews (workflow/personas).
 
 **Decision.** Absorb the durable assets in-repo: the 3 theme JSONs move to `src/themes/`
@@ -61,7 +61,7 @@ dropped from preflight/ensure-siblings and the repo is deprecated.
 
 ## ADR-0021 — brain + bus are required; the bus is transport, never store
 
-**Status:** accepted 2026-06-09. **The brain half is superseded by ADR-0026** (wicked-brain
+**Status:** accepted 2026-06-09. **The brain half is superseded by ADR-0026** (wicked-brain <!-- historical -->
 retired into wicked-estate); the bus half stands unchanged.
 
 **Context.** wicked-bus's integration guide tells consumers to treat the bus as *always
@@ -75,7 +75,7 @@ dependency and the db is initialized at serve time; the brain check is upgraded 
 correctness, not optionality.
 
 *(Historical note, 2026-08-12: everything this section says about the brain — the requirement
-and its preflight check — no longer applies; wicked-brain was retired and grounding moved to
+and its preflight check — no longer applies; wicked-brain was retired and grounding moved to <!-- historical -->
 wicked-estate via wicked-garden, ADR-0026. Only the bus half of this ADR remains in force.)*
 
 **The bus is transport, not storage.** wicked-bus TTL-sweeps (24 h delete / 72 h visibility), so
@@ -153,22 +153,22 @@ rather than duplicated. Per-root isolation is preserved as an **opt-in** (`--roo
 rare case of a deliberately separate instance. Pairs with `--restart` (ADR-0022 follow-up): clean
 single-command upgrades, and SIGTERM/SIGINT now has a hard shutdown cap so a daemon can't wedge.
 
-## ADR-0026 — wicked-brain retired; grounding moves to wicked-estate via wicked-garden
+## ADR-0026 — wicked-brain retired; grounding moves to wicked-estate via wicked-garden <!-- historical -->
 
 **Status:** accepted 2026-08-12. Supersedes the brain half of ADR-0021 (and the brain entry in
 the ADR-0016 install gate); the bus half of ADR-0021 stands.
 
-**Context.** ADR-0021 made wicked-brain a required sibling because the brain was how authored
+**Context.** ADR-0021 made wicked-brain a required sibling because the brain was how authored <!-- historical -->
 content stayed grounded (assist Steps 6 + 9). The wicked ecosystem has since retired
-wicked-brain: its memory/knowledge/search consolidated into **wicked-estate**, with
+wicked-brain: its memory/knowledge/search consolidated into **wicked-estate**, with <!-- historical -->
 wicked-garden's `mem` and `search` skill domains as the agent surface. The estate-backed context
 stack passed its Phase-5 exit gate end-to-end, so the brain probe became dead weight — it gated
 the editor on a tool that no longer ships.
 
-**Decision.** Drop the wicked-brain probe from `preflight.js` / `ensure-siblings.mjs` and the
+**Decision.** Drop the wicked-brain probe from `preflight.js` / `ensure-siblings.mjs` and the <!-- historical -->
 install gate; `wicked-garden` is the one remaining sibling (its plugin brings the estate-backed
 stores along). The assist skill grounds through `wicked-garden-mem` — `recall`/`answer` where it
-called `wicked-brain:search`/`query` (Step 6), `ingest` where it indexed sources into a brain
+called `wicked-brain:search`/`query` (Step 6), `ingest` where it indexed sources into a brain <!-- historical -->
 (Step 9). No user data is touched: any existing `~/.wicked-brain` directory is left in place
 (the brain-side migration into estate owns that lifecycle).
 
