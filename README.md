@@ -6,72 +6,38 @@
    \_/\_/ |_|\___|_|\_\___|\__,_|     |_|_| |_|\__\___|_|  \__,_|\___|\__|_| \_/ \___|
 ```
 
-> A creative surface on the same substrate: describe it, watch it build, ship HTML/PDF/deck. It composes the family's building blocks; it does not close the loop.
+> The wicked family's **document engine**. One local service owns document storage with write-once version lineage and forking, renders and exports HTML / PDF / native PowerPoint / video, records narrated demo walkthroughs, and learns themes from your existing brand pages. [wicked-crew](https://github.com/mikeparcewski/wicked-crew) spawns it as a local bridge and reverse-proxies its API; [wicked-studio](https://github.com/mikeparcewski/wicked-studio) is where you point, edit, rewind, fork, and export. You depend on it — you don't visit it.
 
-## It's 11pm. The deck's due tomorrow. You haven't opened PowerPoint.
+## What lives here
 
-Good news: you don't have to. Just tell it what you need — out loud, like you'd tell a coworker — and watch it build the thing in your browser. The board deck. The launch one-pager. The sales page. A narrated demo video of your product. Then point at anything you don't like and say what to fix.
+The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-now-lives-in-wicked-studio) below). The **engine** did not move — this repo is its sole implementation:
 
-No code. No design tickets. No "let me loop in the team." Just you, describing what's in your head, watching it appear.
-
-```
-Describe it  →  Watch it build  →  Point at what to change  →  Ship it (HTML · PDF · PowerPoint · video)
-```
-
-Describe it, watch it build, ship it.
+- 📦 **Documents & lineage** — every change is a write-once saved version; rewind to any of them, or fork a version and chase two ideas at once without losing either.
+- 📤 **Exports** — self-contained HTML, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`), and video. Nothing for the recipient to install.
+- 🎬 **Demo recording** — narrated walkthroughs of a live app with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
+- 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls.
+- 🔌 **One HTTP API + one bus vocabulary** — the `/api/*` surface and the `wicked.interactive.*` event types (ADR-0019) that the studio UI and supervising agents both speak.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mikeparcewski/wicked-interactive/main/assets/wicked-interactive-demo.gif" alt="wicked-interactive in action: describe a launch page in chat, watch it build live, point at text to change it, remove a block, ask to make it premium, and rewind any version — all in the browser" width="100%">
+  <img src="https://raw.githubusercontent.com/mikeparcewski/wicked-interactive/main/assets/wicked-interactive-demo.gif" alt="The builder loop this engine powers: describe a page in chat, watch it build live, point at text to change it, and rewind any version" width="100%">
 </p>
 
----
+*The loop in the demo — describe, point, fix, rewind — is powered by this engine; the surface you drive it from is wicked-studio.*
 
-## Stuff you'd normally dread making
+## How it runs
 
-- 📊 **Decks** — board updates, pitch decks, QBRs. On-brand and export-ready, not a sad bulleted list.
-- 📄 **Docs & one-pagers** — reports, briefs, proposals, the FAQ nobody wants to write.
-- 📣 **Marketing** — landing pages, launch posts, sales pages, anything that lives on the web.
-- 🎬 **Demo videos** — point it at your live app, say what to show, get a narrated walkthrough with clickable chapter thumbnails.
+You normally never start this service yourself:
 
-Under the hood it's all real, interactive HTML — built, polished, and exported without you ever leaving the browser.
+1. **Through crew — the supported path.** `npx wicked-crew serve` (studio's UI is bundled) spawns this package from npm as a local bridge (`wicked-interactive@^0.8.1`, one bridge per project docs root) and reverse-proxies its entire HTTP surface at `/api/v1/projects/:projectId/interactive/*` on crew's own origin — pure transport, SSE streamed unbuffered both ways. The studio client only ever talks to crew.
+2. **Directly, as an API.** `npx wicked-interactive serve --root ~/wicked-interactive/docs` runs the API-only service on a dynamic port (ADR-0022/0025). `GET /` redirects to the recorded studio origin; there is no bundled UI on the supported path.
+3. **The dev escape hatch.** `wicked-interactive serve --standalone` (or `WI_STANDALONE=1`) serves the retired SPA shell for local development of the engine itself — not the supported UI.
 
-## Try it in 30 seconds
-
-Talk to it like this:
-
-> *"Build me a deck about our Q3 results from scratch."*
-> *"Make a landing page for the new pricing tier."*
-> *"Record a walkthrough of my app showing sign-up and the dashboard."*
-> *"Make this headline punchier — and that number's $4.2M, not $4M."*
-> *"Honestly? Make the whole thing feel more expensive."*
-
-It hands you a first draft. You click a thing, say what's wrong, and watch it fix itself — live, while you're looking at it. Every version quietly saves, so you can rewind to that one you liked three changes ago — or **fork** it and chase two ideas at once without losing either. When it looks right, export clean HTML or PDF, a native editable PowerPoint, or grab the video. Done. Go to bed.
-
-## Why people get hooked
-
-- 🪄 **Just start talking.** Give it a topic, get a real first draft back. No blank page, ever.
-- 🖱️ **Fix it by pointing.** See something off? Highlight it, say what you want in plain English, done.
-- 📎 **It uses your actual numbers.** Drop in your files and folders; it reads them so the real figures show up — no copy-paste.
-- 🎬 **Your app becomes a video.** Narrated walkthrough with YouTube-style chapters. Want a different take? Just ask again.
-- ⏪ **You literally cannot lose work.** Every change is a saved version. Rewind to any of them, anytime.
-- 🍴 **Can't decide? Don't.** Fork any version and keep both, side by side.
-- 📤 **Send it to anyone.** One self-contained file — HTML, PDF, native PowerPoint, or video. Nothing for them to download or figure out.
-- 🙅 **No scary black terminal.** Once it's going, it all happens in your browser.
-
-## Get it running
-
-First, a one-time bit of setup. You'll need [Claude Code](https://claude.com/claude-code) — install it, then paste these two lines where it asks:
+The package also ships a CLI for artifact work — `wicked-interactive create | publish | validate | adopt` — and Claude Code skills (`serve`, `assist`) that put an agent session into the supervising loop the feedback cycle needs (ADR-0010). The plugin install is two steps:
 
 ```
 /plugin marketplace add mikeparcewski/wicked-interactive
 /plugin install wicked-interactive
 ```
-
-And from then on, the only thing you ever type is:
-
-> **"start wicked-interactive"**
-
-That's genuinely it. The first time, it sets up a few helper tools behind the scenes — it'll show you exactly what it's installing, nothing sneaky — then your browser pops open and you're off. (Rather install the helpers yourself? Set `WI_NO_AUTOINSTALL=1` and it'll just tell you what to run.)
 
 ## Moving? The builder UI now lives in wicked-studio
 
@@ -108,14 +74,22 @@ supported path — the merged app is where the UI is maintained.
 document). It remains fully reachable over the API — `POST /api/events` with
 `wicked.interactive.review.requested` — and the affordance for it belongs to the studio side.
 
+## Why this repo stays live
+
+Asked and answered (twice — 2026-08-24 parity audit, re-verified 2026-08-29; the full record is
+ADR-0027 in [`docs/architecture-decisions.md`](docs/architecture-decisions.md)): the UI merge did
+**not** move the engine, so this repo cannot be archived. crew resolves `wicked-interactive@^0.8.1`
+from the public npm registry at runtime — archiving would strand a live dependency, deprecating
+would announce a migration that never happened, and unpublishing would kill every route under
+crew's interactive proxy. The repo stays live, reworded to the engine story it now is.
+
 ## Requirements
 
-- [Claude Code](https://claude.com/claude-code) ≥ 1.0 (the plugin surface)
 - Node.js ≥ 20.0.0 (for the wicked-bus peer)
-- [wicked-bus](https://github.com/mikeparcewski/wicked-bus) ≥ 2.3.0 — the event backbone the UI, service, and agent all share (`npm i -g wicked-bus`); auto-installed on first run if not already present
+- [wicked-bus](https://github.com/mikeparcewski/wicked-bus) ≥ 2.3.0 — the event backbone the service, studio UI, and agents all share (`npm i -g wicked-bus`); auto-installed on first run if not already present
 - macOS, Linux, or Windows
-- A modern browser (Chrome, Edge, Firefox, Safari)
+- For the agent-supervised loop: [Claude Code](https://claude.com/claude-code) ≥ 1.0 (the plugin surface)
 
 ---
 
-MIT licensed — see [LICENSE](LICENSE). Part of the [wicked-*](https://wickedagile.com) family of local-first, AI-native developer tools — a creative surface on the same substrate as wicked-crew and wicked-estate. Presentation craft is built in.
+MIT licensed — see [LICENSE](LICENSE). Part of the [wicked-*](https://wickedagile.com) family of local-first, AI-native developer tools — the foundation document engine beneath wicked-crew and wicked-studio.
