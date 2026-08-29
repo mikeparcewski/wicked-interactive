@@ -5,9 +5,9 @@ ADR frontmatter contract (estate ADR-011 §adr-contract; AW-12 / arch-R12, 2026-
 inline `(ADR-00NN)` tags in the code remain the canonical markers of *where* each decision
 bites — this index and the files record *what* was decided.
 
-ADR-0001…0018 were originally inline-only and are reconstructed from their tag sites (each file
-carries a provenance note); ADR-0019…0027 moved here verbatim from this document. Numbers
-0012–0013 were never assigned.
+ADR-0001…0018 and ADR-0024 were originally inline-only and are reconstructed from their tag
+sites (each file carries a provenance note); the rest of ADR-0019…0027 moved here verbatim from
+this document. Numbers 0012–0013 were never assigned.
 
 ---
 
