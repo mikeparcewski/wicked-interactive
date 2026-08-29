@@ -1,12 +1,13 @@
 # Architecture Decisions
 
-ADRs in this codebase are primarily **inline `(ADR-00NN)` tags** at the load-bearing site.
-This file records the rationale for the decisions that span many files — start here, then
-follow the tags into the code.
+ADRs live as real files under [`docs/adr/`](adr/), one per decision, under the ecosystem's one
+ADR frontmatter contract (estate ADR-011 §adr-contract; AW-12 / arch-R12, 2026-08-29). The
+inline `(ADR-00NN)` tags in the code remain the canonical markers of *where* each decision
+bites — this index and the files record *what* was decided.
 
-ADR-0001 … ADR-0018 are the original interactive-builder decisions (data-wid anchoring,
-single-writer feedback, deterministic regeneration, SSE transport, version/fork model,
-model-free service, multi-doc, install gate, sources, demos). They live as inline tags.
+ADR-0001…0018 were originally inline-only and are reconstructed from their tag sites (each file
+carries a provenance note); ADR-0019…0027 moved here verbatim from this document. Numbers
+0012–0013 were never assigned.
 
 ---
 
@@ -206,3 +207,30 @@ migration that never happened; unpublishing would kill every route under crew's 
 proxy — the entire creator surface at once. Revisit only if the engine itself is ever rehomed;
 the nearer-term open item is making the spawn a real crew dependency with a lockfile entry
 rather than a registry-resolved `npx` spec.
+| ADR | Title | Status |
+|---|---|---|
+| [ADR-0001](adr/0001-data-wid-anchoring.md) | Stable data-wid anchors | active |
+| [ADR-0002](adr/0002-single-writer-feedback-files.md) | Single-writer _v{x}.md feedback files | active |
+| [ADR-0003](adr/0003-determinism-first-regeneration.md) | Determinism-first hybrid regeneration | active |
+| [ADR-0004](adr/0004-fire-and-forget-bus-telemetry.md) | Fire-and-forget wicked-bus telemetry | superseded |
+| [ADR-0005](adr/0005-long-running-local-service.md) | The long-running local service | active |
+| [ADR-0006](adr/0006-sse-as-protocol.md) | SSE as the UI protocol | superseded |
+| [ADR-0007](adr/0007-fifo-mutation-serialization.md) | FIFO mutation serialization | active |
+| [ADR-0008](adr/0008-parent-pointer-versions-and-fork.md) | Parent-pointer version manifest and non-destructive fork | active |
+| [ADR-0009](adr/0009-self-contained-export.md) | Self-contained HTML and PDF export | active |
+| [ADR-0010](adr/0010-model-free-service.md) | Model-free service; judgment delegated to the supervising agent | active |
+| [ADR-0011](adr/0011-theme-base-style-block.md) | Theme tokens as a per-version base style block | active |
+| [ADR-0014](adr/0014-conversation-transcript.md) | Per-document conversation transcript | active |
+| [ADR-0015](adr/0015-multi-document-mode.md) | Multi-document mode | active |
+| [ADR-0016](adr/0016-sibling-install-gate.md) | Sibling install gate and the garden integration slices | active |
+| [ADR-0017](adr/0017-attached-sources.md) | Attached sources | active |
+| [ADR-0018](adr/0018-demo-doc-kind.md) | The demo doc kind: agent-authored spec, service-recorded | active |
+| [ADR-0019](adr/0019-one-bus-vocabulary.md) | One bus vocabulary for the whole control plane | active |
+| [ADR-0020](adr/0020-prezzie-absorbed.md) | wicked-prezzie absorbed, not orchestrated | active |
+| [ADR-0021](adr/0021-bus-required-transport-not-store.md) | brain + bus are required; the bus is transport, never store | active |
+| [ADR-0022](adr/0022-dynamic-port-lockfile.md) | dynamic port, one bridge per root, discovered via a lockfile | active |
+| [ADR-0023](adr/0023-chatgpt-shell-ui.md) | ChatGPT-shell UI: bottom composer, + menu (learn-a-style / reviewers) | active |
+| [ADR-0024](adr/0024-playwright-url-renderer.md) | Playwright URL renderer as the theme-grab default | active |
+| [ADR-0025](adr/0025-one-shared-instance.md) | one shared instance by default (amends ADR-0022) | active |
+| [ADR-0026](adr/0026-brain-retired-estate-grounding.md) | wicked-brain retired; grounding moves to wicked-estate via wicked-garden | active |
+| [ADR-0027](adr/0027-reword-dont-archive.md) | Reword, don't archive: this repo stays live as the family's document engine | active |
