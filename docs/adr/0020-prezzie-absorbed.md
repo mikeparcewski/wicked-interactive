@@ -10,7 +10,7 @@ date: 2026-06-09
 
 **Context.** wicked-prezzie was a *required sibling plugin*: themes were read off its plugin
 cache and the agent "drove its skills." Of its 40 skills / 25 Python modules, most are
-superseded by the browser loop (collaborate/feedback/start), wicked-brain (learn/search/index —
+superseded by the browser loop (collaborate/feedback/start), wicked-brain (learn/search/index — <!-- historical -->
 itself since retired into wicked-estate, ADR-0026), or wicked-garden crews (workflow/personas).
 
 **Decision.** Absorb the durable assets in-repo: the 3 theme JSONs move to `src/themes/`
