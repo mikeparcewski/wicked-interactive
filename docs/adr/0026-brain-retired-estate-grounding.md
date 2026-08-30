@@ -4,6 +4,7 @@ title: "wicked-brain retired; grounding moves to wicked-estate via wicked-garden
 status: active
 date: 2026-08-12
 ---
+<!-- historical-doc: records the 2026-08-12 wicked-brain retirement; kept as written -->
 # ADR-0026 — wicked-brain retired; grounding moves to wicked-estate via wicked-garden
 
 **Status:** accepted 2026-08-12. Supersedes the brain half of ADR-0021 (and the brain entry in

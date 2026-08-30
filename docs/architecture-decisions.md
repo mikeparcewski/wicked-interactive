@@ -232,5 +232,5 @@ rather than a registry-resolved `npx` spec.
 | [ADR-0023](adr/0023-chatgpt-shell-ui.md) | ChatGPT-shell UI: bottom composer, + menu (learn-a-style / reviewers) | active |
 | [ADR-0024](adr/0024-playwright-url-renderer.md) | Playwright URL renderer as the theme-grab default | active |
 | [ADR-0025](adr/0025-one-shared-instance.md) | one shared instance by default (amends ADR-0022) | active |
-| [ADR-0026](adr/0026-brain-retired-estate-grounding.md) | wicked-brain retired; grounding moves to wicked-estate via wicked-garden | active |
+| [ADR-0026](adr/0026-brain-retired-estate-grounding.md) | wicked-brain retired; grounding moves to wicked-estate via wicked-garden | active <!-- historical --> |
 | [ADR-0027](adr/0027-reword-dont-archive.md) | Reword, don't archive: this repo stays live as the family's document engine | active |
