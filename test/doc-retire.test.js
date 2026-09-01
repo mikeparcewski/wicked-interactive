@@ -264,6 +264,47 @@ test("DELETE refuses (409) while a build is in flight, carrying the same activit
   } finally { await cleanup(); }
 });
 
+test("a DELETE that loses the retire race inside the activity read is the idempotent 200, not a 500", async () => {
+  // The window: DELETE B passes the tombstone check, then parks in activityFor's crew fetch
+  // (up to 750ms). DELETE A completes the whole retire meanwhile — tombstone on disk, doc
+  // unmounted. B must then answer the same 200 {already_retired:true} any other repeat gets;
+  // before the mount-refusal guard it fell into mountDoc ("doc retired") → 500.
+  const { createServer: createHttp } = await import("node:http");
+  let releaseFirst;
+  const firstHeld = new Promise((r) => { releaseFirst = r; });
+  let calls = 0;
+  const crew = createHttp(async (_req, res) => {
+    calls += 1;
+    if (calls === 1) await firstHeld; // B parks here, inside its activity window
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ runs: [] }));
+  });
+  await new Promise((r) => crew.listen(0, "127.0.0.1", r));
+  const prevCrew = process.env.WICKED_CREW_API;
+  process.env.WICKED_CREW_API = `http://127.0.0.1:${crew.address().port}`;
+  const { createDoc, retire, cleanup } = await boot();
+  try {
+    await createDoc("raced-late");
+    const b = retire("raced-late"); // enters activityFor and parks on the held crew read
+    await until(() => calls, (n) => n >= 1, 100, 20);
+    const a = await retire("raced-late"); // full retire completes during B's window
+    assert.equal(a.status, 200);
+    const aBody = await a.json();
+    releaseFirst(); // B resumes AFTER the tombstone landed and the doc was unmounted
+    const rB = await b;
+    assert.equal(rB.status, 200, "the losing DELETE is the idempotent repeat, not a 500");
+    const bBody = await rB.json();
+    assert.ok(aBody.retired === true && bBody.retired === true);
+    assert.equal([aBody, bBody].filter((x) => x.already_retired === false).length, 1,
+      "exactly one of the racing DELETEs is the first retire");
+    assert.equal(bBody.retired_at, aBody.retired_at, "one tombstone, one timestamp");
+  } finally {
+    process.env.WICKED_CREW_API = prevCrew;
+    crew.close();
+    await cleanup();
+  }
+});
+
 // ── bus: retired docs no longer materialize commands ────────────────────────
 
 test("a command event for a retired doc is dropped (acked), not materialized and not DLQ'd", async () => {

@@ -693,7 +693,18 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
 
       // Serialize the tombstone write on the doc's FIFO (ADR-0007) so it can't race a
       // materializing command's manifest read-modify-write.
-      const entry = docs.get(name) || await mountDoc(name);
+      let entry = docs.get(name);
+      if (!entry) {
+        try { entry = await mountDoc(name); }
+        catch (e) {
+          // Lost a concurrent retire race: the tombstone landed while this request sat in the
+          // activity read (mountDoc refuses retired docs), so the doc is already unmounted.
+          // Idempotency is the wire promise — answer the same 200 {already_retired:true} any
+          // other repeat gets, with the original timestamp. Anything else rethrows to the 500.
+          if (retiredInfo(name)) return answer(loadManifest(docDir(name)), { already: true });
+          throw e;
+        }
+      }
       const outcome = await entry.svc.enqueue(() => {
         const { manifest, retired_at, already } = retireManifest(loadManifest(docDir(name)));
         if (!already) saveManifest(docDir(name), manifest);
