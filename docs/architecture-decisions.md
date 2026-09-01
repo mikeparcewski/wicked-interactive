@@ -176,7 +176,7 @@ called `wicked-brain:search`/`query` (Step 6), `ingest` where it indexed sources
 ## ADR-0027 — Reword, don't archive: this repo stays live as the family's document engine
 
 **Status:** accepted 2026-08-29 (recon docs-R12 / OQ-3; re-verifies and closes the 2026-08-24
-parity audit's open gate).
+parity audit's open gate). **Parity audit corrections** (interactive#186) appended below.
 
 **Context.** The endgame-consolidation program asked whether wicked-interactive can be archived
 on GitHub/npm now that the builder UI lives in wicked-studio. The 2026-08-24 parity audit said
@@ -207,6 +207,46 @@ migration that never happened; unpublishing would kill every route under crew's 
 proxy — the entire creator surface at once. Revisit only if the engine itself is ever rehomed;
 the nearer-term open item is making the spawn a real crew dependency with a lockfile entry
 rather than a registry-resolved `npx` spec.
+
+### Parity audit corrections (interactive#186)
+
+The same 2026-08-24 analysis produced a "dead-weight cleanup list" that recommended deleting
+three items as zero-consumer dead code. All three are live; the grep missed them because it
+searched the wrong repos or used a static-import pattern against a dynamic-import call.
+
+**`src/artifact/` — backs four live CLI subcommands.**
+`grep -r "from-garden|from-crew|artifact/adopt"` across wicked-crew + wicked-studio returns
+zero hits, but the consumer is in *this* repo: `bin/wicked-interactive.js` dispatches all four
+subcommands (`create`, `publish`, `validate`, `adopt`) via dynamic `await import()`:
+
+```js
+if (cmd === "create")   { const { runCreate }   = await import("../src/artifact/create.js");   … }
+if (cmd === "publish")  { const { runPublish }  = await import("../src/artifact/publish.js");  … }
+if (cmd === "validate") { const { runValidate } = await import("../src/artifact/validate.js"); … }
+if (cmd === "adopt")    { const { runAdopt }    = await import("../src/artifact/adopt.js");    … }
+```
+
+The string argument to `import()` is invisible to any grep that looks for `from '…'` or
+`require('…')`. Deleting `src/artifact/` removes all four subcommands from the npm package.
+
+**`frontend/dist/` — wired, served by the running service.**
+`src/service/server.js` has two `express.static` call sites (lines 330–331 and 769–770), both
+`existsSync`-guarded, both resolving to `frontend/dist/` by default:
+
+```js
+const staticDir = frontendDir || resolve(HERE, "../../frontend/dist");
+if (existsSync(staticDir)) app.use(express.static(staticDir));
+```
+
+`frontend/dist/` is also listed under `files[]` in `package.json` — it ships in every published
+tarball. The guard means its absence degrades (doesn't crash), so static analysis alone
+concluded "not wired," but it is wired and it ships.
+
+**`site/` — the live product site at wi.wickedagile.com.**
+`site/` is an Astro project (`site/package.json`, `site/astro.config.mjs`) auto-deployed by
+`.github/workflows/pages.yml` on every push to `main`. It is the canonical product marketing
+page and is not in any way dead weight.
+
 | ADR | Title | Status |
 |---|---|---|
 | [ADR-0001](adr/0001-data-wid-anchoring.md) | Stable data-wid anchors | active |
