@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Document retired",
+  "description": "The service tombstoned a document (#189): the doc is retired from every live surface (listing, per-doc routes, the UI emit bridge) but its version lineage stays on disk, write-once and auditable. Service-owned; requested over HTTP (DELETE /api/docs/:doc).",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "retired_at"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "retired_at": {
+      "type": "string",
+      "description": "The tombstone timestamp stamped into versions.json — the durable fact this event announces."
+    },
+    "kind": {
+      "enum": [
+        "doc",
+        "html",
+        "source",
+        "demo"
+      ]
+    },
+    "versions": {
+      "type": "integer",
+      "description": "How many versions the retired lineage holds (audit convenience)."
+    },
+    "project_id": {
+      "type": "string",
+      "description": "ADDITIVE (DES-PROJECT-001 §2.3): the crew project this doc is bound to. Absent for unbound docs; consumers that don't know the field ignore it."
+    }
+  },
+  "additionalProperties": true
+}

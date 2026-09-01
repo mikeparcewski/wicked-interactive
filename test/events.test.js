@@ -39,6 +39,10 @@ test("ownership table gates emits by producer", () => {
   assert.ok(canEmit("wicked.interactive.chat.posted", PRODUCERS.AGENT));
   assert.ok(!canEmit("wicked.interactive.chat.posted", PRODUCERS.SERVICE));
   assert.deepEqual(ownerOf("wicked.unknown.thing"), []);
+  // The unmake verb (#189) is service-owned, exactly like doc.created.
+  assert.ok(canEmit("wicked.interactive.doc.retired", PRODUCERS.SERVICE));
+  assert.ok(!canEmit("wicked.interactive.doc.retired", PRODUCERS.UI));
+  assert.ok(!canEmit("wicked.interactive.doc.retired", PRODUCERS.AGENT));
 });
 
 test("crew (wi-crew) is a governed answerer: drafts + structural edits + status (Phase 7c)", () => {
@@ -71,6 +75,7 @@ test("UI may only originate the conversational/intent events", () => {
     "wicked.interactive.theme.requested", "wicked.interactive.review.requested", "wicked.interactive.status.requested"];
   const uiNo = ["wicked.interactive.edit.completed", "wicked.interactive.draft.completed", "wicked.interactive.version.created",
     "wicked.interactive.feedback.processed", "wicked.interactive.status.posted", "wicked.interactive.doc.created",
+    "wicked.interactive.doc.retired",
     "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.export.generated",
     "wicked.interactive.export.reviewed", "wicked.interactive.error.raised", "wicked.interactive.theme.learned",
     "wicked.interactive.review.completed"];
