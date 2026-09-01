@@ -439,7 +439,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // body — a service refusal that says WHY, never Express's route-missing text (the exact failure
   // mode the issue pinned).
   top.use("/d/:doc", (req, res, next) => {
-    const tomb = retiredInfo(String(req.params.doc || ""));
+    const name = String(req.params.doc || "");
+    // A mounted doc is live by construction (mountDoc refuses retired docs and retirement
+    // unmounts) — skip the manifest read on the hot path and only hit disk for unmounted names.
+    if (docs.has(name)) return next();
+    const tomb = retiredInfo(name);
     if (tomb) return res.status(410).json({ error: "doc retired", document_id: req.params.doc, retired_at: tomb.retired_at });
     next();
   });

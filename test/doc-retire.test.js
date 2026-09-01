@@ -16,7 +16,13 @@ import { initManifest, retireManifest, isRetired } from "../src/core/versions.js
 
 // Crew is unreachable throughout: the in-flight gate must degrade to the local pulse alone
 // (never block or slow retirement on a crew that isn't there). 127.0.0.1:1 refuses instantly.
+// Saved and restored on exit so a shared-process runner's later tests see the original value.
+const PRIOR_CREW_API = process.env.WICKED_CREW_API;
 process.env.WICKED_CREW_API = "http://127.0.0.1:1";
+process.on("exit", () => {
+  if (PRIOR_CREW_API === undefined) delete process.env.WICKED_CREW_API;
+  else process.env.WICKED_CREW_API = PRIOR_CREW_API;
+});
 
 // Each boot gets an isolated wicked-bus DB (ADR-0019). bus-client memoizes the handle per
 // process and releases it on svc.stop() (closeBus), so a fresh dir per boot = fresh bus.
