@@ -78,6 +78,24 @@ export function recordVersion(manifest, { version, parent, feedbackFile = null }
   return { manifest: { ...manifest, head: version, versions: [...manifest.versions, entry] }, version };
 }
 
+/** Is this manifest tombstoned (the doc retired)? */
+export function isRetired(manifest) {
+  return typeof manifest?.retired_at === "string" && manifest.retired_at.length > 0;
+}
+
+/**
+ * Retire (tombstone) a document: stamp `retired_at` on the manifest. SOFT retire on purpose —
+ * the versions array, parent pointers, and every `_v{n}.html` on disk are untouched, so the
+ * lineage stays write-once (INV-4) and auditable; only the doc's LIFE ends. Idempotent: an
+ * already-retired manifest comes back unchanged with its original timestamp (`already: true`).
+ * @returns {{ manifest: object, retired_at: string, already: boolean }}
+ */
+export function retireManifest(manifest) {
+  if (isRetired(manifest)) return { manifest, retired_at: manifest.retired_at, already: true };
+  const retired_at = now();
+  return { manifest: { ...manifest, retired_at }, retired_at, already: false };
+}
+
 /** Next version number that would be allocated (max + 1). */
 export function nextVersionNumber(manifest) {
   return nextNumber(manifest);

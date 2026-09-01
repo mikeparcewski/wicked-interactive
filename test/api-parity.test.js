@@ -151,5 +151,25 @@ test("API parity smoke: every capability the merged app drives is reachable on a
     const first = await sse.body.getReader().read();
     assert.match(new TextDecoder().decode(first.value), /event: ready/);
     ctrl.abort();
+
+    // ── retire (#189) ─────────────────────────────────────────────────────
+    // The unmake half of the registry — the route studio#119 waits on. Soft retire: the doc
+    // leaves the default list (tombstone visible via ?includeRetired), per-doc routes answer
+    // 410 Gone with a JSON refusal, repeats are idempotent, unknowns are clean 404s.
+    await postJson(`${base}/api/docs`, { name: "parity-retire", html: "<h1>bye</h1><p>x</p>" });
+    const retired = await fetch(`${base}/api/docs/parity-retire`, { method: "DELETE" });
+    assert.equal(retired.status, 200);
+    const rbody = await retired.json();
+    assert.equal(rbody.retired, true);
+    assert.ok(rbody.retired_at, "the tombstone timestamp rides in the response");
+    const liveNames = (await (await fetch(`${base}/api/docs`)).json()).map((d) => d.name);
+    assert.ok(!liveNames.includes("parity-retire"), "retired doc leaves the default list");
+    const allNames = (await (await fetch(`${base}/api/docs?includeRetired=1`)).json()).map((d) => d.name);
+    assert.ok(allNames.includes("parity-retire"), "?includeRetired still shows the tombstone");
+    assert.equal((await fetch(`${base}/d/parity-retire/api/versions`)).status, 410, "per-doc routes answer 410 Gone");
+    const again = await fetch(`${base}/api/docs/parity-retire`, { method: "DELETE" });
+    assert.equal(again.status, 200, "retire is idempotent");
+    assert.equal((await again.json()).already_retired, true);
+    assert.equal((await fetch(`${base}/api/docs/never-was`, { method: "DELETE" })).status, 404, "unknown doc is a clean 404");
   } finally { await cleanup(); }
 });

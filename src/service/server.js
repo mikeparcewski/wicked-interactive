@@ -18,6 +18,8 @@ import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
+import { saveManifest } from "./fsstore.js";
+import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
@@ -373,6 +375,22 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     return DOC_NAME.test(name) && existsSync(join(docDir(name), "versions.json"));
   }
 
+  // Retirement tombstone (#189): `retired_at` stamped on versions.json by DELETE /api/docs/:doc.
+  // SOFT retire, deliberately: this engine's versions are write-once (INV-4) and the fork model
+  // promises "nothing is removed" (AC-22), so retiring must not shred a lineage that evidence and
+  // audits may still point at — the doc leaves every LIVE surface (listing, /d/ routes, the UI
+  // emit bridge, command materialization) while its files stay on disk, readable by an operator
+  // and re-listable via ?includeRetired. Reads the manifest per call (same posture as listDocs);
+  // an unreadable/absent manifest is simply "not retired" — the existing unknown-doc paths answer.
+  // @returns {{retired_at:string}|null}
+  function retiredInfo(name) {
+    if (!DOC_NAME.test(name)) return null; // also keeps arbitrary path segments away from disk
+    try {
+      const m = loadManifest(docDir(name));
+      return manifestRetired(m) ? { retired_at: m.retired_at } : null;
+    } catch { return null; }
+  }
+
   // ── Browser SSE bridge (down) ─────────────────────────────────────────────
   // One stream of bus envelopes (replaces the old per-doc + cross-doc SSE streams). The frontend
   // routes on event_type and filters on payload.document_id. 15s heartbeat keeps proxies +
@@ -415,9 +433,21 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     };
   }
 
+  // Retired-doc gate for every per-doc route (#189), registered BEFORE any doc app is mounted
+  // (mounts happen at bootstrap/request time, always after construction) so it fires first for
+  // docs retired in this process AND for tombstones already on disk at boot. 410 Gone with a JSON
+  // body — a service refusal that says WHY, never Express's route-missing text (the exact failure
+  // mode the issue pinned).
+  top.use("/d/:doc", (req, res, next) => {
+    const tomb = retiredInfo(String(req.params.doc || ""));
+    if (tomb) return res.status(410).json({ error: "doc retired", document_id: req.params.doc, retired_at: tomb.retired_at });
+    next();
+  });
+
   async function mountDoc(name) {
     if (docs.has(name)) return docs.get(name);
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
+    if (retiredInfo(name)) throw new Error(`doc retired: ${name}`);
     const dir = docDir(name);
     const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone });
     top.use(`/d/${name}`, svc.app);
@@ -425,7 +455,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     return docs.get(name);
   }
 
-  function listDocs() {
+  // Retired docs are EXCLUDED by default (#189) — the tombstone's whole point is leaving the
+  // picker — with `includeRetired` as the audit escape hatch; a retired row carries
+  // `retired: true, retired_at` so a client can render it as history, while live rows stay
+  // byte-identical to before retirement existed.
+  function listDocs({ includeRetired = false } = {}) {
     const out = [];
     for (const entry of (existsSync(root) ? readdirSync(root, { withFileTypes: true }) : [])) {
       if (!entry.isDirectory()) continue;
@@ -435,8 +469,12 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       if (!existsSync(v)) continue;
       try {
         const m = JSON.parse(readFileSync(v, "utf-8"));
+        if (manifestRetired(m) && !includeRetired) continue;
         const last = m.versions[m.versions.length - 1] || {};
-        out.push({ name, kind: m.kind || "doc", head: m.head, versions: m.versions.length, updated_at: last.created_at || null });
+        out.push({
+          name, kind: m.kind || "doc", head: m.head, versions: m.versions.length, updated_at: last.created_at || null,
+          ...(manifestRetired(m) ? { retired: true, retired_at: m.retired_at } : {}),
+        });
       } catch { /* skip malformed */ }
     }
     return out.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
@@ -504,6 +542,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (key && processedKeys.has(key)) return;
     const name = event.payload?.document_id;
     if (!name || !DOC_NAME.test(name)) return;
+    if (retiredInfo(name)) return;  // retired doc (#189) — the tombstone is final; ack, don't DLQ
     let entry = docs.get(name);
     if (!entry && isExistingDoc(name)) entry = await mountDoc(name);
     if (!entry) return;  // unknown doc — nothing to materialize against
@@ -574,9 +613,8 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // contract as GET /api/crew/projects): this read happens on every doc open.
   const RUN_ACTIVE_STATUSES = new Set(["planning", "distributing", "executing", "awaiting_human"]);
   const PULSE_FRESH_MS = 60_000; // crew heartbeats narration every ≤15s — a fresh pulse means live work
-  top.get("/api/docs/:doc/activity", async (req, res) => {
-    const name = String(req.params.doc || "");
-    if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
+  // Shared by GET /api/docs/:doc/activity and DELETE /api/docs/:doc (the in-flight gate, #189).
+  async function activityFor(name) {
     const status = lastStatus.get(name) || null;
     let run = null;
     try {
@@ -595,7 +633,14 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const at = status ? Date.parse(status.at) : NaN;
     const pulseFresh = !!status && status.state === "working" &&
       Number.isFinite(at) && Date.now() - at < PULSE_FRESH_MS;
-    res.json({ document_id: name, active: !!run || pulseFresh, status, run });
+    return { active: !!run || pulseFresh, status, run };
+  }
+  top.get("/api/docs/:doc/activity", async (req, res) => {
+    const name = String(req.params.doc || "");
+    if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
+    const tomb = retiredInfo(name);
+    if (tomb) return res.status(410).json({ error: "doc retired", document_id: name, retired_at: tomb.retired_at });
+    res.json({ document_id: name, ...(await activityFor(name)) });
   });
   // The running instances the UI's project switcher can jump between (ADR-0025 follow-up). Live
   // pids only; the current root is flagged + sorted first. Each `serve` registers itself on start.
@@ -608,7 +653,72 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     res.json({ root: here, projects });
   });
   top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
-  top.get("/api/docs", (_req, res) => res.json(listDocs()));
+  top.get("/api/docs", (req, res) => {
+    const includeRetired = ["1", "true"].includes(String(req.query?.includeRetired ?? "").toLowerCase());
+    res.json(listDocs({ includeRetired }));
+  });
+
+  // Retire a doc (#189): the unmake half of POST /api/docs. SOFT retire — see retiredInfo() for
+  // why hard deletion is the wrong verb for this engine (write-once versions, INV-4/AC-22): the
+  // tombstone lands in versions.json, the doc leaves the default listing and every live surface,
+  // the lineage stays on disk for audit, and the name stays reserved (a recreated "q3-report"
+  // silently inheriting an old doc's audit trail would be worse than a 409).
+  //
+  // In-flight work (issue decision, spelled out so a client can say it out loud): REFUSE with the
+  // reason — 409 carrying the same {status, run} shape as GET /api/docs/:doc/activity. Cancel-then-
+  // delete would put this bridge in the business of killing crew runs it doesn't own.
+  //
+  // Idempotent: retiring a retired doc is 200 with `already_retired: true` and the ORIGINAL
+  // retired_at (no second event). Unknown or invalid name: 404, JSON body.
+  top.delete("/api/docs/:doc", async (req, res) => {
+    const name = String(req.params.doc || "");
+    if (!isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
+
+    const answer = (m, { already, event_id } = {}) => res.json({
+      name, kind: m.kind || "doc", retired: true, already_retired: !!already,
+      retired_at: m.retired_at, head: m.head, versions: m.versions.length,
+      ...(event_id != null ? { event_id } : {}),
+    });
+
+    try {
+      if (retiredInfo(name)) return answer(loadManifest(docDir(name)), { already: true });
+
+      const activity = await activityFor(name);
+      if (activity.active) {
+        return res.status(409).json({
+          error: "doc has a build in flight — wait for it to finish (or cancel the run in crew), then retire",
+          document_id: name, active: true, run: activity.run, status: activity.status,
+        });
+      }
+
+      // Serialize the tombstone write on the doc's FIFO (ADR-0007) so it can't race a
+      // materializing command's manifest read-modify-write.
+      const entry = docs.get(name) || await mountDoc(name);
+      const outcome = await entry.svc.enqueue(() => {
+        const { manifest, retired_at, already } = retireManifest(loadManifest(docDir(name)));
+        if (!already) saveManifest(docDir(name), manifest);
+        return { manifest, retired_at, already };
+      });
+
+      // Off every live surface: the /d/:doc gate answers 410 from here on (the mounted app stays
+      // in the express stack but is unreachable behind it); the maps forget the doc.
+      docs.delete(name);
+      lastStatus.delete(name);
+      lastStatusText.delete(name);
+
+      let event_id;
+      if (!outcome.already) {
+        // The observable unmake fact (project_id enriched for bound docs, like every service emit)
+        // — crew cleans its draft ledger on it; open canvases learn the doc is gone.
+        ({ event_id } = await serviceEmit(name)("wicked.interactive.doc.retired", {
+          retired_at: outcome.retired_at, kind: outcome.manifest.kind || "doc", versions: outcome.manifest.versions.length,
+        }));
+      }
+      return answer(outcome.manifest, { already: outcome.already, event_id });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
 
   // Studio origin (DES-MERGE-001 §7.13). The shell is retired, so GET / redirects to the merged
   // studio app — and the bridge owns .wi-serve.json, so crew records the origin it serves that
@@ -633,6 +743,8 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!uiEmittable(type)) return res.status(403).json({ error: `not a UI-emittable event: ${type}` });
     const name = String(payload.document_id || "");
     if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
+    const tomb = retiredInfo(name);
+    if (tomb) return res.status(410).json({ error: "doc retired", document_id: name, retired_at: tomb.retired_at });
     try {
       const correlationId = randomUUID();
       // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)
@@ -662,7 +774,13 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const style = ["web", "ppt", "brochure", "doc"].includes(req.body?.style) ? req.body.style : null;
     const name = DOC_NAME.test(raw) ? raw : slugify(raw);
     if (!name || !DOC_NAME.test(name)) return res.status(400).json({ error: "valid name required (lowercase letters, digits, hyphens; up to 64 chars)" });
-    if (isExistingDoc(name)) return res.status(409).json({ error: "doc already exists", name });
+    if (isExistingDoc(name)) {
+      // A retired name stays reserved (#189): its tombstoned lineage still answers to this name,
+      // and a fresh doc silently inheriting an old audit trail would be a lie. Distinct message
+      // so a client can explain WHICH kind of taken this is.
+      if (retiredInfo(name)) return res.status(409).json({ error: "doc name is retired — its tombstoned lineage keeps the name reserved", name, retired: true });
+      return res.status(409).json({ error: "doc already exists", name });
+    }
 
     // Optional crew-project binding (DES-PROJECT-001 §2.3): registration is the AUTHORITY and it
     // happens FIRST — a doc that cannot be filed (unknown/archived project, no daemon reachable)
@@ -748,7 +866,8 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // Mount docs already on disk so their routes are live from the first request.
   async function bootstrap() {
     for (const entry of (existsSync(root) ? readdirSync(root, { withFileTypes: true }) : [])) {
-      if (entry.isDirectory() && isExistingDoc(entry.name)) await mountDoc(entry.name);
+      // Tombstoned docs stay unmounted (#189) — the /d/:doc gate would 410 them anyway.
+      if (entry.isDirectory() && isExistingDoc(entry.name) && !retiredInfo(entry.name)) await mountDoc(entry.name);
     }
   }
 
@@ -756,7 +875,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // route map (DES-MERGE-001 §1.5); an unbound (or unknown) one lands on the board.
   function studioPathFor(doc) {
     const name = String(doc ?? "");
-    if (!DOC_NAME.test(name) || !isExistingDoc(name)) return "/";
+    if (!DOC_NAME.test(name) || !isExistingDoc(name) || retiredInfo(name)) return "/";
     const projectId = projectIdFor(docDir(name));
     return projectId ? `/p/${encodeURIComponent(projectId)}/document/${encodeURIComponent(name)}` : "/";
   }

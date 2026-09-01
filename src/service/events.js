@@ -35,6 +35,11 @@ const { SERVICE, AGENT, UI, CREW } = PRODUCERS;
 // is the bus column (functional area). Keep this table and event-schemas/ in lockstep.
 export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.doc.created":         { subdomain: "docs",       owners: [SERVICE],       uiEmittable: false },
+  // The unmake verb (#189): the service announces a doc's retirement (soft tombstone — lineage
+  // kept) so crew can clean its draft ledger and open canvases stop polling a doc that is gone.
+  // Retirement is requested over HTTP (DELETE /api/docs/:doc), never originated from the browser
+  // via the event bridge — the fact is service-owned, exactly like doc.created.
+  "wicked.interactive.doc.retired":         { subdomain: "docs",       owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.feedback.submitted":  { subdomain: "feedback",   owners: [UI],            uiEmittable: true  },
   "wicked.interactive.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT, CREW],   uiEmittable: false },
