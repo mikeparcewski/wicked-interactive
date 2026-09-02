@@ -8,13 +8,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
 import { initManifest, retireManifest, isRetired } from "../src/core/versions.js";
 import { saveManifest } from "../src/service/fsstore.js";
-import { initWorkspace } from "../src/service/workspace.js";
 
 // Crew is unreachable throughout: the in-flight gate must degrade to the local pulse alone
 // (never block or slow retirement on a crew that isn't there). 127.0.0.1:1 refuses instantly.
