@@ -18,7 +18,7 @@ import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
-import { saveManifest } from "./fsstore.js";
+import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
@@ -351,6 +351,10 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
 // ---------------------------------------------------------------------------
 
 const DOC_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/; // slug-safe, no path separators
+// Outbox marker for doc.retired (#198): written alongside the tombstone, cleared after a
+// confirmed emit. A surviving marker means the emit never landed; re-emit on repeat DELETE
+// or boot so crew's ledger sweep never silently misses a retirement.
+const PENDING_RETIRE_EVENT = "retired-event-pending.json";
 
 function slugify(name) {
   return String(name || "").toLowerCase().trim().replace(/[^a-z0-9-]+/g, "-")
@@ -389,6 +393,32 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       const m = loadManifest(docDir(name));
       return manifestRetired(m) ? { retired_at: m.retired_at } : null;
     } catch { return null; }
+  }
+
+  // Outbox drain (#198): if a pending marker exists, emit doc.retired and clear the marker.
+  // At-least-once: the consumer (crew's ledger sweep) handles replay dedupe. Returns the
+  // event_id on a successful emit, undefined if the marker was absent or the emit failed
+  // (bus still down — marker left for next boot/retry).
+  async function drainPendingRetireEvent(name) {
+    const pendingPath = join(docDir(name), PENDING_RETIRE_EVENT);
+    if (!existsSync(pendingPath)) return undefined;
+    try {
+      const pending = JSON.parse(readFileSync(pendingPath, "utf-8"));
+      const { event_id } = await serviceEmit(name)("wicked.interactive.doc.retired", {
+        retired_at: pending.retired_at, kind: pending.kind, versions: pending.versions,
+      });
+      try { rmSync(pendingPath); } catch { /* best-effort clear */ }
+      return event_id;
+    } catch { return undefined; }
+  }
+
+  // Boot-time drain: scan all doc dirs for surviving markers and emit them.
+  async function drainAllPendingRetireEvents() {
+    for (const entry of (existsSync(root) ? readdirSync(root, { withFileTypes: true }) : [])) {
+      if (!entry.isDirectory() || !DOC_NAME.test(entry.name)) continue;
+      if (!existsSync(join(docDir(entry.name), PENDING_RETIRE_EVENT))) continue;
+      try { await drainPendingRetireEvent(entry.name); } catch { /* individual failures don't block boot */ }
+    }
   }
 
   // ── Browser SSE bridge (down) ─────────────────────────────────────────────
@@ -685,7 +715,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     });
 
     try {
-      if (retiredInfo(name)) return answer(loadManifest(docDir(name)), { already: true });
+      if (retiredInfo(name)) {
+        const m = loadManifest(docDir(name));
+        const event_id = await drainPendingRetireEvent(name);
+        return answer(m, { already: true, ...(event_id != null ? { event_id } : {}) });
+      }
 
       const activity = await activityFor(name);
       if (activity.active) {
@@ -705,13 +739,26 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
           // activity read (mountDoc refuses retired docs), so the doc is already unmounted.
           // Idempotency is the wire promise — answer the same 200 {already_retired:true} any
           // other repeat gets, with the original timestamp. Anything else rethrows to the 500.
-          if (retiredInfo(name)) return answer(loadManifest(docDir(name)), { already: true });
+          if (retiredInfo(name)) {
+            const m = loadManifest(docDir(name));
+            const event_id = await drainPendingRetireEvent(name);
+            return answer(m, { already: true, ...(event_id != null ? { event_id } : {}) });
+          }
           throw e;
         }
       }
       const outcome = await entry.svc.enqueue(() => {
         const { manifest, retired_at, already } = retireManifest(loadManifest(docDir(name)));
-        if (!already) saveManifest(docDir(name), manifest);
+        if (!already) {
+          saveManifest(docDir(name), manifest);
+          // Outbox marker written atomically beside the tombstone (#198): if the emit below
+          // fails or the process dies, a surviving marker triggers re-emit on repeat DELETE
+          // or next boot — at-least-once, consumer dedupes.
+          atomicWrite(
+            join(docDir(name), PENDING_RETIRE_EVENT),
+            JSON.stringify({ retired_at, kind: manifest.kind || "doc", versions: manifest.versions.length })
+          );
+        }
         return { manifest, retired_at, already };
       });
 
@@ -728,6 +775,9 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
         ({ event_id } = await serviceEmit(name)("wicked.interactive.doc.retired", {
           retired_at: outcome.retired_at, kind: outcome.manifest.kind || "doc", versions: outcome.manifest.versions.length,
         }));
+        // Emit confirmed: clear the outbox marker. A crash between the write above and here
+        // leaves the marker for the next boot/retry to drain (at-least-once, consumer dedupes).
+        try { rmSync(join(docDir(name), PENDING_RETIRE_EVENT)); } catch { /* best-effort */ }
       }
       return answer(outcome.manifest, { already: outcome.already, event_id });
     } catch (e) {
@@ -914,6 +964,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   async function start(port = 0) {
     await bootstrap();
     busDb(); // fail-fast: open the bus before we accept traffic (ADR-0021)
+    await drainAllPendingRetireEvents(); // recover any doc.retired lost to a previous crash (#198)
     // Two subscriptions on the one bus: the bridge (fan-out + transcript, best-effort) and
     // the command loop (materialize, retry+DLQ). cursor_init "latest" — live events only.
     subs.push(startSubscription({ plugin: "wi-service-bridge", filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));

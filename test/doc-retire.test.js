@@ -8,11 +8,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
 import { initManifest, retireManifest, isRetired } from "../src/core/versions.js";
+import { saveManifest } from "../src/service/fsstore.js";
 
 // Crew is unreachable throughout: the in-flight gate must degrade to the local pulse alone
 // (never block or slow retirement on a crew that isn't there). 127.0.0.1:1 refuses instantly.
@@ -329,4 +330,102 @@ test("a command event for a retired doc is dropped (acked), not materialized and
     assert.equal(manifest.versions.length, 1, "no version materialized after retirement");
     assert.ok(manifest.retired_at);
   } finally { await cleanup(); }
+});
+
+// ── outbox: pending-emit marker (#198) ──────────────────────────────────────
+// The pending marker filename is part of the wire contract so it is spelled out here.
+const PENDING_RETIRE_EVENT = "retired-event-pending.json";
+
+// Helper: write a tombstone + pending marker directly into a doc dir, simulating a process
+// that wrote both files but died before the bus emit confirmed.
+function plantPendingMarker(docDir) {
+  const m = JSON.parse(readFileSync(join(docDir, "versions.json"), "utf-8"));
+  const { manifest, retired_at } = retireManifest(m);
+  saveManifest(docDir, manifest);
+  writeFileSync(
+    join(docDir, PENDING_RETIRE_EVENT),
+    JSON.stringify({ retired_at, kind: manifest.kind || "doc", versions: manifest.versions.length })
+  );
+  return retired_at;
+}
+
+test("happy path: marker is cleared after a successful retire (no orphaned outbox entry)", async () => {
+  const { root, createDoc, retire, cleanup } = await boot();
+  try {
+    await createDoc("outbox-happy");
+    const r = await retire("outbox-happy");
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.equal(body.already_retired, false);
+    assert.ok(body.event_id != null, "happy path carries event_id");
+    assert.ok(
+      !existsSync(join(root, "outbox-happy", PENDING_RETIRE_EVENT)),
+      "outbox marker cleared after confirmed emit"
+    );
+  } finally { await cleanup(); }
+});
+
+test("surviving marker on repeat DELETE: drains and re-emits exactly once, response carries event_id", async () => {
+  // Simulate a process that wrote tombstone + marker but died before the bus emit.
+  const { root, base, createDoc, retire, cleanup } = await boot();
+  try {
+    await createDoc("outbox-resume");
+    const planted_at = plantPendingMarker(join(root, "outbox-resume"));
+
+    const sse = await openSse(base, "wicked.interactive.doc.retired");
+    const r = await retire("outbox-resume");
+    assert.equal(r.status, 200);
+    const body = await r.json();
+    assert.equal(body.already_retired, true, "repeat DELETE takes the idempotent path");
+    assert.ok(body.event_id != null, "drained marker re-emits: event_id on the wire");
+    assert.equal(body.retired_at, planted_at, "original tombstone timestamp preserved");
+    assert.ok(
+      !existsSync(join(root, "outbox-resume", PENDING_RETIRE_EVENT)),
+      "marker cleared after successful drain"
+    );
+    // Exactly one doc.retired reaches the bus.
+    const frame = await sse.frame;
+    assert.equal(frame.payload.document_id, "outbox-resume");
+    assert.equal(frame.payload.retired_at, planted_at);
+  } finally { await cleanup(); }
+});
+
+test("repeat DELETE with no pending marker: byte-identical wire (already_retired, original retired_at, no event_id)", async () => {
+  const { createDoc, retire, cleanup } = await boot();
+  try {
+    await createDoc("outbox-no-reem");
+    const body1 = await (await retire("outbox-no-reem")).json();
+    assert.equal(body1.already_retired, false);
+    assert.ok(body1.event_id != null);
+
+    // The happy-path cleared the marker; repeat must not re-emit.
+    const r2 = await retire("outbox-no-reem");
+    assert.equal(r2.status, 200);
+    const body2 = await r2.json();
+    assert.equal(body2.already_retired, true);
+    assert.equal(body2.retired_at, body1.retired_at, "original timestamp preserved");
+    assert.equal(body2.event_id, undefined, "no event_id when no marker — no re-emit");
+  } finally { await cleanup(); }
+});
+
+test("boot-time drain: a marker surviving a crash is emitted on the next server start", async () => {
+  // Phase 1: create a doc on a live server, then stop it and plant the pending marker on disk
+  // (simulating a crash after tombstone+marker write but before the bus emit).
+  const first = await boot();
+  const docRoot = first.root;
+  try {
+    await first.createDoc("boot-drain-doc");
+    plantPendingMarker(join(docRoot, "boot-drain-doc"));
+    assert.ok(existsSync(join(docRoot, "boot-drain-doc", PENDING_RETIRE_EVENT)), "marker in place before second boot");
+  } finally { await first.cleanup({ keepRoot: true }); }
+
+  // Phase 2: boot a new server on the same root (fresh bus). drainAllPendingRetireEvents()
+  // fires during start() — by the time start() resolves the marker must be gone.
+  const second = await boot(docRoot);
+  try {
+    assert.ok(
+      !existsSync(join(docRoot, "boot-drain-doc", PENDING_RETIRE_EVENT)),
+      "boot drain cleared the marker → emit succeeded"
+    );
+  } finally { await second.cleanup(); }
 });

@@ -32,3 +32,6 @@ frontend/.vite/
 # umbrella site is being worked on. Never commit it into wicked-interactive.
 site/wickedagile/
 .wicked/
+
+# Test-suite scratch (bus dbs, sockets, gif/webm recordings) — never committed
+tmp/
