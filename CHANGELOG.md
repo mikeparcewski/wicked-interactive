@@ -6,6 +6,23 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 _Nothing yet._
 
+## [0.9.0] — 2026-09-01
+
+### Added
+- **Docs can be retired: `DELETE /api/docs/:doc`** (#189, #195). Soft tombstone honoring the
+  engine's write-once lineage (INV-4/AC-22 — nothing is removed): the doc leaves the default list
+  (`GET /api/docs?includeRetired=1` shows it with `retired`/`retired_at`), every per-doc surface
+  answers `410 Gone` (distinct from never-existed 404), and the name stays reserved (re-create →
+  409). Idempotent — a repeat DELETE answers `already_retired` with the ORIGINAL timestamp and no
+  re-emit, including a concurrent repeat racing the winner's unmount. A build in flight refuses
+  with reason (409 carrying the activity `{status,run}` shape). Emits
+  `wicked.interactive.doc.retired` exactly once (service-owned; the UI emit bridge refuses it 403).
+  Reachable through crew's proxy today; crew's governed delete route (crew#338) additionally drops
+  its handoff-ledger rows.
+
+### Changed
+- The retired-doc gate skips the manifest read for mounted (live) docs — no hot-path disk I/O.
+
 ## [0.8.1] — 2026-08-24
 
 ### Added
