@@ -4,7 +4,15 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **`DELETE /api/docs/:doc` outbox: `wicked.interactive.doc.retired` can no longer be lost
+  forever** (#198). The tombstone write preceded the bus emit, so a failed emit (bus
+  unavailable, process death in the post-write window) left the event permanently missing;
+  a retry answered `already_retired` with no re-emit. Fix: an outbox marker
+  (`retired-event-pending.json`) is written atomically alongside the tombstone; the service
+  emits-then-clears on the happy path, and a surviving marker is drained on repeat `DELETE`
+  and on boot. A repeat `DELETE` with no pending marker is byte-identical to before (same
+  `already_retired` response, original `retired_at`, no `event_id`).
 
 ## [0.9.0] — 2026-09-01
 
