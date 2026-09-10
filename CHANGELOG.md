@@ -5,6 +5,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ## [Unreleased]
 
 ### Fixed
+- **`.codegraph/estate.db` (+ `-shm`/`-wal`) is no longer tracked** (#213). A fresh clone shipped an in-tree
+  code graph that an older wicked-core adopted as the live graph and wrote into, dirtying every onboarded
+  checkout; the graph is per-checkout, built by `wicked-estate index` under the daemon state home
+  (wicked-core#406). The files are untracked (local copies are left on disk) and `.codegraph/` is ignored.
 - **`DELETE /api/docs/:doc` outbox: `wicked.interactive.doc.retired` can no longer be lost
   forever** (#198). The tombstone write preceded the bus emit, so a failed emit (bus
   unavailable, process death in the post-write window) left the event permanently missing;
