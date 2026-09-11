@@ -6,7 +6,9 @@ slides to native `.pptx`. Everything here keeps the export clean and editable.
 
 ## Slide anatomy
 
-One `<section>` = one slide. The slide must be exactly 16:9 and overflow-free:
+One `<section class="wi-slide">` = one slide — the `wi-slide` class is what DECLARES the deck to
+the exporter (a doc created with `style: "ppt"` is a deck regardless). The slide must be exactly
+16:9 and overflow-free:
 
 ```html
 <section class="wi-slide">

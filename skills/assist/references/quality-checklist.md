@@ -45,12 +45,15 @@ improve on the next pass. Don't block a user's edit on a knowledge miss or a sty
 
 ## Export-safe — from html-craft.md (the PDF contract)
 
-- **A real deck is multiple `<section>`s** (one per slide) — that's what triggers landscape
-  one-slide-per-page in PDF; don't wrap a deck in one giant section. **(WARN)**
+- **A real deck DECLARES its slides** — `<section class="wi-slide">` / `.slide` / `[data-slide]`
+  (or `data-wi-kind="deck"`); that's what triggers landscape one-slide-per-page in PDF. Plain
+  `<section>`s are a document and print in their own flow. **(WARN)**
+- **A print document declares its paper** — `@page { size: … }` (+ `.page` wrappers or
+  `break-after: page`); the exporter never overrides it. **(FAIL** if a brochure/report has no `@page`).
 - **Responsive rules are `@media screen`-scoped,** so they don't fire and collapse grids during the
   `--print-to-pdf` render. **(FAIL** if a deck's columns collapse in PDF).
-- **One idea fits one screen** — deck slides are clipped to `100vh`, not paginated, so overflow is
-  lost. Split it. **(WARN)**
+- **One idea fits one screen** — declared deck slides are clipped to `100vh`, not paginated, so
+  overflow is lost. Split it. **(WARN)**
 - **No reliance on shadows or gradient-clipped text for meaning** — both are neutralized in print.
   **(WARN)**
 

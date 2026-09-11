@@ -54,32 +54,37 @@ Exports inline everything for a single self-contained file (HTML/PDF). So:
 ## PDF export contract — author print-safe decks by construction
 
 Export to PDF renders the self-contained HTML through **headless Chrome
-`--print-to-pdf`** (not a browser screenshot). The exporter auto-injects a print
-stylesheet (`src/service/export.js`): a universally-safe baseline for every doc,
-plus 16:9 landscape `@page` + one-slide-per-page rules **only when the doc is a
-deck** (detected as **2+ top-level slide containers** — `<section>`,
-`[data-slide]`, or `.slide`). A one-pager with a single `<section>` and a long
-article stay in their natural flow. Author so that injection is enough:
+`--print-to-pdf`** (not a browser screenshot). The exporter injects print rules
+into the PDF-prep copy only (`src/service/export.js`) — **the HTML download is
+your document as authored, no print injection**. Every PDF gets a render-safety
+baseline (animations off, reveal patterns completed, `print-color-adjust:exact`);
+the 16:9 landscape `@page` + one-slide-per-page rules are added **only when the
+doc DECLARES itself a deck**. Plain semantic `<section>`s never do — the web, doc
+and brochure formats are built from sections. Author so the rules apply as intended:
 
-- **A deck is multiple `<section>`s** — one per slide. That is what triggers the
-  landscape `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page
-  pagination. A single `<section>` reads as a one-pager and is left in portrait
-  flow, so don't wrap a real multi-slide deck in one giant `<section>`.
+- **Declare a deck.** A slide is `<section class="wi-slide">` (formats/ppt.md),
+  `.slide`, or `[data-slide]`; 2+ of them at the top of the body (or inside one
+  wrapper) make the doc a deck, as does `data-wi-kind="deck"` on `<html>`/`<body>`
+  or a doc created with `style: "ppt"`. Only then does the exporter inject
+  `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page pagination.
+- **Your page geometry is final.** If you declare `@page { size: … }` (a print
+  brochure, an A4 report), or paginate with `.page`/`.wi-page` wrappers or
+  `break-after: page`, the exporter changes NOTHING about paper size or breaks —
+  the PDF is exactly what Chrome prints of your HTML. Declare the size you mean.
 - **Screen-scope responsive rules.** `--print-to-pdf` lays out at a narrow width,
   so a bare `@media (max-width: N)` FIRES during the PDF render and collapses your
   grids. Always scope phone/tablet rules `@media screen and (max-width: N) { … }`,
   and pin multi-column grids inside `@media print` if they must stay columned.
-- **Don't rely on gradient-clipped text for meaning.** `background:linear-gradient`
-  + `-webkit-background-clip:text` + transparent fill paints a solid box in PDF;
-  the exporter neutralizes it to a solid color. If a heading/number must be a
-  specific color in print, set a solid `color` too, not only the gradient.
+- **Don't rely on gradient-clipped text for meaning in a deck.** In a DECK the
+  exporter paints `-webkit-background-clip:text` runs solid (the slide contract);
+  if a heading/number must be a specific color in print, set a solid `color` too.
 - **Backgrounds and fills survive** via `print-color-adjust:exact` (injected on
-  `*`), so dark slide backgrounds and gradient FILLS on real elements render. But
-  `box-shadow`/`text-shadow` are stripped in print (they print as hard rectangles),
-  so don't depend on a glow to convey state.
-- **One idea per slide, fits one screen.** Deck slides are forced to `100vh` with
-  `overflow:hidden`; content that overflows a slide is clipped, not paginated —
-  split it into another `<section>`.
+  `*`), so dark slide backgrounds and gradient FILLS on real elements render. In a
+  DECK, `box-shadow`/`text-shadow` are stripped in print, so don't depend on a glow
+  to convey state; a document prints its shadows and gradient text as authored.
+- **One idea per slide, fits one screen.** Declared deck slides are forced to `100vh`
+  with `overflow:hidden`; content that overflows a slide is clipped, not paginated —
+  split it into another slide.
 
 **Verification note (load-bearing):** reproduce any PDF-export issue with the REAL
 `chromeRenderer` `--print-to-pdf` command (e.g. call `exportPdf`/`exportHtml`), NOT

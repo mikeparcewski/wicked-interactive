@@ -18,7 +18,8 @@ A web doc is a continuous scrolling page built from thematic `<section>` blocks:
 ```
 
 Each `<section>` is a thematic zone. There's no fixed height — sections grow with content.
-The hero section should fill or nearly fill the viewport (`min-height: 100vh`).
+The hero section should fill or nearly fill the viewport (`min-height: 100vh`). Sections are
+not slides: a PDF export prints the page in its natural flow (never one section per 16:9 page).
 
 ## Section patterns
 
