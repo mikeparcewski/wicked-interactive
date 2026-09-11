@@ -19,10 +19,14 @@ const now = () => new Date().toISOString();
  * A fresh manifest seeded with version 0 (the initial build). `kind` distinguishes a
  * demo workspace ("demo") from an ordinary document; it's omitted for plain docs so
  * existing manifests stay byte-identical (listDocs defaults a missing kind to "doc").
+ * `style` is the requested output format (`web` / `ppt` / `brochure` / `doc`, POST /api/docs
+ * `style`) — a creation-time fact like `kind`, recorded once so the exporter can honour it
+ * (F-050: a brochure is never paginated as a slide deck). Omitted when none was requested.
  */
-export function initManifest(htmlFile = "_v0.html", { kind } = {}) {
+export function initManifest(htmlFile = "_v0.html", { kind, style } = {}) {
   return {
     ...(kind && kind !== "doc" ? { kind } : {}),
+    ...(typeof style === "string" && style ? { style } : {}),
     head: 0,
     versions: [{ version: 0, parent: null, feedback_file: null, html_file: htmlFile, created_at: now() }],
   };

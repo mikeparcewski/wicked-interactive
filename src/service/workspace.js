@@ -36,7 +36,8 @@ function highestVersionOnDisk(dir) {
 
 /**
  * Initialise a workspace from an HTML draft. Instruments it with data-wid (unless
- * opts.instrument === false), writes _v0.html, and seeds the manifest.
+ * opts.instrument === false), writes _v0.html, and seeds the manifest (`opts.kind`,
+ * `opts.style` — the requested output format — are recorded on it).
  */
 export function initWorkspace(dir, html, opts = {}) {
   mkdirSync(dir, { recursive: true });
@@ -45,7 +46,7 @@ export function initWorkspace(dir, html, opts = {}) {
   // look (ADR-0016 Slice C). Idempotent + anchor-free, so INV-1/INV-2 are unaffected.
   const prepared = themed(anchored, opts);
   atomicWrite(join(dir, "_v0.html"), prepared);
-  const manifest = initManifest("_v0.html", { kind: opts.kind });
+  const manifest = initManifest("_v0.html", { kind: opts.kind, style: opts.style });
   saveManifest(dir, manifest);
   return { manifest };
 }

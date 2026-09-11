@@ -147,7 +147,15 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       emit("wicked.interactive.export.requested", { version, format });
       // Export gate: announce the freshly-rendered artifact + its on-disk path so the supervising
       // agent can vision-review it before the user trusts it (the agent replies wicked.interactive.export.reviewed).
-      emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download });
+      // Additive (F-050 rule 4): what the export DID — `layout` (document|deck), `layout_source`,
+      // the page size and, for a PDF, the page count actually produced — so the UI can show
+      // "document · A4 portrait · 2 pages" before the customer opens the file.
+      const report = {
+        layout: result.layout ?? (format === "pptx" ? "deck" : undefined),
+        layout_source: result.layout_source ?? (format === "pptx" ? "format: pptx" : undefined),
+        page_size: result.page_size ?? null, pages: result.pages ?? null,
+      };
+      emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download, ...report });
       res.json({ format, ...result, file, download });
     } catch (e) {
       res.status(400).json({ error: e.message });
@@ -506,7 +514,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
         if (manifestRetired(m) && !includeRetired) continue;
         const last = m.versions[m.versions.length - 1] || {};
         out.push({
-          name, kind: m.kind || "doc", head: m.head, versions: m.versions.length, updated_at: last.created_at || null,
+          name, kind: m.kind || "doc", ...(m.style ? { style: m.style } : {}), head: m.head, versions: m.versions.length, updated_at: last.created_at || null,
           ...(manifestRetired(m) ? { retired: true, retired_at: m.retired_at } : {}),
         });
       } catch { /* skip malformed */ }
@@ -913,7 +921,9 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       const dir = docDir(name);
       // Registration (the authority) precedes content; bindProject owns the dir lifecycle.
       const bound = bindProject ? await bindProject(dir, name) : null;
-      initWorkspace(dir, html);
+      // The requested output format is recorded on the manifest (F-050): the exporter reads it
+      // so a brochure / doc / web page is never paginated as a slide deck, and a ppt IS one.
+      initWorkspace(dir, html, { style });
       await mountDoc(name);
       // Seed the original ask as the first conversation entry — the durable "intent" the Intent
       // review (semantic-reviewer) checks the current version against. Best-effort.

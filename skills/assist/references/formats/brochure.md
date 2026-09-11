@@ -1,12 +1,16 @@
 # Format: Brochure
 
-A brochure is a **landscape, print-ready marketing document** — visually rich, agency-quality,
-self-contained. The viewer renders it inline; it exports as a 16:9 or A4-landscape PDF.
-Every decision here optimises for "looks like it came from a design studio."
+A brochure is a **print-ready marketing document** — visually rich, agency-quality,
+self-contained. The viewer renders it inline; it exports as a PDF at **the paper you declare**
+(`@page { size: … }` — 16:9 landscape by default below, A4 portrait/landscape when the brief
+says so). Only `@page` pins the paper — `.wi-page` wrappers and `page-break-after` alone
+paginate but do not set a size, so always declare it. The exporter honours your `@page` and page
+breaks and never re-paginates a brochure as a slide deck. Every decision here optimises for
+"looks like it came from a design studio."
 
 ## Page anatomy
 
-Structure as **fixed-height landscape pages** — each `<section>` is one page:
+Structure as **fixed-size pages** — each `<section class="wi-page">` is one page:
 
 ```html
 <section class="wi-page">           <!-- one page per section -->
@@ -62,9 +66,10 @@ Aim for 4–8 pages total; tighter is better than padded.
 ## CSS baseline for a page
 
 ```css
+@page { size: 13.333in 7.5in; margin: 0; }   /* the paper — declare it; A4 portrait: `size: A4 portrait` */
 .wi-page {
   width: 100%;
-  aspect-ratio: 16 / 9;        /* landscape */
+  aspect-ratio: 16 / 9;        /* landscape — match the @page size you declared */
   overflow: hidden;
   display: flex;
   align-items: stretch;
@@ -80,7 +85,7 @@ Aim for 4–8 pages total; tighter is better than padded.
 
 ## Quality gate (run before emitting)
 
-- [ ] Every page fits in 16:9 — no overflow
+- [ ] `@page { size: … }` declared and every page fits that paper — no overflow
 - [ ] No scrollable content within a page
 - [ ] No more than 2 type sizes per page
 - [ ] Accent color used ≤ 1× per page

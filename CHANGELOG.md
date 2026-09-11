@@ -5,6 +5,29 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ## [Unreleased]
 
 ### Fixed
+- **Export honours the author's page geometry — plain `<section>`s are not a slide deck**
+  (F-050 / F-4R2-015). The exporter classified any document with 2+ top-level `<section>`s as a
+  deck and injected `@page { size: 13.333in 7.5in }` + `100vh; overflow:hidden; break-after: page`
+  onto every section — into the PDF render AND the HTML download — so a correct two-page A4
+  brochure exported as 9 landscape 16:9 pages (three of them blank), and the delivered `.html`
+  printed the same way from any browser. Now: (1) an author-declared `@page` is never overridden
+  (only `@page` pins the paper; author `.page`/`.wi-page` wrappers or `break-after: page` are
+  kept and stop the exporter from forcing one slide per page), and a doc created with `style`
+  `web`/`doc`/`brochure` always exports as a document; `@page` is read from print-scoped CSS
+  only — a comment, a string literal, `@media screen` or `<style media="screen">` never counts;
+  (2) a deck must DECLARE itself — `[data-slide]` / `.slide` / `.wi-slide` markers at document
+  level, `data-wi-kind="deck"` on a wrapper, or `style: "ppt"` — plain semantic sections never
+  do; an EXPLICIT deck (`style: "ppt"` / `data-wi-kind`) that also declares `@page` keeps one
+  slide per page on the author's paper; (3) the HTML export carries no print
+  injection at all (document head only), and the PDF-prep copy gets page geometry only for a
+  declared deck (a document gets a render-safety baseline: animations off, reveals completed,
+  `print-color-adjust`); (4) `POST /api/docs` `style` is now recorded on the manifest (it was
+  dropped after the `doc.created` emit) and surfaced by `GET /api/docs`; (5) the export response
+  and `wicked.interactive.export.generated` carry additive `layout` (`document`|`deck`),
+  `layout_source` (documented vocabulary, `LAYOUT_SOURCES`), `page_size` (measured from the
+  PDF, e.g. `A4 portrait`) and `pages` so the UI can show what was produced. Behaviour change for undeclared decks: a deck built from plain
+  `<section>`s now prints in its own flow — add `class="wi-slide"` (or `data-wi-kind="deck"`)
+  to get 16:9 one-slide-per-page again; the skill references are updated accordingly.
 - **`.codegraph/estate.db` (+ `-shm`/`-wal`) is no longer tracked** (#213). A fresh clone shipped an in-tree
   code graph that an older wicked-core adopted as the live graph and wrote into, dirtying every onboarded
   checkout; the graph is per-checkout, built by `wicked-estate index` under the daemon state home
