@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.9.1] — 2026-09-11
+
 ### Fixed
 - **Export honours the author's page geometry — plain `<section>`s are not a slide deck**
   (F-050 / F-4R2-015). The exporter classified any document with 2+ top-level `<section>`s as a
