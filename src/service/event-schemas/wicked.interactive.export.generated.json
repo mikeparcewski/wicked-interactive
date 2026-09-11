@@ -45,7 +45,7 @@
     },
     "layout_source": {
       "type": "string",
-      "description": "ADDITIVE (F-050): which rule decided `layout` (e.g. `author @page`, `style: brochure`, `declared slides (5 × [data-slide], .slide, .wi-slide)`, `no deck declaration`)."
+      "description": "ADDITIVE (F-050): which rule decided `layout`. Vocabulary (src/service/export.js LAYOUT_SOURCES): `style: <web|doc|brochure>` (recorded document style), `style: <ppt|slides>` (recorded deck style — explicit deck), `declared data-wi-kind=\"deck\"` (explicit deck marker), `author @page` (author-declared page size, no explicit deck), `declared slides (N × [data-slide], .slide, .wi-slide)` (slide markers at document level), `author page breaks` (document paginated by the author), `no deck declaration` (document, natural flow), `format: pptx` (a PPTX export)."
     },
     "page_size": {
       "type": [

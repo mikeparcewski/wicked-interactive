@@ -7,8 +7,10 @@ slides to native `.pptx`. Everything here keeps the export clean and editable.
 ## Slide anatomy
 
 One `<section class="wi-slide">` = one slide — the `wi-slide` class is what DECLARES the deck to
-the exporter (a doc created with `style: "ppt"` is a deck regardless). The slide must be exactly
-16:9 and overflow-free:
+the exporter (a doc created with `style: "ppt"` is a deck regardless of markup). Don't declare
+`@page`: the exporter supplies the 16:9 paper (`13.333in × 7.5in`) and one slide per page. If you
+do declare one (say `@page { size: A4 landscape }`), an explicit deck keeps one slide per page on
+that paper instead. The slide must be exactly 16:9 and overflow-free:
 
 ```html
 <section class="wi-slide">

@@ -63,14 +63,26 @@ doc DECLARES itself a deck**. Plain semantic `<section>`s never do — the web, 
 and brochure formats are built from sections. Author so the rules apply as intended:
 
 - **Declare a deck.** A slide is `<section class="wi-slide">` (formats/ppt.md),
-  `.slide`, or `[data-slide]`; 2+ of them at the top of the body (or inside one
-  wrapper) make the doc a deck, as does `data-wi-kind="deck"` on `<html>`/`<body>`
-  or a doc created with `style: "ppt"`. Only then does the exporter inject
+  `.slide`, or `[data-slide]`; 2+ of them at the top of the body, or inside ONE
+  wrapper, make the doc a deck. Deeper than that (e.g. `<main>` > `<div>` >
+  slides, or a carousel inside a page) is a component, not a deck — declare it
+  explicitly instead: `data-wi-kind="deck"` on a wrapper element around the
+  slides (not on `<html>`/`<body>` — the version store keeps body content only),
+  or create the doc with `style: "ppt"`. Only a declared deck gets the exporter's
   `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page pagination.
-- **Your page geometry is final.** If you declare `@page { size: … }` (a print
-  brochure, an A4 report), or paginate with `.page`/`.wi-page` wrappers or
-  `break-after: page`, the exporter changes NOTHING about paper size or breaks —
-  the PDF is exactly what Chrome prints of your HTML. Declare the size you mean.
+- **Only `@page` pins the paper.** If you declare `@page { size: … }` (a print
+  brochure, an A4 report), the exporter never changes the paper — the PDF is what
+  Chrome prints of your HTML. `.page`/`.wi-page` wrappers or `break-after: page`
+  alone do NOT pin a size: they only stop the exporter from forcing one slide per
+  page (your breaks are kept; a declared deck without `@page` still gets the 16:9
+  paper). Declare the size you mean.
+- **An explicit deck keeps its slides on your paper.** `style: "ppt"` or
+  `data-wi-kind="deck"` plus your own `@page { size: A4 landscape }` gives one
+  slide per A4-landscape page; a weak `.slide` marker plus `@page` is a document
+  (the paper is yours, no slide pagination).
+- **The `.html` download prints as authored.** No print rules are injected into
+  it — if your deck must print standalone from a browser, write your own
+  `@media print` rules (reveal patterns completed, `print-color-adjust: exact`).
 - **Screen-scope responsive rules.** `--print-to-pdf` lays out at a narrow width,
   so a bare `@media (max-width: N)` FIRES during the PDF render and collapses your
   grids. Always scope phone/tablet rules `@media screen and (max-width: N) { … }`,

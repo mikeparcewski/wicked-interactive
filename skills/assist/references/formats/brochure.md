@@ -3,8 +3,10 @@
 A brochure is a **print-ready marketing document** — visually rich, agency-quality,
 self-contained. The viewer renders it inline; it exports as a PDF at **the paper you declare**
 (`@page { size: … }` — 16:9 landscape by default below, A4 portrait/landscape when the brief
-says so). The exporter honours your `@page` and page breaks and never re-paginates a brochure as
-a slide deck. Every decision here optimises for "looks like it came from a design studio."
+says so). Only `@page` pins the paper — `.wi-page` wrappers and `page-break-after` alone
+paginate but do not set a size, so always declare it. The exporter honours your `@page` and page
+breaks and never re-paginates a brochure as a slide deck. Every decision here optimises for
+"looks like it came from a design studio."
 
 ## Page anatomy
 

@@ -89,11 +89,13 @@ export const DECK_PAGE_SIZE = "13.333in 7.5in";
 const PRINT_DECK_PAGE_CSS = [
   "@media print {",
   `  @page { size: ${DECK_PAGE_SIZE}; margin: 0; }`,
-  "  html, body { margin: 0; padding: 0; }",
   "}",
 ].join("\n");
+// One slide per page. The body margin reset rides HERE (not with @page): a 100vh slide only
+// fits its page when the body adds nothing, whichever @page — ours or the author's — is in force.
 const PRINT_DECK_SLIDES_CSS = [
   "@media print {",
+  "  html, body { margin: 0; padding: 0; }",
   "  .wi-slide-top {",
   "    min-height: 100vh !important; height: 100vh !important; box-sizing: border-box;",
   "    break-after: page !important; page-break-after: always; overflow: hidden !important;",
@@ -114,7 +116,7 @@ const PRINT_DECK_SLIDES_CSS = [
  *  formats are built from thematic sections, and a brochure is sections inside `.page`s. */
 export const SLIDE_MARKER_SELECTOR = "[data-slide], .slide, .wi-slide";
 /** A document-level declaration that the whole file is a deck (any element, usually <html>/<body>). */
-export const DECK_KIND_SELECTOR = '[data-wi-kind="deck"], [data-wi-format="slides"], [data-wi-format="ppt"]';
+export const DECK_KIND_SELECTOR = '[data-wi-kind="deck"]';
 /** Author page wrappers: the tool's own `.wi-page` (formats/brochure.md), the generic `.page`, `[data-page]`. */
 export const PAGE_WRAPPER_SELECTOR = ".page, .wi-page, [data-page]";
 /** Recorded doc styles (POST /api/docs `style`) that are documents, never decks. */
@@ -122,16 +124,125 @@ export const DOCUMENT_STYLES = new Set(["web", "doc", "brochure"]);
 /** Recorded doc styles that declare a deck. */
 export const DECK_STYLES = new Set(["ppt", "slides"]);
 
-const AUTHOR_AT_PAGE = /@page\b/i;
+/**
+ * The `layout_source` vocabulary — which rule decided the layout (reported on the export
+ * response + `wicked.interactive.export.generated`). Diagnostic, human-readable, stable:
+ *  - `style: <web|doc|brochure>`      recorded document style (rule 1)
+ *  - `style: <ppt|slides>`            recorded deck style — an EXPLICIT deck (rule 2)
+ *  - `declared data-wi-kind="deck"`   document-level deck marker — an EXPLICIT deck (rule 2)
+ *  - `author @page`                   author-declared page size, no explicit deck (rule 3)
+ *  - `declared slides (N × <markers>)` 2+ slide markers at document level (rule 4)
+ *  - `author page breaks`             no deck; author paginates with wrappers/breaks (rule 5)
+ *  - `no deck declaration`            no deck, nothing declared — natural flow (rule 5)
+ *  - `format: pptx`                   a PPTX export (always a deck; set by the export route)
+ */
+export const LAYOUT_SOURCES = Object.freeze({
+  documentStyle: (style) => `style: ${style}`,
+  deckStyle: (style) => `style: ${style}`,
+  deckKind: 'declared data-wi-kind="deck"',
+  authorAtPage: "author @page",
+  declaredSlides: (n) => `declared slides (${n} × ${SLIDE_MARKER_SELECTOR})`,
+  authorPageBreaks: "author page breaks",
+  none: "no deck declaration",
+});
+
+// `@page` as an at-rule — not `@page-foo`, and only in print-scoped CSS (see printScopedCss).
+const AUTHOR_AT_PAGE = /@page(?![\w-])/i;
 const AUTHOR_PAGE_BREAK = /(?:^|[\s;{])(?:break-(?:before|after)\s*:\s*(?:page|left|right|recto|verso|always)|page-break-(?:before|after)\s*:\s*always)/i;
 // `@page { size: <value>; ... }` — the author's declared page size, first rule wins.
-const AT_PAGE_SIZE = /@page\b[^{]*\{[^}]*?\bsize\s*:\s*([^;}]+)/i;
+const AT_PAGE_SIZE = /@page(?![\w-])[^{]*\{[^}]*?\bsize\s*:\s*([^;}]+)/i;
+// Media types other than print/all: a query naming only these does not reach the printer.
+const NON_PRINT_MEDIA_TYPE = /\b(?:screen|speech|aural|tty|tv|projection|handheld|braille|embossed)\b/i;
 
+/**
+ * Does a media query list reach print? Each comma-separated query applies unless it names a
+ * non-print media type outright (`screen`, `speech`, …) — `print`, `all`, a bare feature query
+ * like `(max-width: 600px)`, and `not …`/`only print` forms all count as print-relevant; the
+ * list applies when ANY query does. Conservative on purpose: a wrong "yes" only means we treat
+ * a rule as the author's print intent, never that we override anything.
+ */
+export function mediaAppliesToPrint(query) {
+  const q = String(query || "").trim();
+  if (!q) return true;
+  return q.split(",").some((one) => {
+    const t = one.trim().toLowerCase();
+    if (!t || t.startsWith("not ")) return true;
+    if (/\b(?:print|all)\b/.test(t)) return true;
+    return !NON_PRINT_MEDIA_TYPE.test(t);
+  });
+}
+
+const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
+const CSS_STRING = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g;
+const GROUPING_AT_RULE = /^@(?:supports|layer|container|scope|document)\b/i;
+
+/**
+ * The part of a stylesheet that can reach the printer, with comments stripped and string
+ * literals blanked — the text `@page`/break detection is allowed to look at. A brace-depth walk
+ * (the same technique as collectGradientClipSelectors):
+ *  - a plain rule is kept whole (its declarations carry the author's `break-*` rules);
+ *  - `@media <q> { … }` is kept (recursively) only when `<q>` reaches print, so an `@page`
+ *    inside `@media screen` is invisible, one inside `@media print` counts;
+ *  - grouping at-rules (`@supports`, `@layer`, …) are walked into;
+ *  - `@page` at-rules are kept whole; every other at-rule (`@font-face`, `@keyframes`, `@import`)
+ *    is dropped with its block.
+ * A `@page` in a CSS comment or a string is therefore never a declaration (F-050 review M1).
+ */
+export function printScopedCss(cssText) {
+  const css = String(cssText || "").replace(CSS_COMMENT, "").replace(CSS_STRING, '""');
+  let out = "";
+  let i = 0;
+  const n = css.length;
+  while (i < n) {
+    const open = css.indexOf("{", i);
+    if (open === -1) break;                       // trailing statement at-rules (@import …) carry nothing we read
+    const prelude = css.slice(i, open).trim();
+    let depth = 1;
+    let j = open + 1;
+    const bodyStart = j;
+    while (j < n && depth > 0) {
+      const ch = css[j];
+      if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      j++;
+    }
+    const body = css.slice(bodyStart, j - 1);
+    if (/^@media\b/i.test(prelude)) {
+      if (mediaAppliesToPrint(prelude.slice(6))) out += `\n${printScopedCss(body)}`;
+    } else if (GROUPING_AT_RULE.test(prelude)) {
+      out += `\n${printScopedCss(body)}`;
+    } else if (prelude.startsWith("@")) {
+      if (AUTHOR_AT_PAGE.test(prelude)) out += `\n${css.slice(i, j)}`;
+    } else {
+      out += `\n${css.slice(i, j)}`;
+    }
+    i = j;
+  }
+  return out;
+}
+
+// Every <style> block's raw text (the deck contract's gradient scan reads all of it).
 function styleText($) {
   return $("style").map((_, el) => $(el).html() || "").get().join("\n");
 }
+// The print-relevant CSS of the document: `<style media="screen">` blocks are skipped, the rest
+// is reduced to what reaches the printer (printScopedCss).
+function printStyleText($) {
+  return $("style")
+    .filter((_, el) => mediaAppliesToPrint($(el).attr("media")))
+    .map((_, el) => printScopedCss($(el).html() || "")).get().join("\n");
+}
 function inlineStyleText($) {
-  return $("[style]").map((_, el) => $(el).attr("style") || "").get().join(";\n");
+  return $("[style]").map((_, el) => ($(el).attr("style") || "").replace(CSS_COMMENT, "")).get().join(";\n");
+}
+// "A4" → "A4 portrait": a named size with no orientation is portrait, so the declared label
+// matches the one measured from the PDF (describePageSize) for the same document.
+const NAMED_SIZE_WORDS = { a3: "A3", a4: "A4", a5: "A5", b4: "B4", b5: "B5", letter: "Letter", legal: "Legal", ledger: "Ledger", "jis-b4": "JIS-B4", "jis-b5": "JIS-B5" };
+function normalizeDeclaredSize(raw) {
+  const v = String(raw || "").trim().replace(/\s+/g, " ");
+  if (!v) return null;
+  const named = NAMED_SIZE_WORDS[v.toLowerCase()];
+  return named ? `${named} portrait` : v;
 }
 // Depth of an element below <body> (body's children are depth 0). A slide deck is document-level
 // structure: its slides sit at the top of the body (or inside ONE wrapper). A `.slide` three
@@ -159,47 +270,51 @@ function topLevel($, selector) {
  *
  * PRECEDENCE (each rule is an author decision the exporter must not override):
  *  1. The doc's RECORDED style is a document (web / doc / brochure) → document.
- *  2. The author declared `@page` → document, whatever the markup looks like. A page size
- *     is the author's, never ours.
- *  3. The doc is a DECLARED deck — recorded style ppt/slides, a `data-wi-kind="deck"` marker,
- *     or 2+ top-level slide markers ([data-slide] / .slide / .wi-slide) at document level
+ *  2. An EXPLICIT deck declaration — recorded style ppt/slides, or a `data-wi-kind="deck"`
+ *     marker → deck. The author declared the deck; if they also declared `@page`, the paper
+ *     is theirs (no 16:9 injected) and the slides paginate one per page on it.
+ *  3. The author declared `@page` (print-scoped CSS only — not a comment, a string, or
+ *     `@media screen`) → document. A page size is the author's, never ours; a weak marker
+ *     (`.slide`) does not outrank it.
+ *  4. 2+ top-level slide markers ([data-slide] / .slide / .wi-slide) at document level
  *     (depth ≤ 1 below <body>) → deck. Plain semantic <section>s never declare a deck.
- *  4. Otherwise → document (the default; the author's flow prints as it is).
+ *  5. Otherwise → document (the default; the author's flow prints as it is).
  *
  * @param {string|import("cheerio").CheerioAPI} htmlOrCheerio
  * @param {{ style?: string|null }} [opts] the doc's recorded style (POST /api/docs `style`)
  */
 export function classifyLayout(htmlOrCheerio, { style = null } = {}) {
   const $ = typeof htmlOrCheerio === "string" ? cheerio.load(htmlOrCheerio) : htmlOrCheerio;
-  const css = styleText($);
+  const css = printStyleText($);
   const atPage = AUTHOR_AT_PAGE.test(css);
   const pageBreaks = AUTHOR_PAGE_BREAK.test(css) || AUTHOR_PAGE_BREAK.test(inlineStyleText($));
-  const pageWrappers = $(PAGE_WRAPPER_SELECTOR).length > 0;
-  const declaredSize = atPage ? (AT_PAGE_SIZE.exec(css)?.[1] || "").trim().replace(/\s+/g, " ") || null : null;
+  // Page wrappers are document-level structure too: a `.page` badge inside a slide is not one.
+  const pageWrappers = topLevel($, PAGE_WRAPPER_SELECTOR).filter((_, el) => depthBelowBody($, el) <= 1).length > 0;
+  const declaredSize = atPage ? normalizeDeclaredSize(AT_PAGE_SIZE.exec(css)?.[1]) : null;
   const author_geometry = { at_page: atPage, page_breaks: pageBreaks, page_wrappers: pageWrappers, page_size: declaredSize };
   const recorded = typeof style === "string" ? style.toLowerCase() : null;
   const doc = (source) => ({ layout: "document", source, page_size: declaredSize, author_geometry, slides: $([]) });
+  const deck = (source) => {
+    // Slides to paginate: the declared markers when present, else (style/kind-declared deck
+    // with plain markup) the top-level <section>s — the ppt format's "one <section> = one slide".
+    const allMarkers = topLevel($, SLIDE_MARKER_SELECTOR);
+    const slides = allMarkers.length ? allMarkers : topLevel($, "section");
+    // The paper is the author's when they declared it; the 16:9 deck page otherwise.
+    return { layout: "deck", source, page_size: declaredSize ?? DECK_PAGE_SIZE, author_geometry, slides };
+  };
 
   // 1. Recorded document style.
-  if (recorded && DOCUMENT_STYLES.has(recorded)) return doc(`style: ${recorded}`);
-  // 2. Author-declared page size.
-  if (atPage) return doc("author @page");
-
-  // 3. Declared deck?
+  if (recorded && DOCUMENT_STYLES.has(recorded)) return doc(LAYOUT_SOURCES.documentStyle(recorded));
+  // 2. EXPLICIT deck declaration — the author declared the deck (and, if present, its paper).
+  if (recorded && DECK_STYLES.has(recorded)) return deck(LAYOUT_SOURCES.deckStyle(recorded));
+  if ($(DECK_KIND_SELECTOR).length > 0) return deck(LAYOUT_SOURCES.deckKind);
+  // 3. Author-declared page size, no explicit deck: a page size is the author's.
+  if (atPage) return doc(LAYOUT_SOURCES.authorAtPage);
+  // 4. Slide markers at document level.
   const markers = topLevel($, SLIDE_MARKER_SELECTOR).filter((_, el) => depthBelowBody($, el) <= 1);
-  const kindDeck = $(DECK_KIND_SELECTOR).length > 0;
-  const styleDeck = !!recorded && DECK_STYLES.has(recorded);
-  let source = null;
-  if (styleDeck) source = `style: ${recorded}`;
-  else if (kindDeck) source = "declared data-wi-kind=deck";
-  else if (markers.length >= 2) source = `declared slides (${markers.length} × ${SLIDE_MARKER_SELECTOR})`;
-  if (!source) return doc(pageWrappers || pageBreaks ? "author page breaks" : "no deck declaration");
-
-  // Slides to paginate: the declared markers when present, else (style/kind-declared deck with
-  // plain markup) the top-level <section>s — the ppt format's "one <section> = one slide".
-  const allMarkers = topLevel($, SLIDE_MARKER_SELECTOR);
-  const slides = allMarkers.length ? allMarkers : topLevel($, "section");
-  return { layout: "deck", source, page_size: DECK_PAGE_SIZE, author_geometry, slides };
+  if (markers.length >= 2) return deck(LAYOUT_SOURCES.declaredSlides(markers.length));
+  // 5. Default: a document in its own flow.
+  return doc(pageWrappers || pageBreaks ? LAYOUT_SOURCES.authorPageBreaks : LAYOUT_SOURCES.none);
 }
 
 /** True when the export lays out as a slide deck. Accepts an HTML string or a loaded cheerio. */
@@ -305,8 +420,8 @@ export function decorateForExport(html, { style = null, withLayout = false } = {
   const parts = [PRINT_RENDER_SAFETY_CSS];
   if (layout.layout === "deck") {
     parts.push(PRINT_DECK_BASELINE_CSS);
-    // Page size: ours only when the author declared none (an author `@page` classifies as a
-    // document above, so this is always true for a deck — kept explicit as the invariant).
+    // Page size: ours only when the author declared none. An EXPLICIT deck (style ppt /
+    // data-wi-kind) with its own `@page` keeps that paper and gets the slide pagination below.
     if (!layout.author_geometry.at_page) parts.push(PRINT_DECK_PAGE_CSS);
     // One slide per page: ours only when the author declared no page breaks / page wrappers.
     // Stamp `wi-slide-top` onto ONLY the top-level slides so the 100vh/overflow rules never hit
@@ -359,7 +474,9 @@ export function inlineHtml(html, { baseDir }) {
     const abs = resolve(baseDir, href);
     if (!existsSync(abs)) return;
     const css = inlineCssUrls(readFileSync(abs, "utf-8"), dirname(abs));
-    $(el).replaceWith(`<style>${css}</style>`);
+    // Keep the link's media scope: a screen-only stylesheet must stay screen-only once inlined.
+    const media = $(el).attr("media");
+    $(el).replaceWith(media ? `<style media="${media.replace(/"/g, "&quot;")}">${css}</style>` : `<style>${css}</style>`);
   });
 
   $("script[src]").each((_, el) => {

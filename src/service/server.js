@@ -151,7 +151,8 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       // the page size and, for a PDF, the page count actually produced — so the UI can show
       // "document · A4 portrait · 2 pages" before the customer opens the file.
       const report = {
-        layout: result.layout ?? (format === "pptx" ? "deck" : undefined), layout_source: result.layout_source,
+        layout: result.layout ?? (format === "pptx" ? "deck" : undefined),
+        layout_source: result.layout_source ?? (format === "pptx" ? "format: pptx" : undefined),
         page_size: result.page_size ?? null, pages: result.pages ?? null,
       };
       emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download, ...report });
