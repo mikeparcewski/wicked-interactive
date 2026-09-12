@@ -125,11 +125,19 @@ test("every block with visible text in a brochure-shaped document has an anchor 
   assert.match(html, /<div class="decor" data-wi-no-anchor(="")?>ornament/);
 });
 
-test("the text-block pass is stable: re-instrumenting an instrumented document changes nothing (INV-1)", () => {
-  const once = instrument(BROCHURE).html;
-  const twice = instrument(once);
-  assert.equal(twice.html, once);
-  assert.equal(new Set(collectWids(once)).size, collectWids(once).length, "ids unique");
+test("the text-block pass is stable: re-instrumenting an instrumented document changes nothing (INV-1), ids included", () => {
+  const first = instrument(BROCHURE);
+  const twice = instrument(first.html);
+  assert.equal(twice.html, first.html);
+  assert.equal(new Set(collectWids(first.html)).size, collectWids(first.html).length, "ids unique");
+  // `ids` is "every block anchor present", assigned or preserved — the same array both times
+  // (it used to shrink to the semantic ids on the second pass: 88 → 44 on the recon brochure).
+  assert.deepEqual(twice.ids, first.ids);
+  assert.deepEqual(twice.sectionIds, first.sectionIds);
+  assert.ok(first.ids.some((id) => /-block-/.test(id)) && first.ids.some((id) => /-text-/.test(id)), "block + text anchors are reported");
+  // ids ∪ sectionIds = collectWids, disjoint, document order.
+  assert.deepEqual([...first.ids, ...first.sectionIds].sort(), collectWids(first.html).sort());
+  assert.equal(first.ids.filter((id) => /^section-/.test(id)).length, 0, "section anchors never leak into ids");
 });
 
 test("a pre-existing text-block anchor is preserved and new siblings never collide with it (INV-1)", () => {

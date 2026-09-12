@@ -195,7 +195,13 @@ export function instrument(html, opts = {}) {
     sectionIds.push(wid);
   });
 
-  return { html: $.html(), ids, sectionIds };
+  // `ids` = EVERY block anchor present after instrumentation (non-section elements, document
+  // order) — assigned or preserved alike — so re-instrumenting an instrumented document
+  // returns the same array as the first pass, not just the ids the semantic pass touched.
+  const blockIds = [];
+  $("[data-wid]").each((_, el) => { if (!sectionEls.has(el)) blockIds.push($(el).attr("data-wid")); });
+
+  return { html: $.html(), ids: blockIds, sectionIds };
 }
 
 /**

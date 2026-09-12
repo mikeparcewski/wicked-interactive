@@ -82,10 +82,13 @@ const INSTALL_CMD = {
 
 // Playwright (ADR-0018) is the demo recorder. Unlike the sibling plugins it's an npm
 // dependency, so the durable signal is whether the package resolves from this project.
-// (Browser binaries are a second gate surfaced at record time — Playwright throws a clear
-// "Executable doesn't exist, run npx playwright install" we already wrap in recordDemo.)
+// (Browser binaries are a second gate — preflighted and provisioned by recorder-preflight.js,
+// surfaced as `recorder` below and as the typed `recorder_browser_missing` at record time.)
 // Kept OUT of `required`/`missing` so it gates only demo creation, not ordinary documents.
-export const PLAYWRIGHT_INSTALL = "npx playwright install\nplaywright-cli install --skills";
+// The hint names the BUNDLED remedy (ADR-0028): a foreign Playwright install run from some other
+// cwd fetches a different Playwright whose browsers this bridge never launches.
+// `playwright-cli install --skills` is the (unrelated) agent-skills step and stays.
+export const PLAYWRIGHT_INSTALL = "wicked-interactive doctor --install\nplaywright-cli install --skills";
 export function playwrightInstalled() {
   try { require.resolve("playwright"); return true; } catch { return false; }
 }

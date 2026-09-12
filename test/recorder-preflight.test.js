@@ -282,3 +282,36 @@ test("real dry-run probe: names the headless shell + ffmpeg under an injected (e
     rmSync(browsersPath, { recursive: true, force: true });
   }
 });
+
+// ── M1 (review of #224): no shipped surface may still say `npx playwright install` ──────────
+// A foreign `npx playwright install` fetches a DIFFERENT Playwright whose browsers this bridge
+// never launches (ADR-0028) — an operator who follows it ends at "I installed it and doctor still
+// says MISSING". Every shipped remedy must be the bundled one. Scans the published files
+// (package.json `files`: bin/, src/, frontend/dist/) plus the skills the agent reads, and the
+// JSON the install gate / doctor emit.
+
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { preflight, PLAYWRIGHT_INSTALL } from "../src/service/preflight.js";
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+function walk(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    const p = resolve(dir, name);
+    if (statSync(p).isDirectory()) walk(p, out);
+    else if (/\.(m?js|md|json)$/.test(name)) out.push(p);
+  }
+  return out;
+}
+
+test("no shipped string contains `npx playwright install` — the remedy is always the bundled CLI (M1)", () => {
+  const files = ["bin", "src", "skills", "frontend/dist"].flatMap((d) => { try { return walk(resolve(REPO, d)); } catch { return []; } });
+  assert.ok(files.length > 20, `expected the shipped tree, scanned ${files.length} files`);
+  const offenders = files.filter((f) => /npx playwright install/i.test(readFileSync(f, "utf-8"))).map((f) => f.slice(REPO.length + 1));
+  assert.deepEqual(offenders, []);
+  // The two JSON surfaces an operator/installer reads.
+  assert.doesNotMatch(JSON.stringify(preflight()), /npx playwright install/);
+  assert.match(PLAYWRIGHT_INSTALL, /^wicked-interactive doctor --install/);
+  assert.doesNotMatch(recorderInstallCommand("chromium-headless-shell"), /npx playwright install/, "the exact command spawns the bundled cli.js");
+});

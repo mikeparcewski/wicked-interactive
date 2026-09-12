@@ -287,9 +287,15 @@ test("demo.requested with auto-install ON: accepted, the install fails → ONE t
     assert.equal(st.in_flight, false);
     assert.equal(st.error.code, "recorder_browser_install_failed");
     assert.equal(st.browser.ok, false);
-    // The transcript got ONE human line, without Playwright's box.
-    const convo = await (await fetch(`${base}/d/rec-fail/api/conversation`)).text().catch(() => "");
-    if (convo) assert.doesNotMatch(convo, /[╔║╚]/);
+    // The transcript got exactly ONE error line — the typed sentence, without Playwright's box.
+    const convoRes = await fetch(`${base}/d/rec-fail/api/conversation`);
+    assert.equal(convoRes.status, 200);
+    const convo = await convoRes.json();
+    const errors = convo.filter((e) => e.state === "error");
+    assert.equal(errors.length, 1, JSON.stringify(convo));
+    assert.match(errors[0].text, /^Recording failed: installing the recorder's browser failed: no network/);
+    assert.match(errors[0].text, /doctor --install/);
+    assert.doesNotMatch(JSON.stringify(convo), /[╔║╚]/, "Playwright's ASCII box never reaches the thread");
   } finally { bridge.close(); }
 });
 
