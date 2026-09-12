@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.9.2] — 2026-09-13
+
 ### Fixed
 - **The demo recorder preflights and provisions its browser; a missing browser is a typed,
   terminal error — never a retry loop** (F-RECON-012 BLOCKER, F-RECON-014). `npm install`
