@@ -7,6 +7,18 @@
 //   ordinal    — 1-based counter per (slideIndex, role).
 //
 // Stability (INV-1): an element that already carries a data-wid keeps it.
+//
+// EVERY TEXT BLOCK IS ANCHORABLE (F-RECON-004). The reviewable list below covers the semantic
+// tags (h*, p, li, td, …); real documents also carry text in plain containers — a hero fact strip
+// (`div > span…`), a footer requirements block, flow badges, KPI tiles. Those had no anchor, so a
+// comment pinned on the strip resolved to the nearest anchored block (the hero paragraph) and the
+// design edit landed, with perfect anchor fidelity, on the WRONG block. A second pass now anchors
+// every "text block" — an element with visible text whose text is its own or lives in inline
+// children (no block-level child carries text) — that is not already inside an anchored block.
+// Roles: `block` for block-level tags, `text` for inline ones. Strictly additive: the semantic
+// ids are unchanged (own counters), pre-existing ids are preserved, section anchors stay
+// `section-{i}`, decorative (`aria-hidden`) nodes and author opt-outs (`data-wi-no-anchor`) are
+// skipped.
 
 import * as cheerio from "cheerio";
 
@@ -29,6 +41,52 @@ const ROLE_BY_TAG = {
 const SLIDE_SELECTOR = "section, [data-slide], .slide";
 // Containers that can be restyled/themed as a whole (ADR-0011).
 const SECTION_SELECTOR = "section, header, [data-slide], .slide";
+
+// Block-level tags (a child of these kinds that carries text makes its parent a CONTAINER, not
+// a text block); everything else is treated as inline (span, a, b, em, code, small, …).
+const BLOCK_TAGS = new Set([
+  "address", "article", "aside", "blockquote", "body", "caption", "dd", "details", "dialog", "div", "dl", "dt",
+  "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup",
+  "html", "legend", "li", "main", "nav", "ol", "p", "pre", "section", "summary", "table", "tbody", "td", "tfoot",
+  "th", "thead", "tr", "ul",
+]);
+// Never anchored, never counted as visible text.
+const SKIP_TAGS = new Set([
+  "script", "style", "template", "noscript", "svg", "math", "head", "title", "meta", "link", "base", "br", "hr",
+  "wbr", "img", "picture", "source", "track", "video", "audio", "canvas", "iframe", "object", "embed", "input",
+  "select", "option", "optgroup", "textarea", "html", "body", "main",
+]);
+// Author opt-out for a container that must stay un-anchored (decorative chrome).
+const NO_ANCHOR_ATTR = "data-wi-no-anchor";
+const isElement = (n) => n && n.type === "tag";
+const tagOf = (el) => String(el.tagName || el.name || "").toLowerCase();
+const hiddenFromReaders = (el) => el.attribs && (el.attribs["aria-hidden"] === "true" || "hidden" in el.attribs);
+
+/** Own text nodes (direct children only), trimmed. */
+function ownText(el) {
+  let t = "";
+  for (const c of el.children || []) if (c.type === "text") t += c.data || "";
+  return t.trim();
+}
+/** Visible text of an element and its descendants (skips script/style-like nodes and reader-hidden nodes). */
+function visibleText(el) {
+  if (!isElement(el) || SKIP_TAGS.has(tagOf(el)) || hiddenFromReaders(el)) return "";
+  let t = "";
+  for (const c of el.children || []) {
+    if (c.type === "text") t += c.data || "";
+    else if (isElement(c)) t += visibleText(c);
+  }
+  return t.trim();
+}
+/** A text block: has visible text, and either its own text or no block-level child carrying text. */
+function isTextBlock(el) {
+  if (!visibleText(el)) return false;
+  if (ownText(el)) return true;
+  for (const c of el.children || []) {
+    if (isElement(c) && BLOCK_TAGS.has(tagOf(c)) && visibleText(c)) return false;
+  }
+  return true;
+}
 
 function roleFor(el) {
   // `data-card` is explicit author intent — keep its own role so cards (divs) and
@@ -90,6 +148,37 @@ export function instrument(html, opts = {}) {
     ids.push(wid);
   });
 
+  // Second pass (F-RECON-004): anchor every remaining TEXT BLOCK so nothing with words on it
+  // is un-pinnable. Document order, so a parent that qualifies (a `div` of `span`s) is anchored
+  // and its inline children are then skipped as "inside an anchored block". Section containers
+  // are left to the section pass below; anything inside an already-anchored block (the `<b>`
+  // in a `<p>`, the spans of the strip) is skipped — nesting stays at the semantic level.
+  const sectionEls = new Set($(SECTION_SELECTOR).toArray());
+  const insideAnchoredBlock = (el) => {
+    let cur = el.parent;
+    while (cur) {
+      if (isElement(cur) && !sectionEls.has(cur) && cur.attribs && cur.attribs["data-wid"]) return true;
+      cur = cur.parent;
+    }
+    return false;
+  };
+  $("*").each((_, el) => {
+    if (!isElement(el) || el.attribs["data-wid"] != null) return;
+    const tag = tagOf(el);
+    if (SKIP_TAGS.has(tag) || sectionEls.has(el) || hiddenFromReaders(el) || el.attribs[NO_ANCHOR_ATTR] != null) return;
+    if (insideAnchoredBlock(el) || !isTextBlock(el)) return;
+    const slide = nearestSlide(el);
+    const role = BLOCK_TAGS.has(tag) ? "block" : "text";
+    const key = `${slide}-${role}`;
+    let n = (counters.get(key) || 0) + 1;
+    let wid = `slide-${slide}-${role}-${n}`;
+    while (seen.has(wid)) { n += 1; wid = `slide-${slide}-${role}-${n}`; }
+    counters.set(key, n);
+    seen.add(wid);
+    $(el).attr("data-wid", wid);
+    ids.push(wid);
+  });
+
   // Anchor section/slide containers (ADR-0011). Additive: a `section-{i}` namespace that
   // never collides with the `slide-...` block ids, and pre-existing ids are preserved.
   const sectionIds = [];
@@ -107,6 +196,29 @@ export function instrument(html, opts = {}) {
   });
 
   return { html: $.html(), ids, sectionIds };
+}
+
+/**
+ * Every element with visible text that has NO anchored block on its self-or-ancestor chain
+ * (section containers excluded) — i.e. text a comment pin cannot land on. Empty after
+ * `instrument()`; exported so the invariant is testable against any rendered document.
+ * @returns {string[]} outerHTML openings of the offending elements (first 120 chars each)
+ */
+export function unanchoredTextBlocks(html) {
+  const $ = cheerio.load(html, null, false);
+  const sectionEls = new Set($(SECTION_SELECTOR).toArray());
+  const out = [];
+  $("*").each((_, el) => {
+    if (!isElement(el) || SKIP_TAGS.has(tagOf(el)) || hiddenFromReaders(el)) return;
+    if (!ownText(el)) return;   // text lives in a descendant — that descendant is checked itself
+    let cur = el;
+    while (cur && isElement(cur)) {
+      if (!sectionEls.has(cur) && cur.attribs && cur.attribs["data-wid"]) return;
+      cur = cur.parent;
+    }
+    out.push($.html(el).slice(0, 120));
+  });
+  return out;
 }
 
 /** All data-wid values present in an HTML string, in document order. */

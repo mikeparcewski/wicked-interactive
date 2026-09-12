@@ -4,7 +4,65 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **The demo recorder preflights and provisions its browser; a missing browser is a typed,
+  terminal error — never a retry loop** (F-RECON-012 BLOCKER, F-RECON-014). `npm install`
+  never provisions Playwright's browser, nothing in the install chain ran `playwright install`,
+  and nothing preflighted the recorder — so on a fresh machine every recording died on its first
+  line (`browserType.launch: Executable doesn't exist at …/chromium_headless_shell-<rev>/…`), the
+  command loop retried the deterministic failure three times in four seconds and dead-lettered
+  it, the thread showed Playwright's ASCII box three times, and the studio blamed "the generation
+  service". Now: (1) a launch-free **preflight** (`src/service/recorder-preflight.js`) asks the
+  BUNDLED Playwright CLI what a recording needs (`install --dry-run` — headless shell **and**
+  ffmpeg, which video capture requires) and checks each install location for Playwright's own
+  completion marker; (2) on the first `demo.requested` the materializer **provisions** what is
+  missing with that same bundled CLI (never a foreign `npx playwright`, whose version's browsers
+  the bridge would not launch) — progress narrated on the thread, 10-minute cap
+  (`WI_RECORDER_INSTALL_TIMEOUT_MS`), opt-out `WI_RECORDER_AUTO_INSTALL=0`; (3) every recorder
+  failure is a **typed `RecorderError`** on the wire — `wicked.interactive.status.posted
+  {state:"error", code, source:"recorder", retryable:false, remedy, …}` plus
+  `wicked.interactive.error.raised {source:"recorder", error:<code>, context}` — with stable
+  codes `recorder_browser_missing` · `recorder_browser_install_failed` · `recorder_launch_failed`
+  · `recording_spec_missing` · `recording_spec_invalid` · `recording_step_failed` (names the
+  step) · `recording_failed` · `recording_in_flight`, and the one-line remedy
+  (`wicked-interactive doctor --install`, plus the exact `node <bundled cli> install …`); (4) the
+  materializer **acks** a recording failure (one honest error per request — the same spec on
+  the same machine replays the same failure) instead of throwing into the retry → dead-letter
+  path; (5) **"Re-record" follows the wire**: `POST /api/events` refuses a `demo.requested`
+  while one is in flight for the doc (`409 recording_in_flight`) and, with auto-install off,
+  refuses it up front when the browser is missing (`503 recorder_browser_missing`) instead of a
+  200 that fails seconds later; `GET /d/:doc/api/demo/status` exposes the per-doc recording
+  state (`idle` · `preflight` · `installing` · `recording` · `recorded` · `failed`, with
+  `error`, `step`, `progress`, `in_flight`) plus the browser snapshot; (6) `GET /api/preflight`
+  carries the recorder snapshot (`recorder.ok/missing/remedy/install_command/auto_install`) so a
+  skin can say so BEFORE a multi-minute spec run is spent, and `POST /api/demo/browser/install`
+  provisions on demand; (7) a new CLI **`wicked-interactive doctor [--install] [--json]`**
+  (alias `--check`) reports the recorder browser, the sibling install gate and crew
+  reachability — exit 1 while the recorder cannot record. CI gains a `recorder-provision` job
+  that runs the real path on ubuntu: doctor MISSING → `doctor --install` → READY → a real
+  two-step recording.
+- **Every block with visible text carries a `data-wid`** (F-RECON-004). Only the semantic tags
+  (`h*`, `p`, `li`, `td`, …) were anchored, so a brochure's hero fact strip (`div > span…`),
+  footer requirements block, flow badges and KPI tiles were un-pinnable: a comment pinned on the
+  strip resolved to the nearest anchored block (the hero paragraph) and the design edit landed,
+  with perfect anchor fidelity, on the wrong block. `instrument()` now runs a second pass that
+  anchors every remaining **text block** — an element with visible text whose text is its own
+  or lives in inline children — as `slide-{n}-block-{k}` (block-level tags) or
+  `slide-{n}-text-{k}` (inline), skipping `aria-hidden` decoration and the new author opt-out
+  `data-wi-no-anchor`. Additive: semantic ids and section anchors are unchanged (own counters),
+  pre-existing ids are preserved (INV-1), re-instrumenting is a no-op. New helper
+  `unanchoredTextBlocks(html)` states the invariant (empty after instrumentation).
+- **No phantom versions** (F-RECON-005). A feedback batch that changed nothing — structural-only
+  (the edit is the agent's to make), or deterministic edits that were all stale / rejected /
+  no-ops — still landed `_v{n}.html` byte-identical to its parent and announced
+  `version.created`, so the version strip, the export menu and the thread ("v3 landed") offered
+  a version that changed nothing, and the real edit landed as v4. Now a version is minted only
+  when the prepared bytes differ (sha-256). The unchanged batch keeps its reserved number on
+  `_v{n}.md` (the handoff id crew's edit seam dedupes on — unchanged wire semantics), announces
+  no `version.created`, and `feedback.processed` gains additive `landed:false` / `unchanged:true`
+  / `base_version` / `feedback_file`; the follow-on `edit.completed {version:n}` resolves its base
+  through the feedback file's `base_html` and lands as **v{n}** — the number the ask reserved —
+  recording `feedback_file: "_v{n}.md"` on it.
 
 ## [0.9.1] — 2026-09-11
 

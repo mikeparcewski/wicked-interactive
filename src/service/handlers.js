@@ -18,6 +18,7 @@ import { writeFeedback, applyFeedbackItems } from "./workspace.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
 import { recordDemo } from "./demo.js";
+import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload } from "./recorder-preflight.js";
 import { grabUrlToPdf } from "./theme-grab.js";
 import { resolveLearnedTheme } from "./theme-source.js";
 
@@ -48,15 +49,25 @@ export async function materializeFeedback(dir, payload, ctx) {
   const { items, author } = payload;
   const { version, parent } = writeFeedback(dir, { items, author });
   const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
-  if (!result.idempotent) {
+  // version.created announces a version that EXISTS. An unchanged batch (structural-only, or
+  // deterministic edits that were all no-ops) lands nothing (F-RECON-005) — so nothing is
+  // announced, and no skin can say "v3 landed" for a document that did not change.
+  if (!result.idempotent && result.landed) {
     ctx.emit("wicked.interactive.version.created", {
       version, parent, kind: "deterministic", html_file: result.html_file,
     });
   }
   ctx.emit("wicked.interactive.feedback.processed", {
+    // `version` stays the batch's reserved number — the handoff id the agent/crew edit is keyed on
+    // (edit.completed {version}) — whether or not a partial landed under it.
     version, applied: result.applied, rejected: result.rejected, stale: result.stale,
     awaiting_structural: result.structural_items.length,
     structural_items: result.structural_items,
+    // Additive (F-RECON-005): did this batch land a version, and what is the current base?
+    landed: result.landed !== false,
+    unchanged: result.unchanged === true,
+    base_version: result.base_version ?? parent,
+    ...(result.feedback_file ? { feedback_file: result.feedback_file } : {}),
   });
   return { version, ...result };
 }
@@ -84,26 +95,74 @@ export async function materializeDraft(dir, payload, ctx) {
   return out;
 }
 
-/** Demo (re-)record trigger → run the authored spec with Playwright, land the storyboard. */
-export async function materializeDemo(dir, payload, ctx) {
+/**
+ * Demo (re-)record trigger → preflight the recorder's browser (provisioning it on first use),
+ * run the authored spec with Playwright, land the storyboard.
+ *
+ * FAILURES ARE TERMINAL, TYPED, AND NEVER RETRIED (F-RECON-012 / F-RECON-014). Before this, a
+ * missing browser threw straight into the command loop, which retried the deterministic failure
+ * three times in four seconds and dead-lettered it, while the thread showed Playwright's raw
+ * ASCII box three times. Every failure now becomes a RecorderError (recorder-preflight.js):
+ *   • `wicked.interactive.status.posted {state:"error", code, retryable:false, remedy, …}` — the
+ *     human line + the machine fields, on the doc thread (what crew relays, what studio renders);
+ *   • `wicked.interactive.error.raised {source:"recorder", error:<code>, context:{…}}` — the same
+ *     payload for machine consumers;
+ * and the handler RESOLVES (`{ error }`) so the bus acks the command: one honest failure per
+ * request, and a "Re-record" is one honest attempt, not a third dead letter.
+ *
+ * `ctx.recorder` (optional, bound by server.js) carries the injectable preflight seams
+ * (`status`, `install`, `autoInstall`) and `onState` — the per-doc recording state the HTTP
+ * surface exposes (`GET /d/:doc/api/demo/status`) so a button can follow the wire.
+ */
+export async function materializeDemo(dir, payload, ctx, { record = recordDemo, ensureBrowser = ensureRecorderBrowser } = {}) {
+  const headless = payload.headless !== false;
+  const recorder = ctx.recorder || {};
+  const onState = typeof recorder.onState === "function" ? recorder.onState : () => {};
+  const emitWorking = (message, extra = {}) => ctx.emit("wicked.interactive.status.posted", { state: "working", message, ...extra });
+  let lastProgressAt = 0;
   try {
-    const result = await recordDemo(dir, {
+    onState({ state: "preflight", headless });
+    await ensureBrowser({
+      headless,
+      autoInstall: recorder.autoInstall,
+      ...(recorder.status ? { status: recorder.status } : {}),
+      ...(recorder.install ? { install: recorder.install } : {}),
+      onProgress: (p) => {
+        if (p.phase === "installing") { onState({ state: "installing", headless }); emitWorking(p.message); return; }
+        if (p.phase === "installed") { emitWorking(p.message); return; }
+        // Download progress: keep the UI's liveness window fed without flooding the bus.
+        const now = Date.now();
+        if (now - lastProgressAt < 2000 && p.percent !== 100) return;
+        lastProgressAt = now;
+        onState({ state: "installing", headless, progress: p.percent ?? null });
+        emitWorking(p.percent != null ? `Installing the recorder's browser… ${p.percent}% of ${p.size}` : `Installing the recorder's browser… ${p.line}`);
+      },
+    });
+    onState({ state: "recording", headless });
+    const result = await record(dir, {
       documentId: ctx.documentId,
-      headless: payload.headless !== false,
-      onStep: ({ index, total, label }) => ctx.emit("wicked.interactive.status.posted", {
-        state: "working", message: `Step ${index}${total ? `/${total}` : ""}: ${label}`,
-      }),
+      headless,
+      onStep: ({ index, total, label }) => {
+        onState({ state: "recording", headless, step: { index, label } });
+        emitWorking(`Step ${index}${total ? `/${total}` : ""}: ${label}`);
+      },
     });
     ctx.emit("wicked.interactive.version.created", {
       version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
     });
+    onState({ state: "recorded", headless, version: result.version });
     return result;
   } catch (e) {
+    const err = classifyRecorderError(e, { headless });
+    const wire = recorderErrorPayload(err);
     ctx.emit("wicked.interactive.status.posted", {
       document_id: ctx.documentId, state: "error",
-      message: `Recording failed: ${e.message}`,
+      message: `Recording failed: ${err.message}`,
+      ...wire,
     });
-    throw e;
+    ctx.emit("wicked.interactive.error.raised", { document_id: ctx.documentId, source: "recorder", error: err.code, context: wire });
+    onState({ state: "failed", headless, error: wire });
+    return { error: wire };
   }
 }
 

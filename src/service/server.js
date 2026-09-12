@@ -26,6 +26,10 @@ import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
+import {
+  recorderBrowserStatus, ensureRecorderBrowser, recorderAutoInstallEnabled, missingBrowserError,
+  recorderErrorPayload, RecorderError, RECORDER_ERROR_CODES,
+} from "./recorder-preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
 import { bindDocToProject, projectIdFor } from "./project.js";
@@ -89,9 +93,30 @@ const COMMAND_TYPES = new Set([
  * @param {string} [opts.frontendDir]
  * @param {boolean} [opts.standalone]  serve the retired SPA shell (dev only, DES-MERGE-001 §7.13)
  */
-export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault() } = {}) {
+export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
+
+  // Per-doc RECORDING STATE (F-RECON-014): idle → preflight → installing → recording → recorded |
+  // failed. Fed by materializeDemo via ctx.recorder.onState, read by GET /api/demo/status and by
+  // the multi-server's demo.requested gate — so a skin's "Re-record" button follows the wire
+  // instead of guessing, and a second click while one is in flight is refused (409), not queued
+  // into an identical failure. `recorder.status/install/autoInstall` are the injectable
+  // preflight seams (tests never probe the developer's machine).
+  const demoState = { state: "idle", since: new Date().toISOString(), started_at: null, finished_at: null, version: null, step: null, progress: null, error: null };
+  // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
+  const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
+  function onDemoState(next) {
+    const now = new Date().toISOString();
+    if (demoState.state !== next.state) { demoState.state = next.state; demoState.since = now; }
+    if (next.state === "preflight") { demoState.started_at = now; demoState.finished_at = null; demoState.error = null; demoState.step = null; demoState.progress = null; }
+    if (next.state === "recorded" || next.state === "failed") demoState.finished_at = now;
+    if (next.step) demoState.step = next.step;
+    if (next.progress !== undefined) demoState.progress = next.progress;
+    if (next.version !== undefined) demoState.version = next.version;
+    if (next.error) demoState.error = next.error;
+  }
+  const demoStatus = () => ({ ...demoState, in_flight: DEMO_IN_FLIGHT.has(demoState.state) });
 
   // FIFO serialization (ADR-0007): process one mutation at a time so concurrent
   // regenerations never race on the manifest. Returns a promise reflecting THIS task so the
@@ -103,8 +128,16 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     return run;
   }
 
-  // Plugin install-gate (ADR-0016): which sibling tools are present.
-  app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
+  // Plugin install-gate (ADR-0016): which sibling tools are present (+ the recorder's browser).
+  app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew({ recorderStatus })));
+
+  // Recording state for this doc (F-RECON-014) + the recorder browser's presence (F-RECON-012):
+  // what a "Re-record" control renders from. `browser` is the snapshot for a headless recording.
+  app.get("/api/demo/status", async (_req, res) => {
+    let browser;
+    try { browser = await recorderStatus({ headless: true }); } catch (e) { browser = { ok: false, probe_error: e.message }; }
+    res.json({ document_id: documentId, ...demoStatus(), browser });
+  });
 
   app.get("/api/versions", (_req, res) => {
     try { res.json(loadManifest(dir)); } catch (e) { res.status(404).json({ error: e.message }); }
@@ -325,7 +358,7 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       case "wicked.interactive.feedback.submitted": return enqueue(() => materializeFeedback(dir, p, ctx));
       case "wicked.interactive.edit.completed":     return enqueue(() => materializeEdit(dir, p, ctx));
       case "wicked.interactive.draft.completed":    return enqueue(() => materializeDraft(dir, p, ctx));
-      case "wicked.interactive.demo.requested":     return enqueue(() => materializeDemo(dir, p, ctx));
+      case "wicked.interactive.demo.requested":     return enqueue(() => materializeDemo(dir, p, { ...ctx, recorder: { autoInstall: recorder.autoInstall, status: recorderStatus, ...(recorder.install ? { install: (o) => recorder.install(o) } : {}), onState: onDemoState } }));
       case "wicked.interactive.theme.requested":    return enqueue(() => materializeThemeRequested(dir, p, ctx));
       case "wicked.interactive.source.attached":    return enqueue(() => materializeSourceAttached(dir, p));
       case "wicked.interactive.source.updated":     return enqueue(() => materializeSourceUpdated(dir, p));
@@ -349,8 +382,11 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     if (server) await new Promise((r) => server.close(r));
   }
 
-  return { app, start, stop, enqueue, runCommand, emit, dir, documentId };
+  return { app, start, stop, enqueue, runCommand, emit, dir, documentId, demoStatus };
 }
+
+/** Recording states during which a second demo.requested is refused rather than queued (F-RECON-014). */
+const DEMO_IN_FLIGHT = new Set(["preflight", "installing", "recording"]);
 
 // ---------------------------------------------------------------------------
 // Multi-document mode (ADR-0015): one express server hosting many workspaces under a docs
@@ -370,8 +406,12 @@ function slugify(name) {
 }
 
 /** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
-export function createMultiServer({ root, frontendDir, standalone = standaloneDefault() } = {}) {
+export function createMultiServer({ root, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
   if (!root) throw new Error("createMultiServer: root is required");
+  // Recorder preflight seams (F-RECON-012), shared by every doc app + the top-level gates.
+  // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
+  const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
+  const recorderAutoInstall = () => (recorder.autoInstall ?? recorderAutoInstallEnabled());
   mkdirSync(root, { recursive: true });
   const top = express();
   top.use(express.json({ limit: "5mb" }));
@@ -491,7 +531,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
     if (retiredInfo(name)) throw new Error(`doc retired: ${name}`);
     const dir = docDir(name);
-    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone });
+    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone, recorder });
     top.use(`/d/${name}`, svc.app);
     docs.set(name, { svc, dir });
     return docs.get(name);
@@ -694,7 +734,22 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       .sort((a, b) => (a.current === b.current ? a.name.localeCompare(b.name) : a.current ? -1 : 1));
     res.json({ root: here, projects });
   });
-  top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
+  top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew({ recorderStatus })));
+
+  // Provision the demo recorder's browser on demand (F-RECON-012): the bundled Playwright CLI
+  // downloads the headless shell + ffmpeg into Playwright's cache. Blocks for the download
+  // (minutes on a slow link — a local bridge, so the caller waits), answers the fresh presence
+  // snapshot, or the typed 503 when it could not be provisioned. Forces the install regardless
+  // of WI_RECORDER_AUTO_INSTALL: an explicit request IS the operator's consent.
+  top.post("/api/demo/browser/install", async (req, res) => {
+    const headless = req.body?.headless !== false;
+    try {
+      const status = await ensureRecorderBrowser({ headless, autoInstall: true, status: recorderStatus, ...(recorder.install ? { install: (o) => recorder.install(o) } : {}) });
+      res.json({ ok: true, ...status });
+    } catch (e) {
+      res.status(503).json(recorderErrorPayload(e));
+    }
+  });
   top.get("/api/docs", (req, res) => {
     const includeRetired = ["1", "true"].includes(String(req.query?.includeRetired ?? "").toLowerCase());
     res.json(listDocs({ includeRetired }));
@@ -818,6 +873,28 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
     const tomb = retiredInfo(name);
     if (tomb) return res.status(410).json({ error: "doc retired", document_id: name, retired_at: tomb.retired_at });
+    // Demo (re-)record gate (F-RECON-012 / F-RECON-014): refuse, with the typed reason, what
+    // would only replay a known failure. (a) A recording is in flight for this doc → 409 — a
+    // second click must not queue an identical run. (b) The recorder's browser is missing and
+    // auto-install is OFF → 503 `recorder_browser_missing` with the one-line remedy, instead of a
+    // 200 that fails seconds later on the thread. With auto-install on, the request is accepted
+    // and the materializer provisions the browser first (progress narrated on the thread).
+    if (type === "wicked.interactive.demo.requested") {
+      let entry = docs.get(name);
+      if (!entry) { try { entry = await mountDoc(name); } catch (e) { return res.status(400).json({ error: e.message }); } }
+      const st = entry.svc.demoStatus();
+      if (st.in_flight) {
+        const err = new RecorderError(RECORDER_ERROR_CODES.IN_FLIGHT,
+          `a recording is already ${st.state} for ${name} (since ${st.since}) — wait for it to finish or fail, then Re-record.`,
+          { remedy: "wait for the current recording to finish", state: st.state, started_at: st.started_at });
+        err.retryable = true;   // the one recorder condition that clears by itself
+        return res.status(409).json({ ...recorderErrorPayload(err), document_id: name });
+      }
+      const browser = await recorderStatus({ headless: payload.headless !== false });
+      if (!browser.ok && !recorderAutoInstall()) {
+        return res.status(503).json({ ...recorderErrorPayload(missingBrowserError(browser)), document_id: name, auto_install: false });
+      }
+    }
     try {
       const correlationId = randomUUID();
       // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)

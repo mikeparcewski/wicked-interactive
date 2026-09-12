@@ -152,7 +152,13 @@ function fmtTime(seconds) {
  * @param {string}   [opts.documentId]  doc name (used for the recording URL + events)
  * @param {Function} [opts.onStep]      progress callback ({ index, total, label })
  * @param {boolean}  [opts.headless]    default true
+ * @param {Function} [opts.importPlaywright]  injectable `() => import("playwright")` (tests)
  * @returns {Promise<{version:number, parent:number, video:string, steps:Array}>}
+ *
+ * Failure semantics (F-RECON-012/014): this function THROWS plain errors; the caller
+ * (handlers.materializeDemo) classifies them into a typed RecorderError and never retries — a
+ * missing browser or a failing step is deterministic, so a replay only repeats it. A step failure
+ * is tagged with `err.recorderStep = { index, label }` so the typed error names the step.
  */
 export async function recordDemo(dir, opts = {}) {
   const documentId = opts.documentId ?? dir;
@@ -160,12 +166,13 @@ export async function recordDemo(dir, opts = {}) {
   if (!existsSync(specPath)) throw new Error(`no ${DEMO_SPEC} authored yet — the agent must write the spec before recording`);
 
   // Resolve Playwright lazily so the service runs fine without it until a demo is recorded
-  // (the install gate, ADR-0016, blocks demo creation until Playwright is present).
+  // (the install gate, ADR-0016, blocks demo creation until Playwright is present). The BROWSER
+  // binary is a second gate: preflighted + provisioned by recorder-preflight.js before this runs.
   let chromium;
   try {
-    ({ chromium } = await import("playwright"));
+    ({ chromium } = await (opts.importPlaywright ?? (() => import("playwright")))());
   } catch {
-    throw new Error("Playwright is not installed — run `npx playwright install` (the install gate should have caught this)");
+    throw new Error("Playwright is not installed — run `wicked-interactive doctor --install` (the install gate should have caught this)");
   }
 
   // Cache-bust the import so a re-authored spec is picked up (ESM caches by URL).
@@ -220,7 +227,12 @@ export async function recordDemo(dir, opts = {}) {
 
       if (showCap) await showCaption(page, say);          // before the action (same-page steps)
 
-      if (typeof fn === "function") await fn();
+      // Tag a failing step so the typed error (recorder-preflight.classifyRecorderError) can
+      // say WHICH step broke — the storyboard highlight the user refines.
+      if (typeof fn === "function") {
+        try { await fn(); }
+        catch (e) { const err = e instanceof Error ? e : new Error(String(e)); err.recorderStep = { index, label: String(label) }; throw err; }
+      }
 
       // Re-assert after the action (fn may have navigated and wiped the node), then pause so
       // the viewer reads it against the settled, resulting view.

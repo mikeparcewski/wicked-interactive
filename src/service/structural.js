@@ -6,7 +6,9 @@
 // are the shared helpers the feedback path uses to pull current markup for the agent.
 
 import * as cheerio from "cheerio";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseFeedback } from "../core/feedback-schema.js";
 import { regenerate } from "../core/regenerate.js";
 import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
@@ -42,7 +44,7 @@ const rootWid = (fragmentHtml) => {
  * @returns {Promise<{version:number, parent:number, applied:string[], rejected:object[]}>}
  */
 export async function applyStructuralResults(dir, { version, results }, opts = {}) {
-  const parent = version;
+  const { parent, feedbackFile } = resolveEditBase(dir, version);
   const bySelector = new Map(results.map((r) => [r.selector, r.fragment]));
   const baseHtml = readVersionHtml(dir, parent);
   const feedback = {
@@ -69,7 +71,27 @@ export async function applyStructuralResults(dir, { version, results }, opts = {
   let manifest = loadManifest(dir);
   const newVersion = nextVersionNumber(manifest);
   atomicWrite(join(dir, `_v${newVersion}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? null }));
+  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? feedbackFile ?? null }));
   saveManifest(dir, manifest);
   return { version: newVersion, parent, applied, rejected };
+}
+
+/**
+ * The base an `edit.completed {version}` edits. `version` is the handoff id from
+ * `feedback.processed` — historically always a landed partial version, so the base WAS that
+ * number. Since F-RECON-005 an unchanged (structural-only) batch lands nothing: its number is
+ * held only by `_v{n}.md`, whose frontmatter `base_html` names the version the feedback was
+ * given against. Resolve: a landed `_v{n}.html` wins (unchanged wire semantics); else the
+ * feedback file's base; the feedback file is then recorded on the version the edit lands as.
+ * @returns {{ parent: number, feedbackFile: string|null }}
+ */
+export function resolveEditBase(dir, version) {
+  if (existsSync(join(dir, `_v${version}.html`))) return { parent: version, feedbackFile: null };
+  const md = join(dir, `_v${version}.md`);
+  if (existsSync(md)) {
+    const { frontmatter } = parseFeedback(readFileSync(md, "utf-8"));
+    const m = /^_v(\d+)\.html$/.exec(String(frontmatter?.base_html || ""));
+    if (m) return { parent: Number(m[1]), feedbackFile: `_v${version}.md` };
+  }
+  return { parent: version, feedbackFile: null };   // let readVersionHtml raise the honest ENOENT
 }

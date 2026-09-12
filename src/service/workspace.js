@@ -11,6 +11,7 @@
 // structural edits are delegated to the supervising agent (ADR-0010).
 
 import { mkdirSync, readdirSync, copyFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { instrument } from "../core/instrument.js";
 import { parseFeedback, serializeFeedback } from "../core/feedback-schema.js";
@@ -80,13 +81,24 @@ export function writeFeedback(dir, { items, author }) {
  * their freshly-extracted fragments) for the agent to fulfil — instead of writing a request
  * file. Pure: no emit, no bus. Idempotent on (version): a re-run for a version already in the
  * manifest is a no-op that still reports the (now-empty) structural set.
- * @returns {Promise<{version,html_file,applied,rejected,stale,structural_items}>}
+ *
+ * NO PHANTOM VERSIONS (F-RECON-005): a version is minted only when the content actually changed.
+ * A batch that is structural-only (or whose deterministic edits were all rejected/stale/no-ops)
+ * regenerates byte-identical HTML; landing that as `_v{n}.html` produced a version the strip,
+ * the export menu and the thread ("v3 landed") all offered while it changed nothing — and the
+ * real edit then landed as v4. Now the unchanged batch lands NOTHING: `_v{n}.md` (the feedback,
+ * already written by writeFeedback) keeps its reserved number, the returned `version` stays that
+ * number (it is the handoff id the agent/crew edit is keyed on), `landed: false` /
+ * `unchanged: true` / `base_version` say what happened, and the follow-on structural edit is the
+ * version that gets the number (structural.applyStructuralResults resolves its base through the
+ * feedback file). Content equality is a sha-256 of the prepared bytes.
+ * @returns {Promise<{version,html_file,applied,rejected,stale,structural_items,landed,unchanged,base_version,feedback_file}>}
  */
 export async function applyFeedbackItems(dir, { version, parent, items }, opts = {}) {
   let manifest = loadManifest(dir);
   if (getVersion(manifest, version) != null) {
     const existing = getVersion(manifest, version);
-    return { version, html_file: existing.html_file, applied: [], rejected: [], stale: [], structural_items: [], idempotent: true };
+    return { version, html_file: existing.html_file, applied: [], rejected: [], stale: [], structural_items: [], idempotent: true, landed: true, unchanged: false, base_version: existing.parent };
   }
   const { deterministic, structural } = splitItems(items);
   const prevHtml = readVersionHtml(dir, parent);
@@ -94,17 +106,34 @@ export async function applyFeedbackItems(dir, { version, parent, items }, opts =
   // Re-instrument (adds wids to new blocks, INV-1 preserves existing) then re-theme
   // (idempotent), exactly as the legacy path — so a partial version stays clickable + themed.
   const html = themed(instrument(regenerated).html, opts);
-  atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: `_v${version}.md` }));
-  saveManifest(dir, manifest);
-  // Extract each structural item's CURRENT fragment from the landed partial so the agent
-  // edits real markup (the data-wid contract — ADR-0001 — rides in the fragment).
-  const structural_items = structural.map((it) => ({
+  const feedback_file = `_v${version}.md`;
+  // Extract each structural item's CURRENT fragment so the agent edits real markup (the data-wid
+  // contract — ADR-0001 — rides in the fragment). When nothing landed, "current" is the base.
+  const fragmentsFrom = (src) => structural.map((it) => ({
     selector: it.selector,
     instruction: it.instruction,
-    fragment: extractFragment(html, it.selector),
+    fragment: extractFragment(src, it.selector),
   }));
-  return { version, html_file: `_v${version}.html`, applied, rejected, stale, structural_items };
+  if (contentHash(html) === contentHash(prevHtml)) {
+    return {
+      version, html_file: `_v${parent}.html`, applied, rejected, stale,
+      structural_items: fragmentsFrom(prevHtml),
+      landed: false, unchanged: true, base_version: parent, feedback_file,
+    };
+  }
+  atomicWrite(join(dir, `_v${version}.html`), html);
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: feedback_file }));
+  saveManifest(dir, manifest);
+  return {
+    version, html_file: `_v${version}.html`, applied, rejected, stale,
+    structural_items: fragmentsFrom(html),
+    landed: true, unchanged: false, base_version: parent, feedback_file,
+  };
+}
+
+/** sha-256 of the prepared bytes — the "did the content change" test (F-RECON-005). */
+export function contentHash(html) {
+  return createHash("sha256").update(String(html)).digest("hex");
 }
 
 /**

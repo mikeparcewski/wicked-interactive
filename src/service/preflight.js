@@ -16,6 +16,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
+import { recorderBrowserStatus } from "./recorder-preflight.js";
 
 const require = createRequire(import.meta.url);
 
@@ -108,10 +109,20 @@ export async function crewAvailable(timeoutMs = 750) {
   }
 }
 
-/** Async preflight for the HTTP route: the sync snapshot plus crew reachability. */
-export async function preflightWithCrew() {
+/**
+ * Async preflight for the HTTP route: the sync snapshot plus crew reachability plus the demo
+ * RECORDER'S BROWSER (F-RECON-012) — `recorder` is the presence snapshot from
+ * recorder-preflight.js (`ok`, `browser`, `missing[]`, `install_command`, `remedy`,
+ * `auto_install`), so a skin can say "the recorder's browser is not installed" BEFORE a
+ * multi-minute spec run is spent. Additive: `ok`/`missing` still describe the plugin gate only
+ * (a missing browser gates demo recording, not ordinary documents). `recorderStatus` is
+ * injectable so route tests never probe the developer's machine.
+ */
+export async function preflightWithCrew({ recorderStatus = recorderBrowserStatus } = {}) {
   const out = preflight();
   out.crew_available = await crewAvailable();
+  try { out.recorder = await recorderStatus({ headless: true }); }
+  catch (e) { out.recorder = { ok: false, probe_error: e.message }; }
   return out;
 }
 
