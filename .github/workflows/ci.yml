@@ -64,7 +64,6 @@ jobs:
     timeout-minutes: 15
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
       WICKED_CREW_API: http://127.0.0.1:1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -72,6 +71,11 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      # An ISOLATED browsers cache for this job (the `runner` context is not available in a
+      # job-level `env`, so it is exported from a step): the provisioning must land HERE, and the
+      # doctor's component paths are asserted against it below.
+      - name: Point Playwright at an isolated, empty browsers cache
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/pw-browsers" >> "$GITHUB_ENV"
       - name: Install (clean, from lockfile — no browsers)
         run: npm ci
       - name: doctor reports the recorder browser MISSING on a fresh install (exit 1, typed remedy)
