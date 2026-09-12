@@ -13,15 +13,19 @@
 // macOS, Linux, and Windows.
 
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { preflight, playwrightInstalled } from "../src/service/preflight.js";
 
 // Playwright (ADR-0018) powers demo recording. It's an npm dependency, not a Claude plugin,
-// so it installs differently: pull the package + browser binaries, then the skills (the
-// supervising agent uses these to learn the target app). `playwright-cli install --skills`
-// relies on the softlinked skill dirs in the standard locations.
+// so it installs differently: pull the package, then the BROWSER through this package's own
+// `doctor --install` — the bundled Playwright CLI, so the provisioned revision is the one the
+// recorder launches (ADR-0028; a foreign Playwright install run from another cwd would fetch
+// a different Playwright's browsers) — then the skills (the supervising agent uses these to learn the
+// target app). `playwright-cli install --skills` relies on the softlinked skill dirs.
+const DOCTOR = fileURLToPath(new URL("./wicked-interactive.js", import.meta.url));
 const PLAYWRIGHT_STEPS = [
   "npm install playwright",
-  "npx playwright install",
+  `node "${DOCTOR}" doctor --install`,
   "playwright-cli install --skills",
 ];
 

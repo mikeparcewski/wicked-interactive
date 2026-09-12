@@ -53,3 +53,48 @@ jobs:
           # recorded" page. Either is a non-error response; a UI shell is no longer expected here.
           curl -fsS -o /dev/null -w "GET / (API-only bridge) -> HTTP %{http_code}\n" "http://127.0.0.1:4411/"
           kill "$SVC" 2>/dev/null || true
+
+  # The recorder's browser is NOT provisioned by `npm install` (F-RECON-012). This job proves the
+  # provisioning path a fresh install relies on, end to end and against a REAL cache dir: doctor
+  # says MISSING (exit 1) → `doctor --install` downloads the headless shell + ffmpeg with the
+  # BUNDLED Playwright CLI → doctor says READY (exit 0) → the recorder records a real two-step
+  # demo. Kept out of `verify` so the unit suite stays browser-free and fast.
+  recorder-provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      WICKED_CREW_API: http://127.0.0.1:1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      # An ISOLATED browsers cache for this job (the `runner` context is not available in a
+      # job-level `env`, so it is exported from a step): the provisioning must land HERE, and the
+      # doctor's component paths are asserted against it below.
+      - name: Point Playwright at an isolated, empty browsers cache
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/pw-browsers" >> "$GITHUB_ENV"
+      - name: Install (clean, from lockfile — no browsers)
+        run: npm ci
+      - name: doctor reports the recorder browser MISSING on a fresh install (exit 1, typed remedy)
+        run: |
+          set -uo pipefail
+          set +e
+          node bin/wicked-interactive.js doctor --json > /tmp/doctor-before.json
+          rc=$?
+          set -e
+          cat /tmp/doctor-before.json
+          [ "$rc" = "1" ] || { echo "::error::doctor should exit 1 when the recorder browser is missing (got $rc)"; exit 1; }
+          node -e "const r=require('/tmp/doctor-before.json').recorder; if (r.ok) throw new Error('expected ok:false'); if (!r.missing.includes('chromium-headless-shell')) throw new Error('expected chromium-headless-shell missing'); if (!/doctor --install/.test(r.remedy)) throw new Error('remedy missing')"
+      - name: doctor --install provisions the headless shell + ffmpeg with the bundled Playwright
+        run: node bin/wicked-interactive.js doctor --install
+      - name: doctor reports READY (exit 0) and the install landed under PLAYWRIGHT_BROWSERS_PATH
+        run: |
+          set -euo pipefail
+          node bin/wicked-interactive.js doctor --json > /tmp/doctor-after.json
+          node -e "const r=require('/tmp/doctor-after.json').recorder; if (!r.ok) throw new Error('expected ok:true: '+JSON.stringify(r)); for (const c of r.components) if (!c.dir.startsWith(process.env.PLAYWRIGHT_BROWSERS_PATH)) throw new Error('component outside the cache: '+c.dir)"
+          ls "$PLAYWRIGHT_BROWSERS_PATH"
+      - name: The recorder records a real two-step demo with the provisioned browser
+        run: node test/recorder-smoke.mjs

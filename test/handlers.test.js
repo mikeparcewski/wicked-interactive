@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initWorkspace, loadManifest } from "../src/service/workspace.js";
 import {
-  materializeFeedback, materializeEdit, materializeDraft,
+  materializeFeedback, materializeEdit, materializeDraft, materializeDemo,
   materializeSourceAttached, materializeSourceUpdated, appendConversation,
   materializeThemeRequested, themeArtifactPath,
 } from "../src/service/handlers.js";
@@ -45,19 +45,29 @@ test("materializeFeedback applies a deterministic edit and emits version.created
   } finally { cleanup(dir); }
 });
 
-test("materializeFeedback surfaces structural items inline (no request file)", async () => {
+test("materializeFeedback surfaces structural items inline (no request file) and announces NO phantom version (F-RECON-005)", async () => {
   const dir = ws();
   const ctx = spyCtx();
   try {
     await materializeFeedback(dir, {
       items: [{ selector: "slide-0-heading-1", type: "structural-change", instruction: "make it punchier" }],
     }, ctx);
+    // A structural-only batch changes nothing yet: no version.created may fire (the thread said
+    // "v3 landed" for a byte-identical copy before), only the handoff.
+    assert.deepEqual(ctx.events.map((e) => e.type), ["wicked.interactive.feedback.processed"]);
     const fp = ctx.events.find((e) => e.type === "wicked.interactive.feedback.processed").payload;
     assert.equal(fp.awaiting_structural, 1);
+    assert.equal(fp.version, 1, "the handoff id is the batch's reserved number");
+    assert.equal(fp.landed, false);
+    assert.equal(fp.unchanged, true);
+    assert.equal(fp.base_version, 0);
+    assert.equal(fp.feedback_file, "_v1.md");
     assert.equal(fp.structural_items[0].selector, "slide-0-heading-1");
     assert.equal(fp.structural_items[0].instruction, "make it punchier");
     assert.match(fp.structural_items[0].fragment, /data-wid="slide-0-heading-1"/, "current fragment extracted");
     assert.ok(!existsSync(join(dir, "requests", "_v1.request.json")), "NO request file written (event-native)");
+    assert.ok(!existsSync(join(dir, "_v1.html")), "nothing landed");
+    assert.equal(loadManifest(dir).head, 0);
   } finally { cleanup(dir); }
 });
 
@@ -74,12 +84,14 @@ test("materializeEdit lands the agent's structural result as a follow-on version
     // Agent returns an edited fragment that PRESERVES the data-wid (INV-2).
     const edited = item.fragment.replace(/Q2 Results/, "Q2 — Crushed It");
     const out = await materializeEdit(dir, { version: fb.version, results: [{ selector: item.selector, fragment: edited }] }, ctx);
-    assert.equal(out.parent, 1);
-    assert.equal(out.version, 2);
-    assert.equal(loadManifest(dir).head, 2);
+    // The structural-only handoff landed nothing (F-RECON-005), so the EDIT is v1, chained to v0.
+    assert.equal(out.parent, 0);
+    assert.equal(out.version, 1);
+    assert.equal(loadManifest(dir).head, 1);
     const vc = ctx.events.find((e) => e.type === "wicked.interactive.version.created").payload;
     assert.equal(vc.kind, "structural");
-    assert.match(readFileSync(join(dir, "_v2.html"), "utf-8"), /Crushed It/);
+    assert.equal(vc.version, 1); assert.equal(vc.parent, 0);
+    assert.match(readFileSync(join(dir, "_v1.html"), "utf-8"), /Crushed It/);
   } finally { cleanup(dir); }
 });
 
@@ -257,5 +269,129 @@ test("appendConversation persists transcript lines", () => {
     assert.equal(lines.length, 2);
     assert.equal(lines[0].role, "user");
     assert.equal(lines[1].state, "processing");
+  } finally { cleanup(dir); }
+});
+
+
+// ── materializeDemo: typed, terminal, never retried (F-RECON-012 / F-RECON-014) ────────────
+
+function demoWs() {
+  const dir = mkdtempSync(join(tmpdir(), "wi-handlers-demo-"));
+  initWorkspace(dir, "<section><h1>Learning…</h1></section>", { kind: "demo" });
+  return dir;
+}
+const okStatus = { ok: true, browser: "chromium-headless-shell", missing: [], components: [] };
+const missingStatus = {
+  ok: false, browser: "chromium-headless-shell", missing: ["chromium-headless-shell", "ffmpeg"], components: [],
+  playwright_version: "1.62.1", install_command: "node cli install chromium-headless-shell", remedy: "wicked-interactive doctor --install",
+  browsers_path: null, message: "the recorder's browser is not installed — run `wicked-interactive doctor --install`, then Re-record.",
+};
+function demoCtx(recorder = {}) {
+  const ctx = spyCtx("demo-1");
+  ctx.states = [];
+  ctx.recorder = { onState: (st) => ctx.states.push(st.state), ...recorder };
+  return ctx;
+}
+
+test("materializeDemo: missing browser + auto-install off → ONE typed error (status.posted + error.raised), resolves (no retry), recorder never launched", async () => {
+  const dir = demoWs();
+  const ctx = demoCtx({ status: async () => missingStatus, autoInstall: false });
+  let recorded = 0;
+  try {
+    const out = await materializeDemo(dir, {}, ctx, { record: async () => { recorded += 1; } });
+    assert.equal(recorded, 0, "no launch attempt against a missing browser");
+    assert.ok(out.error, "resolves with the typed error instead of throwing into the command loop");
+    assert.equal(out.error.code, "recorder_browser_missing");
+    assert.equal(out.error.retryable, false);
+    const types = ctx.events.map((e) => e.type);
+    assert.deepEqual(types, ["wicked.interactive.status.posted", "wicked.interactive.error.raised"]);
+    const st = ctx.events[0].payload;
+    assert.equal(st.state, "error");
+    assert.equal(st.code, "recorder_browser_missing");
+    assert.equal(st.source, "recorder");
+    assert.equal(st.retryable, false);
+    assert.equal(st.remedy, "wicked-interactive doctor --install");
+    assert.deepEqual(st.missing, ["chromium-headless-shell", "ffmpeg"]);
+    assert.match(st.message, /^Recording failed: the recorder's browser is not installed/);
+    assert.doesNotMatch(st.message, /[╔║╚]/);
+    const er = ctx.events[1].payload;
+    assert.equal(er.source, "recorder");
+    assert.equal(er.error, "recorder_browser_missing");
+    assert.equal(er.context.code, "recorder_browser_missing");
+    assert.deepEqual(ctx.states, ["preflight", "failed"]);
+    assert.equal(loadManifest(dir).head, 0, "no version landed");
+  } finally { cleanup(dir); }
+});
+
+test("materializeDemo: missing browser + auto-install on → provisions (narrated), then records and lands the storyboard", async () => {
+  const dir = demoWs();
+  let present = false;
+  let installed = null;
+  const ctx = demoCtx({
+    status: async () => (present ? okStatus : missingStatus),
+    install: async ({ browser, onProgress }) => { installed = browser; onProgress({ phase: "downloading", percent: 100, size: "95 MiB" }); present = true; },
+    autoInstall: true,
+  });
+  try {
+    const out = await materializeDemo(dir, {}, ctx, {
+      record: async (_dir, opts) => { opts.onStep({ index: 1, label: "Land" }); return { version: 1, parent: 0, video: "_v1.webm", steps: [{ label: "Land", at: 0 }] }; },
+    });
+    assert.equal(installed, "chromium-headless-shell");
+    assert.equal(out.version, 1);
+    const types = ctx.events.map((e) => e.type);
+    assert.equal(types.at(-1), "wicked.interactive.version.created");
+    const working = ctx.events.filter((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "working").map((e) => e.payload.message);
+    assert.ok(working.some((m) => /Installing the recorder's browser/.test(m)), JSON.stringify(working));
+    assert.ok(working.some((m) => /100%/.test(m)), "download progress narrated");
+    assert.ok(working.some((m) => /Step 1: Land/.test(m)));
+    assert.ok(!ctx.events.some((e) => e.payload.state === "error"));
+    assert.deepEqual(ctx.states, ["preflight", "installing", "installing", "recording", "recording", "recorded"]);
+  } finally { cleanup(dir); }
+});
+
+test("materializeDemo: a failing step → recording_step_failed naming the step; a launch failure → recorder_launch_failed; neither throws", async () => {
+  const dir = demoWs();
+  const ctx = demoCtx({ status: async () => okStatus });
+  try {
+    const stepErr = new Error("locator.click: Timeout 30000ms exceeded.");
+    stepErr.recorderStep = { index: 2, label: "Open the scope" };
+    let out = await materializeDemo(dir, {}, ctx, { record: async () => { throw stepErr; } });
+    assert.equal(out.error.code, "recording_step_failed");
+    assert.deepEqual(out.error.step, { index: 2, label: "Open the scope" });
+    assert.match(ctx.events[0].payload.message, /step 2 \(Open the scope\)/);
+    assert.equal(ctx.events[0].payload.retryable, false);
+    ctx.events.length = 0;
+    out = await materializeDemo(dir, {}, ctx, { record: async () => { throw new Error("browserType.launch: Failed to launch: spawn EACCES"); } });
+    assert.equal(out.error.code, "recorder_launch_failed");
+    // A missing-executable error thrown by the launch itself (preflight raced an uninstall) is
+    // still classified, with Playwright's own path and no ASCII box.
+    ctx.events.length = 0;
+    out = await materializeDemo(dir, {}, ctx, { record: async () => { throw new Error("browserType.launch: Executable doesn't exist at /x/chromium_headless_shell-1/chrome-headless-shell\n╔══╗\n║ Looks like Playwright was just installed ║\n╚══╝"); } });
+    assert.equal(out.error.code, "recorder_browser_missing");
+    assert.equal(out.error.executable_path, "/x/chromium_headless_shell-1/chrome-headless-shell");
+    assert.doesNotMatch(ctx.events[0].payload.message, /[╔║╚]/);
+  } finally { cleanup(dir); }
+});
+
+test("materializeDemo: no spec authored yet → recording_spec_missing (typed, terminal) via the real recordDemo", async () => {
+  const dir = demoWs();
+  const ctx = demoCtx({ status: async () => okStatus });
+  try {
+    const out = await materializeDemo(dir, {}, ctx);   // real recordDemo: refuses before touching Playwright
+    assert.equal(out.error.code, "recording_spec_missing");
+    assert.equal(ctx.events[0].payload.code, "recording_spec_missing");
+    assert.match(ctx.events[0].payload.remedy, /spec run/);
+  } finally { cleanup(dir); }
+});
+
+test("materializeDemo: an install failure is typed recorder_browser_install_failed with the cause", async () => {
+  const dir = demoWs();
+  const ctx = demoCtx({ status: async () => missingStatus, install: async () => { throw new Error("ENOTFOUND cdn.playwright.dev"); }, autoInstall: true });
+  try {
+    const out = await materializeDemo(dir, {}, ctx, { record: async () => { throw new Error("must not run"); } });
+    assert.equal(out.error.code, "recorder_browser_install_failed");
+    assert.match(out.error.cause, /ENOTFOUND/);
+    assert.equal(ctx.events.filter((e) => e.payload.state === "error").length, 1, "exactly one error line");
+    assert.deepEqual(ctx.states, ["preflight", "installing", "failed"]);
   } finally { cleanup(dir); }
 });

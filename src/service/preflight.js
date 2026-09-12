@@ -16,6 +16,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
+import { recorderBrowserStatus } from "./recorder-preflight.js";
 
 const require = createRequire(import.meta.url);
 
@@ -81,10 +82,13 @@ const INSTALL_CMD = {
 
 // Playwright (ADR-0018) is the demo recorder. Unlike the sibling plugins it's an npm
 // dependency, so the durable signal is whether the package resolves from this project.
-// (Browser binaries are a second gate surfaced at record time — Playwright throws a clear
-// "Executable doesn't exist, run npx playwright install" we already wrap in recordDemo.)
+// (Browser binaries are a second gate — preflighted and provisioned by recorder-preflight.js,
+// surfaced as `recorder` below and as the typed `recorder_browser_missing` at record time.)
 // Kept OUT of `required`/`missing` so it gates only demo creation, not ordinary documents.
-export const PLAYWRIGHT_INSTALL = "npx playwright install\nplaywright-cli install --skills";
+// The hint names the BUNDLED remedy (ADR-0028): a foreign Playwright install run from some other
+// cwd fetches a different Playwright whose browsers this bridge never launches.
+// `playwright-cli install --skills` is the (unrelated) agent-skills step and stays.
+export const PLAYWRIGHT_INSTALL = "wicked-interactive doctor --install\nplaywright-cli install --skills";
 export function playwrightInstalled() {
   try { require.resolve("playwright"); return true; } catch { return false; }
 }
@@ -108,10 +112,20 @@ export async function crewAvailable(timeoutMs = 750) {
   }
 }
 
-/** Async preflight for the HTTP route: the sync snapshot plus crew reachability. */
-export async function preflightWithCrew() {
+/**
+ * Async preflight for the HTTP route: the sync snapshot plus crew reachability plus the demo
+ * RECORDER'S BROWSER (F-RECON-012) — `recorder` is the presence snapshot from
+ * recorder-preflight.js (`ok`, `browser`, `missing[]`, `install_command`, `remedy`,
+ * `auto_install`), so a skin can say "the recorder's browser is not installed" BEFORE a
+ * multi-minute spec run is spent. Additive: `ok`/`missing` still describe the plugin gate only
+ * (a missing browser gates demo recording, not ordinary documents). `recorderStatus` is
+ * injectable so route tests never probe the developer's machine.
+ */
+export async function preflightWithCrew({ recorderStatus = recorderBrowserStatus } = {}) {
   const out = preflight();
   out.crew_available = await crewAvailable();
+  try { out.recorder = await recorderStatus({ headless: true }); }
+  catch (e) { out.recorder = { ok: false, probe_error: e.message }; }
   return out;
 }
 

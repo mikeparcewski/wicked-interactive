@@ -204,3 +204,27 @@ test("GET /api/fs hides dotfiles and 404s on a missing directory", async () => {
     assert.equal((await fetch(`${base}/api/fs?path=${encodeURIComponent("/no/such/dir/xyz")}`)).status, 404);
   } finally { await cleanup(); }
 });
+
+// ── F-RECON-014: the per-doc recording state a "Re-record" control renders from ────────────
+
+test("GET /api/demo/status starts idle and carries the recorder browser snapshot (injected seam)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-srv-demo-"));
+  initWorkspace(dir, "<section><h1>Learning…</h1></section>", { kind: "demo" });
+  const recorder = { status: async () => ({ ok: false, browser: "chromium-headless-shell", missing: ["ffmpeg"], remedy: "wicked-interactive doctor --install" }) };
+  const svc = createServer({ dir, documentId: "demo-a", emit: () => {}, recorder });
+  const port = await svc.start(0);
+  try {
+    const st = await (await fetch(`http://localhost:${port}/api/demo/status`)).json();
+    assert.equal(st.document_id, "demo-a");
+    assert.equal(st.state, "idle");
+    assert.equal(st.in_flight, false);
+    assert.equal(st.error, null);
+    assert.equal(st.browser.ok, false);
+    assert.deepEqual(st.browser.missing, ["ffmpeg"]);
+    assert.deepEqual(svc.demoStatus().state, "idle");
+    // The install gate on the doc app carries the same snapshot (additive to ok/missing).
+    const pf = await (await fetch(`http://localhost:${port}/api/preflight`)).json();
+    assert.equal(pf.recorder.ok, false);
+    assert.ok("ok" in pf && "missing" in pf, "plugin gate fields unchanged");
+  } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
