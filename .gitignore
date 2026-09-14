@@ -39,3 +39,4 @@ tmp/
 # Per-checkout code graph an older wicked-core indexed in-tree (#213). The live graph is built by
 # `wicked-estate index` under the daemon state home (wicked-core#406); nothing here is source.
 .codegraph/
+!.wicked/checks.json

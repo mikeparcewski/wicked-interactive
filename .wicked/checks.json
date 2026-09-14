@@ -1,0 +1,4 @@
+{
+  "test": ["npm", "test"],
+  "timeout_s": 900
+}
