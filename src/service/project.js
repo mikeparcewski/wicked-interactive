@@ -22,9 +22,22 @@ import { atomicWrite } from "./fsstore.js";
 /** The advisory breadcrumb filename, sibling of versions.json. */
 export const BREADCRUMB = "project.json";
 
-/** The crew daemon base URL: `WICKED_CREW_API` env, else crew's default loopback port. */
-export function resolveCrewApi() {
-  return process.env.WICKED_CREW_API || "http://127.0.0.1:7701";
+/** The one message every crew-API consumer raises when the variable is unset (R-L7-a). */
+export const NO_CREW_API = "no crew API configured (set WICKED_CREW_API)";
+
+/**
+ * The crew daemon base URL from `WICKED_CREW_API`, or `null` when it is unset — never a hidden
+ * loopback default (F-RC1-122 / R-L7-a): a bridge nobody pointed at a daemon must not talk to
+ * whatever happens to sit on the default port. Every consumer fails CLOSED on `null` — the
+ * picker reports `available:false`, binding refuses, the runs probe is skipped — and says which
+ * variable to set. Crew-spawned bridges always carry the variable; a hand-started bridge on the
+ * same root that crew adopts keeps whatever env it has (stop it; the next request respawns it).
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null}
+ */
+export function resolveCrewApi(env = process.env) {
+  const v = String(env.WICKED_CREW_API ?? "").trim();
+  return v ? v : null;
 }
 
 /** Read a doc's breadcrumb; `null` when unbound (or unreadable — advisory, never fatal). */
@@ -49,6 +62,7 @@ export function writeBreadcrumb(dir, info) {
 
 /** fetch with a bounded timeout and a LOUD, actionable error for the offline case. */
 async function crewFetch(base, path, init = {}) {
+  if (!base) throw new Error(NO_CREW_API);   // fail closed: no variable, no dial (R-L7-a)
   const url = `${base.replace(/\/$/, "")}${path}`;
   let res;
   try {

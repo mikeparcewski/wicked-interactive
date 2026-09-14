@@ -44,6 +44,7 @@ import {
   normalizeOrigin, readStudioOrigin,
 } from "../src/service/serve-bridge.mjs";
 import { registerInstance, deregisterInstance } from "../src/service/instances.mjs";
+import { resolveCrewApi } from "../src/service/project.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -118,6 +119,12 @@ async function runServer(root, requested, { restart = false, standalone = false,
   registerInstance(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, version: pkgVersion() }); // cross-instance registry (the UI project switcher)
   printBanner("wicked-interactive (multi-doc) serving", root, base, standalone);
   if (!standalone) console.log(`  studio: ${origin || "not recorded yet — crew records it on start/adopt (POST /api/studio-origin)"}`);
+  // Disclose the two env-driven seams THIS process runs with (R-L7-a / R-L7-d): no crew API means
+  // project binding and the picker are OFF (fail closed, never a hidden default); the browsers
+  // path is where the recorder both installs and looks.
+  const crewApi = resolveCrewApi();
+  console.log(`  crew API: ${crewApi || "none (WICKED_CREW_API unset — project binding and the project picker are off)"}`);
+  console.log(`  recorder browsers: ${process.env.PLAYWRIGHT_BROWSERS_PATH || "Playwright default cache (PLAYWRIGHT_BROWSERS_PATH unset)"}`);
   if (requested && requested !== actualPort) console.log(`  note:   port ${requested} was taken — using ${actualPort} instead`);
   if (!wrote) console.log(`  note:   could not write .wi-serve.json — other sessions won't auto-discover this bridge`);
 
@@ -204,7 +211,9 @@ async function runDoctor(args) {
   }
   const pl = report.plugins;
   if (pl && !pl.error) say(`sibling plugins: ${pl.ok ? "ok" : `missing ${pl.missing.join(", ")}`}${pl.playwright?.detected ? "" : " · playwright package NOT resolvable"}`);
-  say(`crew daemon: ${report.crew_available ? "reachable" : "not reachable (governed answering unavailable; the bridge still serves)"}`);
+  say(`crew daemon: ${report.crew_available ? "reachable"
+    : resolveCrewApi() ? "not reachable (governed answering unavailable; the bridge still serves)"
+    : "not configured (WICKED_CREW_API unset — project binding and the picker are off; the bridge still serves)"}`);
   return recorder.ok ? 0 : 1;
 }
 

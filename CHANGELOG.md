@@ -4,7 +4,52 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Bus identity per served root — two bridges on one bus no longer share a cursor**
+  (F-RC1-120, #227; DES-L7 §5 I1). Every bridge registered the FIXED plugin names
+  `wi-service-bridge` / `wi-service-commands`; wicked-bus keys one cursor per (plugin, filter),
+  so a second bridge on another docs root (a crew project partition, a second daemon) drained
+  the first root's commands — and, finding no such doc under its root, **acked them silently**:
+  "I asked for a demo and nothing recorded — the other project's bridge ate it." Now the plugin
+  names are `wi-service-bridge@<h8>` / `wi-service-commands@<h8>`, `h8` = first 8 hex of sha256
+  over the resolved root (`bridgeRootId`), so each root holds its own two cursors (`latest`
+  init, live events only). Legacy rows stay inert — never polled, never deregistered (a
+  still-running 0.9.2 bridge would hit WB-006). `wicked-interactive serve` prints `bus identity:
+  <h8>`.
+- **Frames for a doc that is not under this root are refused loudly, BEFORE the SSE fan-out**
+  (#210/#278 "the thread forgets"). The bridge handler fanned every bus frame to its SSE clients
+  and tried the transcript write under the wrong root (ENOENT, swallowed) before checking the
+  doc; the command handler acked unknown docs with a bare `return`. Both now `refuse()` first:
+  `GET /api/health` gains `plugin: {bridge, commands}` and a counter `unknown_doc_refused`, and
+  one `warn` line per (handler, doc) names the type, doc and root. On any host where two roots
+  share a bus, `unknown_doc_refused ≥ 1` is EXPECTED — it is the mechanism proof, not an alarm.
+- **No hidden crew-API default — `WICKED_CREW_API` unset fails closed everywhere** (F-RC1-122,
+  R-L7-a). Six sites defaulted to `http://127.0.0.1:7701`, so a bridge nobody pointed at a daemon
+  talked to whatever sat on that port. `resolveCrewApi()` now returns `null` when unset and every
+  consumer says so: `GET /api/preflight.crew_available` = `false` (nothing dialed);
+  `GET /api/crew/projects` → `{available:false, projects:[], reason:"WICKED_CREW_API unset"}`;
+  `POST /api/crew/projects` → **503** `no crew API configured (set WICKED_CREW_API)`;
+  `POST /api/docs` with `project` → **502** with the same message and nothing created;
+  `GET /api/docs/:doc/activity` skips the runs probe (`run: null`); `wicked-interactive adopt`
+  without `--crew-api` → exit 1 with the message; `serve` prints `crew API: none (WICKED_CREW_API
+  unset — project binding and the project picker are off)`. Crew-spawned bridges always carry the
+  variable; a hand-started bridge crew adopts keeps whatever env it has — stop it and let the
+  next request respawn it.
+- **`install_command` and the doctor remedy carry `PLAYWRIGHT_BROWSERS_PATH`** (F-RC1-121, #228,
+  R-L7-d). The variable moves where Playwright LOOKS, not only where it installs, so a bare
+  `wicked-interactive doctor --install` run in a terminal filled the GLOBAL cache while a bridge
+  spawned with the variable kept reporting the browser missing. When the variable is in force,
+  `install_command` = `PLAYWRIGHT_BROWSERS_PATH="<path>" node "<cli>" install <browser>` and
+  `remedy` = `PLAYWRIGHT_BROWSERS_PATH="<path>" wicked-interactive doctor --install` (wire,
+  doctor, and the classified launch errors alike); `serve` prints `recorder browsers: <path>`.
+- **Doc-name slugs never end in `-`** (#212): `slugify` cut the 64-char limit AFTER stripping
+  edge hyphens, so a cut that fell on a separator shipped `…-`; it now cuts, then strips.
+
+### Removed
+- **`wicked-web` runtime dependency** (L10-10). The site chrome was pinned in the ROOT
+  `package.json` although only `site/` (its own package) consumes it — every `npm install` of the
+  bridge pulled the whole Astro/Vite tree (279 packages) for nothing. Removed; `site/package.json`
+  keeps its own pin.
 
 ## [0.9.2] — 2026-09-13
 
