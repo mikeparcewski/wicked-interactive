@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.9.3] — 2026-09-14
+
 ### Fixed
 - **Bus identity per served root — two bridges on one bus no longer share a cursor**
   (F-RC1-120, #227; DES-L7 §5 I1). Every bridge registered the FIXED plugin names
@@ -22,7 +26,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   doc; the command handler acked unknown docs with a bare `return`. Both now `refuse()` first:
   `GET /api/health` gains `plugin: {bridge, commands}` and a counter `unknown_doc_refused`, and
   one `warn` line per (handler, doc) names the type, doc and root. On any host where two roots
-  share a bus, `unknown_doc_refused ≥ 1` is EXPECTED — it is the mechanism proof, not an alarm.
+  share a bus, `unknown_doc_refused ≥ 1` is EXPECTED — it is the mechanism proof, not an alarm;
+  each handler counts its own refusal (a foreign command is refused by both, so it counts twice).
+  An own-root transcript write that fails now warns once per doc instead of staying silent, and
+  `wicked-interactive create --help` no longer describes the deleted loopback default.
 - **No hidden crew-API default — `WICKED_CREW_API` unset fails closed everywhere** (F-RC1-122,
   R-L7-a). Six sites defaulted to `http://127.0.0.1:7701`, so a bridge nobody pointed at a daemon
   talked to whatever sat on that port. `resolveCrewApi()` now returns `null` when unset and every
@@ -218,3 +225,6 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
+
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.2...v0.9.3
