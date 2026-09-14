@@ -443,16 +443,19 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // Frames for a doc that is NOT under this root (another bridge's doc on the shared bus, or a
   // malformed id) are REFUSED loudly instead of acked silently: counted on /api/health and
   // warned once per (handler, doc). On any two-root host `unknown_doc_refused ≥ 1` is EXPECTED —
-  // every foreign frame counts once; it is the mechanism proof, not an alarm (hence warn level).
+  // each handler counts its own refusal (a foreign COMMAND is refused by both, so it counts
+  // twice); it is the mechanism proof, not an alarm (hence warn level).
   let unknownDocRefused = 0;
-  const refusedWarned = new Set();   // "<handler>:<doc>" — bounded like the status maps
+  const warnedOnce = new Set();   // "<kind>:<doc>" — bounded like the status maps
+  function warnOnce(key, message) {
+    if (warnedOnce.has(key)) return;
+    warnedOnce.add(key);
+    if (warnedOnce.size > 500) warnedOnce.delete(warnedOnce.values().next().value);
+    console.warn(`[wi-service ${rootId}] ${message}`);
+  }
   function refuse(handler, name, event) {
     unknownDocRefused += 1;
-    const key = `${handler}:${name || "(none)"}`;
-    if (refusedWarned.has(key)) return;
-    refusedWarned.add(key);
-    if (refusedWarned.size > 500) refusedWarned.delete(refusedWarned.values().next().value);
-    console.warn(`[wi-service ${rootId}] refused ${event?.event_type ?? "?"} for doc ${name || "(none)"}: not under ${root}`);
+    warnOnce(`${handler}:${name || "(none)"}`, `refused ${event?.event_type ?? "?"} for doc ${name || "(none)"}: not under ${root}`);
   }
   const top = express();
   top.use(express.json({ limit: "5mb" }));
@@ -656,7 +659,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
           }
         }
       }
-    } catch { /* transcript logging is best-effort */ }
+    } catch (e) {
+      // Best-effort, but no longer silent (DES §5 ":615"): an OWN-root transcript write that fails
+      // warns once per doc — the foreign-root ENOENT that used to land here is closed by the guard.
+      warnOnce(`transcript:${name}`, `transcript write failed for doc ${name}: ${e?.message ?? e}`);
+    }
   }
 
   // Commands: materialize state. Drops our own facts (loop safety) and non-command types.

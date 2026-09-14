@@ -30,7 +30,8 @@ Options:
                               this is a loud error, and nothing is created.
   --name <doc-name>           Doc dir name for --project (default: slug of the title)
   --root <docs-dir>           Serve root for --project (default: ~/wicked-interactive/docs)
-  --crew-api <base-url>       Crew daemon base URL (default: WICKED_CREW_API or http://127.0.0.1:7701)
+  --crew-api <base-url>       Crew daemon base URL (default: WICKED_CREW_API; unset ⇒ --project is
+                              refused — there is no loopback default)
   --help                      Show this help
 
 Environment:
