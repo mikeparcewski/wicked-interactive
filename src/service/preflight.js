@@ -17,6 +17,7 @@ import { join, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import { recorderBrowserStatus } from "./recorder-preflight.js";
+import { resolveCrewApi } from "./project.js";
 
 const require = createRequire(import.meta.url);
 
@@ -100,7 +101,9 @@ export function playwrightInstalled() {
  * bridge so the two seams cannot disagree about where crew lives.
  */
 export async function crewAvailable(timeoutMs = 750) {
-  const base = (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+  const configured = resolveCrewApi();
+  if (!configured) return false;   // fail closed (R-L7-a): unset ⇒ not available, and nothing is dialed
+  const base = configured.replace(/\/+$/, "");
   try {
     // AbortSignal.timeout (same idiom as project.js): the timer is owned by the signal, so a
     // fast failure (connection refused) leaves no dangling handle to accumulate under

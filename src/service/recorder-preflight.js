@@ -52,6 +52,23 @@ export const DEFAULT_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 export const DOCTOR_REMEDY = "wicked-interactive doctor --install";
 
 /**
+ * The env prefix a copy-pasteable remedy needs so it provisions into the SAME cache this bridge
+ * launches from (F-RC1-121 / R-L7-d). `PLAYWRIGHT_BROWSERS_PATH` moves where Playwright LOOKS, not
+ * only where it installs — a bare `doctor --install` run in a terminal fills the global cache while
+ * a bridge spawned with the variable keeps looking under it and reports the browser missing.
+ * Empty when the variable is unset (the default cache needs no prefix). POSIX `VAR=value cmd` form.
+ */
+export function browsersPathPrefix(env = process.env) {
+  const p = String(env.PLAYWRIGHT_BROWSERS_PATH ?? "").trim();
+  return p ? `PLAYWRIGHT_BROWSERS_PATH="${p.replace(/"/g, '\\"')}" ` : "";
+}
+
+/** `DOCTOR_REMEDY`, prefixed with the browsers path when one is in force — the remedy the wire and the doctor print. */
+export function doctorRemedy(env = process.env) {
+  return `${browsersPathPrefix(env)}${DOCTOR_REMEDY}`;
+}
+
+/**
  * A typed recorder failure. Deterministic by construction (`retryable: false`): the same spec on the
  * same machine replays the same failure, so the fix is the `remedy`, not a retry.
  */
@@ -107,9 +124,13 @@ export function recorderInstallTimeoutMs(env = process.env) {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_INSTALL_TIMEOUT_MS;
 }
 
-/** The exact command that provisions `browser` for THIS bridge's Playwright (copy-pasteable). */
-export function recorderInstallCommand(browser, cli = playwrightCliPath()) {
-  return cli ? `node "${cli}" install ${browser}` : `npx playwright@${playwrightVersion() || "latest"} install ${browser}`;
+/**
+ * The exact command that provisions `browser` for THIS bridge's Playwright (copy-pasteable), carrying
+ * the `PLAYWRIGHT_BROWSERS_PATH` prefix whenever `env` has one so it lands where this bridge looks.
+ */
+export function recorderInstallCommand(browser, cli = playwrightCliPath(), env = process.env) {
+  const cmd = cli ? `node "${cli}" install ${browser}` : `npx playwright@${playwrightVersion() || "latest"} install ${browser}`;
+  return `${browsersPathPrefix(env)}${cmd}`;
 }
 
 /**
@@ -193,8 +214,8 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
     playwright_version: playwrightVersion(),
     cli,
     browsers_path: env.PLAYWRIGHT_BROWSERS_PATH || null,
-    install_command: recorderInstallCommand(browser, cli),
-    remedy: DOCTOR_REMEDY,
+    install_command: recorderInstallCommand(browser, cli, env),
+    remedy: doctorRemedy(env),
     auto_install: recorderAutoInstallEnabled(env),
     checked_at: new Date().toISOString(),
   };
@@ -312,11 +333,11 @@ export function classifyRecorderError(err, { headless = true } = {}) {
   const exe = /Executable doesn't exist at (.+?)(?:\r?\n|$)/.exec(msg);
   if (exe) {
     return new RecorderError(C.BROWSER_MISSING,
-      `the recorder's browser is not installed (Playwright expected ${exe[1]}). Run \`${DOCTOR_REMEDY}\` (or \`${recorderInstallCommand(browser)}\`), then Re-record.`,
-      { remedy: DOCTOR_REMEDY, browser, executable_path: exe[1], install_command: recorderInstallCommand(browser), playwright_version: playwrightVersion(), cause: firstLine(msg) });
+      `the recorder's browser is not installed (Playwright expected ${exe[1]}). Run \`${doctorRemedy()}\` (or \`${recorderInstallCommand(browser)}\`), then Re-record.`,
+      { remedy: doctorRemedy(), browser, executable_path: exe[1], install_command: recorderInstallCommand(browser), playwright_version: playwrightVersion(), cause: firstLine(msg) });
   }
   if (/Playwright is not installed/i.test(msg)) {
-    return new RecorderError(C.BROWSER_MISSING, msg, { remedy: DOCTOR_REMEDY, browser, install_command: recorderInstallCommand(browser), cause: firstLine(msg) });
+    return new RecorderError(C.BROWSER_MISSING, msg, { remedy: doctorRemedy(), browser, install_command: recorderInstallCommand(browser), cause: firstLine(msg) });
   }
   if (/no demo\.spec\.mjs authored/i.test(msg)) {
     return new RecorderError(C.SPEC_MISSING,

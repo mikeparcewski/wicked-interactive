@@ -260,3 +260,50 @@ test("adopt re-registers memberships from breadcrumbs (control-store loss / new 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ── fail closed (R-L7-a): WICKED_CREW_API unset ⇒ no hidden 127.0.0.1:7701 default anywhere ──
+
+test("project set but WICKED_CREW_API unset: 502 naming the variable, nothing created, nothing dialed", async () => {
+  const prev = process.env.WICKED_CREW_API;
+  delete process.env.WICKED_CREW_API;
+  const { root, base, cleanup } = await boot();
+  const realFetch = globalThis.fetch;
+  const dialed = [];
+  globalThis.fetch = async (url, init) => { const u = String(url); if (!u.startsWith(base)) dialed.push(u); return realFetch(url, init); };
+  try {
+    const r = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "unset-bound", html: "<h1>x</h1><p>y</p>", project: "proj_mock1" }),
+    });
+    assert.equal(r.status, 502);
+    assert.match((await r.json()).error, /no crew API configured \(set WICKED_CREW_API\)/);
+    assert.equal(existsSync(join(root, "unset-bound")), false, "a refused bind leaves no doc dir");
+    assert.deepEqual(dialed, [], "the bind never guessed a daemon address");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    await cleanup();
+  }
+});
+
+test("adopt without --crew-api and WICKED_CREW_API unset exits 1 with the message; breadcrumbs untouched", async () => {
+  const prev = process.env.WICKED_CREW_API;
+  delete process.env.WICKED_CREW_API;
+  const root = mkdtempSync(join(tmpdir(), "wi-adopt-unset-"));
+  const bound = join(root, "restored-doc");
+  mkdirSync(bound, { recursive: true });
+  initWorkspace(bound, "<h1>Restored</h1><p>x</p>");
+  writeBreadcrumb(bound, { project_id: "proj_mock1", project_name: "keystone", crew_api: "http://old-machine:1", attached_at: "2026-01-01T00:00:00Z" });
+  const errs = [];
+  const origErr = console.error;
+  console.error = (...a) => errs.push(a.join(" "));
+  try {
+    assert.equal(await runAdopt({ root }), 1);
+    assert.match(errs.join("\n"), /no crew API configured \(set WICKED_CREW_API\)/);
+    assert.equal(loadBreadcrumb(bound).crew_api, "http://old-machine:1", "no re-registration was attempted anywhere");
+  } finally {
+    console.error = origErr;
+    if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    rmSync(root, { recursive: true, force: true });
+  }
+});

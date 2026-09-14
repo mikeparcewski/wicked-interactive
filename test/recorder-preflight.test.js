@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  RECORDER_ERROR_CODES, RecorderError, INSTALL_MARKER, DOCTOR_REMEDY,
+  RECORDER_ERROR_CODES, RecorderError, INSTALL_MARKER, DOCTOR_REMEDY, doctorRemedy, browsersPathPrefix,
   recorderBrowserName, recorderAutoInstallEnabled, recorderInstallTimeoutMs, recorderInstallCommand,
   parseDryRun, dryRunProbe, recorderBrowserStatus, ensureRecorderBrowser, invalidateRecorderStatusCache,
   classifyRecorderError, recorderErrorPayload, missingBrowserError, playwrightCliPath, playwrightVersion,
@@ -72,8 +72,11 @@ test("status: missing components → ok:false with the typed remedy fields (inje
   assert.equal(st.browser, "chromium-headless-shell");
   assert.deepEqual(st.missing, ["chromium-headless-shell", "ffmpeg"]);
   assert.equal(st.browsers_path, "/fake");
-  assert.equal(st.remedy, DOCTOR_REMEDY);
-  assert.match(st.install_command, /install chromium-headless-shell$/);
+  // PLAYWRIGHT_BROWSERS_PATH in force ⇒ BOTH copy-pasteable lines carry it (F-RC1-121 / R-L7-d):
+  // a bare `doctor --install` would fill the global cache while this bridge looks under /fake.
+  assert.equal(st.remedy, `PLAYWRIGHT_BROWSERS_PATH="/fake" ${DOCTOR_REMEDY}`);
+  assert.equal(st.remedy, doctorRemedy({ PLAYWRIGHT_BROWSERS_PATH: "/fake" }));
+  assert.match(st.install_command, /^PLAYWRIGHT_BROWSERS_PATH="\/fake" node ".*" install chromium-headless-shell$/);
   assert.match(st.message, /not installed/);
   assert.match(st.message, /doctor --install/);
   assert.equal(typeof st.playwright_version, "string");
@@ -245,7 +248,26 @@ test("missingBrowserError builds the typed error from a not-ok status", async ()
   assert.equal(e.code, C.BROWSER_MISSING);
   assert.deepEqual(e.missing, ["chromium-headless-shell", "ffmpeg"]);
   assert.equal(e.browsers_path, "/fake");
-  assert.equal(e.remedy, DOCTOR_REMEDY);
+  assert.equal(e.remedy, doctorRemedy({ PLAYWRIGHT_BROWSERS_PATH: "/fake" }), "the typed error carries the prefixed remedy");
+  assert.match(e.install_command, /^PLAYWRIGHT_BROWSERS_PATH="\/fake" /);
+});
+
+test("install_command / remedy: the PLAYWRIGHT_BROWSERS_PATH prefix appears iff the variable is set (R-L7-d)", () => {
+  const cli = playwrightCliPath();
+  // Unset ⇒ no prefix: the default cache needs none, and the remedy stays the bare doctor line.
+  assert.equal(browsersPathPrefix({}), "");
+  assert.equal(doctorRemedy({}), DOCTOR_REMEDY);
+  assert.equal(recorderInstallCommand("chromium-headless-shell", cli, {}), `node "${cli}" install chromium-headless-shell`);
+  // Set ⇒ the POSIX `VAR=value cmd` prefix, value quoted (state-home paths may carry spaces).
+  const env = { PLAYWRIGHT_BROWSERS_PATH: "/state home/interactive/recorder-browsers" };
+  assert.equal(browsersPathPrefix(env), 'PLAYWRIGHT_BROWSERS_PATH="/state home/interactive/recorder-browsers" ');
+  assert.equal(doctorRemedy(env), 'PLAYWRIGHT_BROWSERS_PATH="/state home/interactive/recorder-browsers" wicked-interactive doctor --install');
+  assert.equal(recorderInstallCommand("chromium-headless-shell", cli, env),
+    `PLAYWRIGHT_BROWSERS_PATH="/state home/interactive/recorder-browsers" node "${cli}" install chromium-headless-shell`);
+  // Blank / whitespace counts as unset — never an empty `PLAYWRIGHT_BROWSERS_PATH=""` prefix.
+  assert.equal(browsersPathPrefix({ PLAYWRIGHT_BROWSERS_PATH: "  " }), "");
+  // The npx fallback (no bundled cli) is prefixed the same way.
+  assert.match(recorderInstallCommand("chromium", null, env), /^PLAYWRIGHT_BROWSERS_PATH="[^"]+" npx playwright@/);
 });
 
 // ── the real bundled CLI, against an EMPTY temp browsers path (dry-run: nothing is downloaded) ──
@@ -254,8 +276,8 @@ test("bundled Playwright resolves: cli.js path + version + install command point
   const cli = playwrightCliPath();
   assert.ok(cli && /playwright[\\/]cli\.js$/.test(cli), cli);
   assert.match(playwrightVersion(), /^\d+\.\d+\.\d+/);
-  assert.equal(recorderInstallCommand("chromium-headless-shell"), `node "${cli}" install chromium-headless-shell`);
-  assert.match(recorderInstallCommand("chromium", null), /^npx playwright@/, "no cli → an explicit pinned npx fallback");
+  assert.equal(recorderInstallCommand("chromium-headless-shell", cli, {}), `node "${cli}" install chromium-headless-shell`);
+  assert.match(recorderInstallCommand("chromium", null, {}), /^npx playwright@/, "no cli → an explicit pinned npx fallback");
 });
 
 test("real dry-run probe: names the headless shell + ffmpeg under an injected (empty) browsers path → missing; a marker makes it present", async () => {

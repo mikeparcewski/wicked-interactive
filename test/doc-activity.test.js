@@ -137,6 +137,25 @@ test("a terminal crew run is not activity", async () => {
   await crew.close();
 });
 
+test("WICKED_CREW_API unset: the runs probe is skipped (run: null) and nothing is dialed — fail closed (R-L7-a)", async () => {
+  await withCrewApi(undefined, async () => {
+    const { createDoc, activity, cleanup } = await boot();
+    const realFetch = globalThis.fetch;
+    const dialed = [];   // any crew-shaped call (/api/v1/…) from the bridge
+    globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes("/api/v1/")) dialed.push(u); return realFetch(url, init); };
+    try {
+      assert.equal((await createDoc("unset-doc")).status, 200);
+      const r = await activity("unset-doc");
+      assert.equal(r.status, 200);
+      assert.deepEqual(await r.json(), { document_id: "unset-doc", active: false, status: null, run: null });
+      assert.deepEqual(dialed, [], "no default-port probe");
+    } finally {
+      globalThis.fetch = realFetch;
+      await cleanup();
+    }
+  });
+});
+
 test("crew unreachable degrades to inactive — never an error", async () => {
   await withCrewApi("http://127.0.0.1:1", async () => {
     const { createDoc, activity, cleanup } = await boot();

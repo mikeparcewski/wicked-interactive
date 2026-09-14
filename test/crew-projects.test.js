@@ -115,6 +115,31 @@ test("POST /api/crew/projects returns a 502 {error} when crew is unreachable", a
   }
 });
 
+test("WICKED_CREW_API unset: GET is {available:false, projects:[], reason}, POST is a 503 naming the variable — and nothing is dialed (R-L7-a)", async () => {
+  const prev = process.env.WICKED_CREW_API;
+  delete process.env.WICKED_CREW_API;
+  const { base, cleanup } = await boot();
+  const realFetch = globalThis.fetch;
+  const dialed = [];   // every fetch that is NOT this test talking to its own bridge
+  globalThis.fetch = async (url, init) => { const u = String(url); if (!u.startsWith(base)) dialed.push(u); return realFetch(url, init); };
+  try {
+    const list = await fetch(`${base}/api/crew/projects`);
+    assert.equal(list.status, 200, "the picker read stays a soft answer");
+    assert.deepEqual(await list.json(), { available: false, projects: [], reason: "WICKED_CREW_API unset" });
+    const create = await fetch(`${base}/api/crew/projects`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "keystone" }),
+    });
+    assert.equal(create.status, 503, "a write with no daemon named is refused up front, not a 502 after a dial");
+    assert.match((await create.json()).error, /no crew API configured \(set WICKED_CREW_API\)/);
+    assert.deepEqual(dialed, [], "no hidden loopback default was contacted");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+    await cleanup();
+  }
+});
+
 test("POST /api/crew/projects rejects a blank name without dialing crew", async () => {
   const crew = await stubCrew();
   const prev = process.env.WICKED_CREW_API;

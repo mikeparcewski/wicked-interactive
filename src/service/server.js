@@ -11,8 +11,8 @@
 import express from "express";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { randomUUID, createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
@@ -32,7 +32,7 @@ import {
 } from "./recorder-preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
-import { bindDocToProject, projectIdFor } from "./project.js";
+import { bindDocToProject, projectIdFor, resolveCrewApi, NO_CREW_API } from "./project.js";
 import { resolveLearnedTheme, learnedThemePath } from "./theme-source.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -401,8 +401,32 @@ const DOC_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/; // slug-safe, no path separators
 const PENDING_RETIRE_EVENT = "retired-event-pending.json";
 
 function slugify(name) {
+  // Cut THEN strip (#212): the 64-char cut can land on a separator, so stripping edge hyphens
+  // must come last — the other order shipped names like `…-` that DOC_NAME happily accepts.
   return String(name || "").toLowerCase().trim().replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+    .replace(/-+/g, "-").slice(0, 64).replace(/^-|-$/g, "");
+}
+
+/**
+ * Bus identity for a served root (F-RC1-120 / D-19 R20): the first 8 hex of sha256 over the
+ * RESOLVED root. Two bridges on one bus db used to share the fixed plugin names — and with
+ * them ONE cursor per (plugin, filter) — so the wrong bridge consumed (and silently acked) the
+ * other root's commands. The plugin name is the bus's existing identity dimension (the filter
+ * is `type@domain` and cannot carry the root), so keying it by root needs no new mechanism.
+ * realpath first (symlinked roots collapse to one identity); a root that cannot be realpath'd
+ * falls back to its absolute form. A moved root is a NEW identity: fresh cursors at `latest`,
+ * the old rows stay inert (never polled, never deregistered — a still-running 0.9.2 bridge
+ * on the legacy names would hit WB-006 if we did).
+ */
+export function bridgeRootId(root) {
+  let canonical;
+  try { canonical = realpathSync(root); } catch { canonical = resolve(root); }
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 8);
+}
+/** The two per-root plugin names a bridge registers on the bus. */
+export function bridgePluginNames(root) {
+  const id = bridgeRootId(root);
+  return Object.freeze({ bridge: `wi-service-bridge@${id}`, commands: `wi-service-commands@${id}` });
 }
 
 /** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
@@ -413,6 +437,23 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
   const recorderAutoInstall = () => (recorder.autoInstall ?? recorderAutoInstallEnabled());
   mkdirSync(root, { recursive: true });
+  // Per-root bus identity (see bridgeRootId) — mkdirSync above guarantees realpath can resolve.
+  const rootId = bridgeRootId(root);
+  const PLUGIN = bridgePluginNames(root);
+  // Frames for a doc that is NOT under this root (another bridge's doc on the shared bus, or a
+  // malformed id) are REFUSED loudly instead of acked silently: counted on /api/health and
+  // warned once per (handler, doc). On any two-root host `unknown_doc_refused ≥ 1` is EXPECTED —
+  // every foreign frame counts once; it is the mechanism proof, not an alarm (hence warn level).
+  let unknownDocRefused = 0;
+  const refusedWarned = new Set();   // "<handler>:<doc>" — bounded like the status maps
+  function refuse(handler, name, event) {
+    unknownDocRefused += 1;
+    const key = `${handler}:${name || "(none)"}`;
+    if (refusedWarned.has(key)) return;
+    refusedWarned.add(key);
+    if (refusedWarned.size > 500) refusedWarned.delete(refusedWarned.values().next().value);
+    console.warn(`[wi-service ${rootId}] refused ${event?.event_type ?? "?"} for doc ${name || "(none)"}: not under ${root}`);
+  }
   const top = express();
   top.use(express.json({ limit: "5mb" }));
 
@@ -578,9 +619,12 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // probe below, never to a wrong answer.
   const lastStatus = new Map();
   function onBridge(event) {
-    bridgeSend(event);
+    // Guard BEFORE the fan-out (review F6): a foreign root's frame must reach neither this
+    // bridge's SSE clients nor its transcript writer (which would ENOENT under the wrong root
+    // while the owning bridge never gets the line — the "thread forgets" half of #210/#278).
     const name = event.payload?.document_id;
-    if (!name || !DOC_NAME.test(name)) return;
+    if (!name || !DOC_NAME.test(name) || !isExistingDoc(name)) { refuse("bridge", name, event); return; }
+    bridgeSend(event);
     const dir = docDir(name);
     try {
       if (event.event_type === "wicked.interactive.chat.posted") {
@@ -623,11 +667,14 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const key = event.idempotency_key;
     if (key && processedKeys.has(key)) return;
     const name = event.payload?.document_id;
-    if (!name || !DOC_NAME.test(name)) return;
+    if (!name || !DOC_NAME.test(name)) { refuse("commands", name, event); return; }
     if (retiredInfo(name)) return;  // retired doc (#189) — the tombstone is final; ack, don't DLQ
     let entry = docs.get(name);
     if (!entry && isExistingDoc(name)) entry = await mountDoc(name);
-    if (!entry) return;  // unknown doc — nothing to materialize against
+    // Unknown doc: nothing to materialize against HERE — the doc belongs to another bridge's root
+    // (or nowhere). Ack loudly (counter + warn), never silently: the silent ack is how bridge B
+    // "ate" root A's demo.requested (F-RC1-120). Not thrown — a retry/DLQ cannot make it ours.
+    if (!entry) { refuse("commands", name, event); return; }
     await entry.svc.runCommand(event);
     if (key) processedKeys.add(key);
   }
@@ -635,14 +682,23 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // ── Top-level endpoints ─────────────────────────────────────────────────────
   // Identity probe (ADR-0022): says WHICH instance this is (the docs root it serves) so a
   // launching agent can tell "my bridge is already up" from "someone else is on this port".
-  top.get("/api/health", (_req, res) => res.json({ ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null }));
+  // `plugin` = this bridge's per-root bus identity; `unknown_doc_refused` = frames for docs not
+  // under this root that were refused (≥ 1 is expected wherever two roots share a bus).
+  top.get("/api/health", (_req, res) => res.json({
+    ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null,
+    plugin: PLUGIN, unknown_doc_refused: unknownDocRefused,
+  }));
   // Crew projects for the creation wizard's picker (#162): docs must be project-bound to route
   // through the governed crew, and the ONLY place a browser user can bind is at creation. Proxied
   // here (same-origin) because the frontend cannot call the crew API cross-origin. `available:
   // false` (crew down/absent) renders the wizard without a picker — the assist-only path.
-  const crewApiBase = () => (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+  // `null` when WICKED_CREW_API is unset (R-L7-a): every consumer below fails closed and names
+  // the variable — no hidden loopback default, so a bridge nobody pointed at a daemon never
+  // talks to whatever sits on the default port.
+  const crewApiBase = () => { const b = resolveCrewApi(); return b ? b.replace(/\/+$/, "") : null; };
   top.get("/api/crew/projects", async (_req, res) => {
     const base = crewApiBase();
+    if (!base) return res.json({ available: false, projects: [], reason: "WICKED_CREW_API unset" });
     try {
       const r = await fetch(`${base}/api/v1/projects`, { signal: AbortSignal.timeout(750) });
       if (!r.ok) return res.json({ available: false, projects: [] });
@@ -663,6 +719,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ error: "a project name is required" });
     const base = crewApiBase();
+    if (!base) return res.status(503).json({ error: NO_CREW_API });
     try {
       const r = await fetch(`${base}/api/v1/projects`, {
         method: "POST",
@@ -699,17 +756,20 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   async function activityFor(name) {
     const status = lastStatus.get(name) || null;
     let run = null;
-    try {
-      const r = await fetch(`${crewApiBase()}/api/v1/runs`, { signal: AbortSignal.timeout(750) });
-      if (r.ok) {
-        const body = await r.json();
-        const marker = `the wicked-interactive document "${name}"`;
-        const hit = (body.runs || []).find((v) =>
-          typeof v?.session?.problem === "string" && v.session.problem.includes(marker) &&
-          RUN_ACTIVE_STATUSES.has(v.session.status));
-        if (hit) run = { id: hit.session.id, workflow_id: hit.session.workflow_id, status: hit.session.status };
-      }
-    } catch { /* crew unreachable — the status snapshot is still the honest answer */ }
+    const base = crewApiBase();
+    if (base) {   // unset ⇒ the probe is skipped outright (run: null), never dialed at a default
+      try {
+        const r = await fetch(`${base}/api/v1/runs`, { signal: AbortSignal.timeout(750) });
+        if (r.ok) {
+          const body = await r.json();
+          const marker = `the wicked-interactive document "${name}"`;
+          const hit = (body.runs || []).find((v) =>
+            typeof v?.session?.problem === "string" && v.session.problem.includes(marker) &&
+            RUN_ACTIVE_STATUSES.has(v.session.status));
+          if (hit) run = { id: hit.session.id, workflow_id: hit.session.workflow_id, status: hit.session.status };
+        }
+      } catch { /* crew unreachable — the status snapshot is still the honest answer */ }
+    }
     // Active = crew reports a live run, OR the last pulse is fresh (covers the assist-skill
     // answerer, which has no crew run, and a crew API the service can't reach).
     const at = status ? Date.parse(status.at) : NaN;
@@ -1054,8 +1114,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     await drainAllPendingRetireEvents(); // recover any doc.retired lost to a previous crash (#198)
     // Two subscriptions on the one bus: the bridge (fan-out + transcript, best-effort) and
     // the command loop (materialize, retry+DLQ). cursor_init "latest" — live events only.
-    subs.push(startSubscription({ plugin: "wi-service-bridge", filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
-    subs.push(startSubscription({ plugin: "wi-service-commands", filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
+    // Plugin names are keyed by the served root (bridgeRootId) so two bridges on one bus db
+    // hold two cursors each — never one shared cursor that the wrong bridge drains.
+    console.log(`[wi-service] bus identity: ${rootId} (root ${root})`);
+    subs.push(startSubscription({ plugin: PLUGIN.bridge, filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
+    subs.push(startSubscription({ plugin: PLUGIN.commands, filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
     return new Promise((res, rej) => {
       topServer = top.listen(port, () => res(topServer.address().port));
       topServer.once("error", rej); // surface EADDRINUSE as a rejection so the CLI can fall forward (ADR-0022)
@@ -1071,5 +1134,8 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     closeBus();
   }
 
-  return { app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; } };
+  return {
+    app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; },
+    plugin: PLUGIN, rootId, get unknownDocRefused() { return unknownDocRefused; },
+  };
 }
