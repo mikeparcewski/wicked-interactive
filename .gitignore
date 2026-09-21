@@ -40,3 +40,4 @@ tmp/
 # `wicked-estate index` under the daemon state home (wicked-core#406); nothing here is source.
 .codegraph/
 !.wicked/checks.json
+.product/
