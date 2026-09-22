@@ -1,0 +1,607 @@
+<style data-wi-theme="corporate-light">
+:root{--wi-bg:#FFFFFF;--wi-surface:#F8FAFC;--wi-primary:#1E3A5F;--wi-secondary:#2563EB;--wi-accent:#0891B2;--wi-text:#1E293B;--wi-text-secondary:#64748B;--wi-muted:#94A3B8;--wi-border:#E2E8F0;--wi-font-heading:Calibri;--wi-font-body:Calibri;--wi-font-mono:Consolas;--wi-size-title:44px;--wi-size-heading:34px;--wi-size-body:18px;--wi-card-bg:#FFFFFF;--wi-card-radius:8px;--wi-card-padding:24px;--wi-card-shadow:0 1px 3px rgba(0,0,0,0.1);}
+body{font-family:var(--wi-font-body),system-ui,-apple-system,sans-serif;color:var(--wi-text);background:var(--wi-bg);}
+h1,h2,h3,h4,h5,h6{font-family:var(--wi-font-heading),system-ui,sans-serif;color:var(--wi-primary);line-height:1.2;}
+h1{font-size:var(--wi-size-title);}
+h2{font-size:var(--wi-size-heading);}
+a{color:var(--wi-secondary);}
+[data-card]{background:var(--wi-card-bg);border:1px solid var(--wi-border);border-radius:var(--wi-card-radius);padding:var(--wi-card-padding);box-shadow:var(--wi-card-shadow);}
+</style>
+
+
+<meta charset="UTF-8">
+<title>Wicked Studio — Product Brochure</title>
+<style>
+  /* ─── Design tokens ─── */
+  :root {
+    --bg:           #09090f;
+    --bg-card:      #0f0f1a;
+    --bg-elevated:  #141425;
+    --violet:       #7c3aed;
+    --indigo:       #4f46e5;
+    --violet-light: #a78bfa;
+    --indigo-light: #818cf8;
+    --amber:        #f59e0b;
+    --amber-dim:    #78350f;
+    --emerald:      #10b981;
+    --emerald-dim:  #064e3b;
+    --red:          #ef4444;
+    --text:         #e2e8f0;
+    --text-muted:   #94a3b8;
+    --text-subtle:  #475569;
+    --border:       #1e1e30;
+    --border-mid:   #2a2a42;
+    --mono: 'JetBrains Mono','Fira Code','Cascadia Code','Courier New',monospace;
+    --sans: 'Inter',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 9pt;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    background: var(--bg);
+    position: relative;
+    page-break-after: always;
+  }
+
+  .page:last-child { page-break-after: avoid; }
+
+  /* ── Utilities ── */
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 5.5pt;
+    letter-spacing: 0.07em;
+    padding: 1.5pt 4.5pt;
+    border-radius: 2pt;
+    font-weight: 500;
+  }
+  .pill-amber  { background: var(--amber-dim);  color: var(--amber);        border: 0.5pt solid var(--amber); }
+  .pill-emerald{ background: var(--emerald-dim); color: var(--emerald);      border: 0.5pt solid var(--emerald); }
+  .pill-violet { background: #2e1065;            color: var(--violet-light); border: 0.5pt solid var(--violet); }
+  .pill-subtle { background: var(--bg-elevated); color: var(--text-muted);   border: 0.5pt solid var(--border-mid); }
+
+  hr.rule { border: none; border-top: 0.5pt solid var(--border-mid); margin: 0; }
+
+  /* ════════ PAGE 1 ════════ */
+
+  .accent-bar {
+    height: 2pt;
+    background: linear-gradient(90deg, var(--violet) 0%, var(--indigo) 60%, transparent 100%);
+  }
+
+  /* Hero */
+  .hero { padding: 13mm 16mm 9mm; }
+
+  .hero-eyebrow {
+    display: flex; align-items: center; gap: 6pt;
+    margin-bottom: 7mm;
+  }
+  .hero-eyebrow-mark {
+    width: 14pt; height: 14pt; border-radius: 3pt;
+    background: linear-gradient(135deg, var(--violet) 0%, var(--indigo) 100%);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .hero-product-name {
+    font-family: var(--mono); font-size: 6.5pt; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--violet-light); font-weight: 500;
+  }
+
+  .hero-headline {
+    font-size: 27pt; font-weight: 700; line-height: 1.15;
+    letter-spacing: -0.02em; color: var(--text);
+    max-width: 155mm; margin-bottom: 5mm;
+  }
+  .hero-headline em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--violet-light) 0%, var(--indigo-light) 60%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+
+  .hero-sub {
+    font-size: 9.5pt; color: var(--text-muted);
+    line-height: 1.6; max-width: 140mm; margin-bottom: 6mm;
+  }
+
+  /* Terminal block */
+  .hero-terminal {
+    background: var(--bg-card); border: 0.5pt solid var(--border-mid);
+    border-radius: 4pt; padding: 6pt 9pt; max-width: 155mm; position: relative;
+  }
+  .hero-terminal::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 0.5pt;
+    background: linear-gradient(90deg, var(--violet) 0%, var(--indigo) 60%, transparent 100%);
+    border-radius: 4pt 4pt 0 0;
+  }
+  .terminal-header {
+    display: flex; align-items: center; gap: 4pt;
+    margin-bottom: 4pt; padding-bottom: 4pt; border-bottom: 0.5pt solid var(--border);
+  }
+  .terminal-dot { width: 4.5pt; height: 4.5pt; border-radius: 50%; }
+  .terminal-bar-label {
+    margin-left: 4pt; font-family: var(--mono); font-size: 5.5pt;
+    color: var(--text-subtle); letter-spacing: 0.08em;
+  }
+  .terminal-lines { display: flex; flex-direction: column; gap: 2pt; }
+  .tl {
+    font-family: var(--mono); font-size: 6pt; line-height: 1.5; color: var(--text-muted);
+  }
+  .tl .ts  { color: var(--text-subtle); margin-right: 4pt; }
+  .tl .ok  { color: var(--emerald); }
+  .tl .gt  { color: var(--amber); }
+  .tl .cmd { color: var(--violet-light); }
+  .tl .dim { color: var(--text-subtle); }
+
+  .hero-meta {
+    display: flex; align-items: center; gap: 5pt; flex-wrap: wrap; margin-top: 5mm;
+  }
+
+  /* Pillars */
+  .pillars { padding: 8mm 16mm 12mm; }
+  .pillars-label {
+    font-family: var(--mono); font-size: 6pt; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text-subtle); margin-bottom: 5mm;
+  }
+  .pillars-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5pt;
+  }
+  .pillar {
+    background: var(--bg-card); border: 0.5pt solid var(--border-mid);
+    border-radius: 4pt; padding: 8pt 9pt 9pt; position: relative;
+  }
+  .pillar-top-rule {
+    position: absolute; top: 0; left: 0; right: 0; height: 1.5pt; border-radius: 4pt 4pt 0 0;
+  }
+  .rule-violet  { background: linear-gradient(90deg, var(--violet) 0%, transparent 100%); }
+  .rule-indigo  { background: linear-gradient(90deg, var(--indigo) 0%, transparent 100%); }
+  .rule-emerald { background: linear-gradient(90deg, var(--emerald) 0%, transparent 100%); }
+
+  .pillar-num {
+    font-family: var(--mono); font-size: 5.5pt; color: var(--text-subtle);
+    letter-spacing: 0.1em; margin-bottom: 3pt;
+  }
+  .pillar-title {
+    font-size: 8.5pt; font-weight: 700; color: var(--text);
+    margin-bottom: 5pt; line-height: 1.3;
+  }
+  .pillar-items { list-style: none; display: flex; flex-direction: column; gap: 3pt; }
+  .pillar-items li {
+    font-size: 7pt; color: var(--text-muted); padding-left: 8pt;
+    position: relative; line-height: 1.45;
+  }
+  .pillar-items li::before {
+    content: '—'; position: absolute; left: 0; color: var(--text-subtle);
+    font-family: var(--mono); font-size: 5.5pt; top: 1pt;
+  }
+  .pillar-items li strong { color: var(--text); font-weight: 500; }
+
+  .page-footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 3.5pt 16mm; border-top: 0.5pt solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg);
+  }
+  .folio { font-family: var(--mono); font-size: 5pt; color: var(--text-subtle); letter-spacing: 0.1em; }
+  .url   { font-family: var(--mono); font-size: 5pt; color: var(--violet-light); letter-spacing: 0.06em; }
+
+  /* ════════ PAGE 2 ════════ */
+
+  .flow-section { padding: 13mm 16mm 8mm; }
+  .section-eyebrow {
+    font-family: var(--mono); font-size: 6pt; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text-subtle); margin-bottom: 2pt;
+  }
+  .section-title {
+    font-size: 16pt; font-weight: 700; color: var(--text);
+    letter-spacing: -0.015em; line-height: 1.2; margin-bottom: 3pt;
+  }
+  .section-sub {
+    font-size: 8pt; color: var(--text-muted); line-height: 1.5; max-width: 140mm; margin-bottom: 7mm;
+  }
+
+  /* Flow steps */
+  .flow-steps {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 0; margin-bottom: 8mm;
+  }
+  .flow-step {
+    background: var(--bg-card); border: 0.5pt solid var(--border-mid);
+    padding: 7pt 7pt 9pt; position: relative;
+  }
+  .flow-step:not(:first-child) { border-left: none; }
+  .flow-step:first-child { border-radius: 4pt 0 0 4pt; }
+  .flow-step:last-child  { border-radius: 0 4pt 4pt 0; }
+
+  .step-num {
+    font-family: var(--mono); font-size: 5pt; color: var(--text-subtle);
+    letter-spacing: 0.1em; margin-bottom: 4pt;
+  }
+  .step-icon {
+    width: 14pt; height: 14pt; border-radius: 3pt;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 4pt;
+  }
+  .step-icon svg { width: 8pt; height: 8pt; }
+  .si-violet  { background: #2e1065; }
+  .si-indigo  { background: #1e1b4b; }
+  .si-amber   { background: var(--amber-dim); }
+  .si-emerald { background: var(--emerald-dim); }
+  .si-blue    { background: #1e3a5f; }
+
+  .step-title { font-size: 7.5pt; font-weight: 700; color: var(--text); margin-bottom: 3pt; line-height: 1.3; }
+  .step-body  { font-size: 6pt; color: var(--text-muted); line-height: 1.5; }
+  .step-body .mref { font-family: var(--mono); font-size: 5.5pt; color: var(--indigo-light); display: block; margin-top: 2pt; }
+
+  /* Proof */
+  .proof-section { padding: 0 16mm 8mm; }
+  .proof-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 5pt; margin-top: 5mm;
+  }
+  .proof-full { grid-column: 1 / -1; }
+  .proof-card {
+    background: var(--bg-card); border: 0.5pt solid var(--border-mid);
+    border-radius: 4pt; padding: 8pt 9pt;
+  }
+  .proof-card-title { font-size: 7.5pt; font-weight: 700; color: var(--text); margin-bottom: 4pt; }
+  .proof-card-body  { font-size: 6.5pt; color: var(--text-muted); line-height: 1.5; }
+  .proof-card-body .mref { font-family: var(--mono); font-size: 5.5pt; color: var(--indigo-light); display: inline; }
+
+  /* Ledger */
+  .ledger-rows { display: flex; flex-direction: column; gap: 2pt; margin-top: 5pt; }
+  .ledger-row {
+    display: flex; align-items: baseline; gap: 5pt;
+    font-family: var(--mono); font-size: 5.5pt; color: var(--text-subtle);
+    padding: 1.5pt 4pt; background: var(--bg-elevated); border-radius: 2pt;
+  }
+  .ledger-row .ts  { flex-shrink: 0; color: var(--text-subtle); }
+  .ledger-row .act { flex: 1; color: var(--text-muted); }
+
+  /* CTA */
+  .cta-section { padding: 8mm 16mm 14mm; }
+  .cta-inner {
+    background: var(--bg-card); border: 0.5pt solid var(--border-mid);
+    border-radius: 6pt; padding: 11pt 13pt; position: relative;
+  }
+  .cta-inner::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1.5pt;
+    background: linear-gradient(90deg, var(--violet) 0%, var(--indigo) 60%, transparent 100%);
+    border-radius: 6pt 6pt 0 0;
+  }
+  .cta-layout { display: grid; grid-template-columns: 1fr auto; gap: 14pt; align-items: start; }
+  .cta-title { font-size: 13pt; font-weight: 700; color: var(--text); letter-spacing: -0.01em; margin-bottom: 4pt; line-height: 1.25; }
+  .cta-sub   { font-size: 7pt; color: var(--text-muted); line-height: 1.5; margin-bottom: 7pt; max-width: 110mm; }
+  .cta-cmd {
+    font-family: var(--mono); font-size: 7.5pt; color: var(--violet-light);
+    background: var(--bg-elevated); border: 0.5pt solid var(--violet);
+    border-radius: 3pt; padding: 4pt 9pt; display: inline-block; letter-spacing: 0.04em;
+  }
+  .cta-reqs { margin-top: 5pt; display: flex; gap: 4pt; flex-wrap: wrap; }
+  .cta-secondary { display: flex; flex-direction: column; align-items: flex-end; gap: 5pt; padding-top: 2pt; }
+  .cta-url { font-family: var(--mono); font-size: 7pt; color: var(--indigo-light); letter-spacing: 0.06em; }
+  .cta-ci  { font-family: var(--mono); font-size: 5pt; color: var(--text-subtle); text-align: right; line-height: 1.7; letter-spacing: 0.07em; }
+
+  .p2-footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 3.5pt 16mm; border-top: 0.5pt solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg);
+  }
+  .p2-footer .tagline { font-family: var(--mono); font-size: 5pt; color: var(--text-subtle); }
+  .p2-footer .folio   { font-family: var(--mono); font-size: 5pt; color: var(--text-subtle); letter-spacing: 0.1em; }
+</style>
+
+
+
+<!-- ════════════════════ PAGE 1 ════════════════════ -->
+<div class="page" id="page-1">
+
+  <div class="accent-bar"></div>
+
+  <!-- HERO -->
+  <section class="hero" data-wid="section-0">
+
+    <div class="hero-eyebrow">
+      <div class="hero-eyebrow-mark">
+        <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" width="8" height="8">
+          <path d="M2 5h6M5 2l3 3-3 3" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <span class="hero-product-name">wicked-studio &nbsp;·&nbsp; operator surface for governed AI coding</span>
+    </div>
+
+    <h1 class="hero-headline" data-wid="slide-0-heading-1">
+      The cockpit for AI coding agents<br>
+      you can <em>actually trust.</em>
+    </h1>
+
+    <p class="hero-sub" data-wid="slide-0-paragraph-1">Govern every AI coding run. Prove every "done".</p>
+
+    <div class="hero-terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot" style="background:#ef4444;"></div>
+        <div class="terminal-dot" style="background:#f59e0b;"></div>
+        <div class="terminal-dot" style="background:#10b981;"></div>
+        <span class="terminal-bar-label">wicked-studio — live run narration</span>
+        <span class="pill pill-emerald" style="margin-left:auto;">● RUNNING</span>
+      </div>
+      <div class="terminal-lines">
+        <div class="tl"><span class="ts">14:03:22</span><span class="cmd">→ council</span>&nbsp;&nbsp;3 of 3 agent seats ready · quorum confirmed</div>
+        <div class="tl"><span class="ts">14:03:45</span><span class="ok">✓ explore</span>&nbsp;&nbsp;domain graph built · 42 nodes · coverage report attached</div>
+        <div class="tl"><span class="ts">14:04:11</span><span class="gt">▮ gate</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;acceptance check complete · awaiting human decision</div>
+        <div class="tl"><span class="ts">14:04:13</span><span class="ok">✓ approved</span>&nbsp;<span class="dim">actor=operator · note="looks good, proceed"</span></div>
+        <div class="tl"><span class="ts">14:04:41</span><span class="ok">✓ deliver</span>&nbsp;&nbsp;PR opened · evidence bundle ready · run complete</div>
+      </div>
+    </div>
+
+    <div class="hero-meta">
+      <span class="pill pill-subtle" style="font-family:var(--mono);">npx wicked-crew serve</span>
+      <span class="pill pill-subtle">Claude Code · Codex · Antigravity</span>
+      <span class="pill pill-subtle">Node ≥ 22 · MIT licensed</span>
+      <span class="pill pill-violet">ws.wickedagile.com</span>
+    </div>
+
+  </section>
+
+  <div style="padding: 0 16mm;"><hr class="rule"></div>
+
+  <!-- THREE PILLARS -->
+  <section class="pillars" data-wid="section-1">
+    <div class="pillars-label">Why you would want it</div>
+
+    <div class="pillars-grid">
+
+      <div class="pillar">
+        <div class="pillar-top-rule rule-violet"></div>
+        <div class="pillar-num">01 ·</div>
+        <div class="pillar-title">Direct, don't babysit.</div>
+        <ul class="pillar-items">
+          <li data-wid="slide-1-list-item-1">Launch governed runs across <strong>many repos and projects simultaneously</strong> — one surface, not one terminal per agent.</li>
+          <li data-wid="slide-1-list-item-2">Attention-decay board sorting surfaces what needs you and collapses what is quiet — signal over noise, automatically.</li>
+          <li data-wid="slide-1-list-item-3"><strong>Desktop notifications</strong> when a run needs you; lifecycle controls — cancel, inject a message, retry — from the same surface.</li>
+          <li data-wid="slide-1-list-item-4"><strong>Campaign grouping</strong> tracks "N of M landed" across a multi-run effort. No spreadsheet maintenance required.</li>
+        </ul>
+      </div>
+
+      <div class="pillar">
+        <div class="pillar-top-rule rule-indigo"></div>
+        <div class="pillar-num">02 ·</div>
+        <div class="pillar-title">Approve what matters.</div>
+        <ul class="pillar-items">
+          <li data-wid="slide-1-list-item-5"><strong>Human-in-the-loop gates</strong> surface the real decisions: approve, approve with a steer, or reject.</li>
+          <li data-wid="slide-1-list-item-6">Gate card shows the artifact, governance findings, and the <strong>full context</strong> behind the ask — never a bare prompt.</li>
+          <li data-wid="slide-1-list-item-7">Gate notification arrives within <strong>2 seconds</strong> of the awaiting-human WebSocket event.</li>
+          <li data-wid="slide-1-list-item-8">Keyboard <strong>batch triage</strong> when gates pile up across concurrent runs.</li>
+          <li data-wid="slide-1-list-item-9">Pre-gate guidance notes and elicitation prompts — steer before it reaches the gate.</li>
+        </ul>
+      </div>
+
+      <div class="pillar">
+        <div class="pillar-top-rule rule-emerald"></div>
+        <div class="pillar-num">03 ·</div>
+        <div class="pillar-title">"Done" is proven, not claimed.</div>
+        <ul class="pillar-items">
+          <li data-wid="slide-1-list-item-10">The <strong>evaluator is never the creator</strong> — the check agent is independent of the coding agent.</li>
+          <li data-wid="slide-1-list-item-11">Per-step transcripts, worktree file and diff viewer, and <strong>one-click evidence-bundle download</strong> for every run.</li>
+          <li data-wid="slide-1-list-item-12">Full <strong>decisions ledger</strong>: every gate outcome is in the audit trail with actor, timestamp, and detail.</li>
+          <li data-wid="slide-1-list-item-13">Codebase exploration with <strong>blast-radius analysis</strong>, hotspot detection, and domain graph — understand what any change touches before you approve.</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="page-footer">
+    <span class="folio">WICKED STUDIO &nbsp;·&nbsp; PRODUCT BROCHURE &nbsp;·&nbsp; PAGE 1 OF 2</span>
+    <span class="url">ws.wickedagile.com</span>
+  </div>
+
+</div><!-- end page 1 -->
+
+
+<!-- ════════════════════ PAGE 2 ════════════════════ -->
+<div class="page" id="page-2">
+
+  <div class="accent-bar"></div>
+
+  <!-- HOW A RUN FLOWS -->
+  <section class="flow-section" data-wid="section-2">
+
+    <div class="section-eyebrow">From intent to pull request</div>
+    <h2 class="section-title" data-wid="slide-2-heading-1">How a run flows.</h2>
+    <p class="section-sub" data-wid="slide-2-paragraph-1">
+      Every governed run moves through five phases. Studio surfaces each phase in real time over a live WebSocket feed — you are always in view, never in the dark.
+    </p>
+
+    <div class="flow-steps">
+
+      <div class="flow-step">
+        <div class="step-num">01 ·</div>
+        <div class="step-icon si-violet">
+          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 5h6M5 2v6" stroke="#a78bfa" stroke-width="1.2" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <div class="step-title">Intent</div>
+        <div class="step-body">
+          Register a repo, select a workflow — <em>ask</em>, <em>balanced</em>, or <em>autonomous</em> — and write the goal. The run card appears immediately; CoreEvents stream over
+          <span class="mref">/ws</span>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">02 ·</div>
+        <div class="step-icon si-indigo">
+          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="5" cy="3.5" r="1.5" stroke="#818cf8" stroke-width="1"></circle>
+            <path d="M2 8.5c0-1.7 1.3-3 3-3s3 1.3 3 3" stroke="#818cf8" stroke-width="1" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <div class="step-title">Council</div>
+        <div class="step-body">
+          Multiple agent seats join the run. Studio surfaces the roster — each CLI is visible. Quorum displayed as "N of N agents ready" before the first phase.
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">03 ·</div>
+        <div class="step-icon si-amber">
+          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 2.5v2.8M5 7.5v.3" stroke="#f59e0b" stroke-width="1.2" stroke-linecap="round"></path>
+            <circle cx="5" cy="5" r="3.5" stroke="#f59e0b" stroke-width="0.9"></circle>
+          </svg>
+        </div>
+        <div class="step-title">Gates</div>
+        <div class="step-body">
+          The platform pauses at checkpoints. A gate card surfaces the artifact, governance findings, and <strong style="color:var(--text);">approve · steer · reject</strong> controls. Run advances within 3 s of your decision.
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">04 ·</div>
+        <div class="step-icon si-emerald">
+          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="1.5" width="6" height="7" rx="1" stroke="#10b981" stroke-width="0.9"></rect>
+            <path d="M3.5 4h3M3.5 6h2" stroke="#10b981" stroke-width="0.8" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <div class="step-title">Evidence</div>
+        <div class="step-body">
+          As phases complete, the evidence panel populates: per-step transcripts, worktree diff viewer, downloadable evidence bundle, and a domain coverage report.
+          <span class="mref">GET /api/v1/runs/:id/evidence</span>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">05 ·</div>
+        <div class="step-icon si-blue">
+          <svg viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="2.5" cy="7.5" r="1" stroke="#60a5fa" stroke-width="0.8"></circle>
+            <circle cx="7.5" cy="7.5" r="1" stroke="#60a5fa" stroke-width="0.8"></circle>
+            <circle cx="7.5" cy="2.5" r="1" stroke="#60a5fa" stroke-width="0.8"></circle>
+            <path d="M2.5 6.5V4a1.5 1.5 0 011.5-1.5H6.5" stroke="#60a5fa" stroke-width="0.8" stroke-linecap="round"></path>
+            <path d="M6.5 3.5l1-1-1-1" stroke="#60a5fa" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </div>
+        <div class="step-title">Pull Request</div>
+        <div class="step-body">
+          The deliver phase opens a PR. The URL is captured from the deliver unit's output and surfaced on the campaign card as a live link.
+          <span class="mref">campaign · N of M landed</span>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <!-- PROOF -->
+  <section class="proof-section" data-wid="section-3">
+
+    <div class="section-eyebrow">Proof — evidence &amp; acceptance gate</div>
+    <h2 class="section-title" style="font-size:14pt;" data-wid="slide-3-heading-1">Every "done" leaves a retrievable record.</h2>
+
+    <div class="proof-grid">
+
+      <div class="proof-card proof-full">
+        <div class="proof-card-title">Decisions ledger — full audit trail</div>
+        <div class="proof-card-body">
+          Every gate outcome is recorded with actor, timestamp, and decision detail. Browsable at
+          <span class="mref">/api/v1/audit</span> &nbsp;—&nbsp;
+          governance evidence endpoint at <span class="mref">/api/v1/runs/:id/evidence</span>.
+        </div>
+        <div class="ledger-rows">
+          <div class="ledger-row">
+            <span class="ts">14:03:22Z</span>
+            <span class="act">run:start · workflow=balanced · repo registered</span>
+            <span class="pill pill-emerald">STARTED</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ts">14:04:11Z</span>
+            <span class="act">gate:awaiting_human · acceptance-check phase · artifact attached</span>
+            <span class="pill pill-amber">GATE</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ts">14:04:13Z</span>
+            <span class="act">gate:approved · actor=operator · note="looks good, proceed"</span>
+            <span class="pill pill-emerald">APPROVED</span>
+          </div>
+          <div class="ledger-row">
+            <span class="ts">14:04:41Z</span>
+            <span class="act">run:complete · evidence bundle available · PR opened</span>
+            <span class="pill pill-emerald">DONE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="proof-card">
+        <div class="proof-card-title">Campaign scoreboard</div>
+        <div class="proof-card-body">
+          Track a multi-run effort with denominator honesty — "15 of 18 landed" when the total is declared; "15 of 17 so far" when it is not. Never a number without a statement of what it means.
+          <span class="mref">DES-CAMPAIGN-001 · campaign grouping</span>
+        </div>
+      </div>
+
+      <div class="proof-card">
+        <div class="proof-card-title">Codebase exploration</div>
+        <div class="proof-card-body">
+          Graph view with <strong style="color:var(--text);">blast-radius analysis</strong>, hotspot detection, and a domain graph with coverage report — understand what any proposed change touches before you approve the gate.
+          <span class="mref">explore · domain-extraction phase</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CALL TO ACTION -->
+  <section class="cta-section" data-wid="section-4">
+    <div class="cta-inner">
+      <div class="cta-layout">
+
+        <div>
+          <div class="cta-title">One command. The API, the engine,<br>and the UI on a single port.</div>
+          <p class="cta-sub" data-wid="slide-4-paragraph-1">
+            Wicked Studio is a pure HTTP/WS client of the wicked-crew daemon — zero coupling to the engine
+            internals, no lock-in to a single agent CLI. Start governing your AI coding runs in minutes.
+          </p>
+          <div class="cta-cmd">$ npx wicked-crew serve</div>
+          <div class="cta-reqs">
+            <span class="pill pill-subtle">Node ≥ 22</span>
+            <span class="pill pill-subtle">npm ≥ 10</span>
+            <span class="pill pill-subtle">Chrome · Edge · Firefox · Safari</span>
+            <span class="pill pill-subtle">macOS · Linux · Windows</span>
+            <span class="pill pill-subtle">MIT licensed</span>
+          </div>
+        </div>
+
+        <div class="cta-secondary">
+          <div style="font-family:var(--mono);font-size:5.5pt;color:var(--text-subtle);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3pt;">Live product</div>
+          <div class="cta-url">ws.wickedagile.com</div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <div class="p2-footer">
+    <span class="tagline">Governed by design. Every claim traceable to the wicked-studio repository.</span>
+    <span class="folio">WICKED STUDIO &nbsp;·&nbsp; PAGE 2 OF 2</span>
+  </div>
+
+</div><!-- end page 2 -->
+
+
+

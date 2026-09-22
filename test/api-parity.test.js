@@ -21,10 +21,18 @@ function freshBus() {
   return dir;
 }
 
+// Recorder preflight seam injected: parity is about ROUTES; the real probe/installer would touch
+// (and, with auto-install on, download into) Playwright's cache on the machine running this.
+const recorder = {
+  status: async () => ({ ok: true, browser: "chromium-headless-shell", missing: [], components: [], playwright_version: "x", install_command: "node cli install chromium-headless-shell", remedy: "wicked-interactive doctor --install" }),
+  install: async () => {},
+  autoInstall: false,
+};
+
 async function boot() {
   const busDir = freshBus();
   const root = mkdtempSync(join(tmpdir(), "wi-parity-"));
-  const svc = createMultiServer({ root });   // default = API-only, exactly what studio talks to
+  const svc = createMultiServer({ root, recorder });   // default = API-only, exactly what studio talks to
   const port = await svc.start(0);
   return {
     root, svc, base: `http://localhost:${port}`,
@@ -50,7 +58,10 @@ test("API parity smoke: every capability the merged app drives is reachable on a
 
     const preflight = await fetch(`${base}/api/preflight`);
     assert.equal(preflight.status, 200);
-    assert.ok(typeof (await preflight.json()) === "object", "the install gate still answers");
+    const pfBody = await preflight.json();
+    assert.ok(typeof pfBody === "object", "the install gate still answers");
+    assert.equal(pfBody.recorder.ok, true, "F-RECON-012: the install gate carries the recorder browser snapshot");
+    assert.equal(pfBody.recorder.browser, "chromium-headless-shell");
 
     // ── docs: list + create (§4.1) ────────────────────────────────────────
     assert.deepEqual(await (await fetch(`${base}/api/docs`)).json(), []);

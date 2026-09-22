@@ -50,6 +50,23 @@ test("POST /api/docs creates a doc + GET lists it + per-doc route works", async 
   } finally { await cleanup(); }
 });
 
+test("POST /api/docs slugifies a long name by cutting to 64 THEN stripping edge hyphens — never a trailing `-` (#212)", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    // slug before the cut = 63×"a" + "-tail" (68 chars). Strip-then-cut shipped 63×"a" + "-";
+    // cut-then-strip yields 63×"a".
+    const raw = "a".repeat(63) + " tail";
+    const r = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: raw, html: "<p>x</p>" }),
+    });
+    assert.equal(r.status, 200);
+    const names = JSON.stringify(await (await fetch(`${base}/api/docs`)).json());
+    assert.ok(names.includes(`"${"a".repeat(63)}"`), names);
+    assert.ok(!names.includes(`${"a".repeat(63)}-`), "no slug ends in a hyphen");
+  } finally { await cleanup(); }
+});
+
 test("POST /api/docs validates name + html and reports duplicates", async () => {
   const { base, cleanup } = await boot();
   try {

@@ -54,32 +54,49 @@ Exports inline everything for a single self-contained file (HTML/PDF). So:
 ## PDF export contract — author print-safe decks by construction
 
 Export to PDF renders the self-contained HTML through **headless Chrome
-`--print-to-pdf`** (not a browser screenshot). The exporter auto-injects a print
-stylesheet (`src/service/export.js`): a universally-safe baseline for every doc,
-plus 16:9 landscape `@page` + one-slide-per-page rules **only when the doc is a
-deck** (detected as **2+ top-level slide containers** — `<section>`,
-`[data-slide]`, or `.slide`). A one-pager with a single `<section>` and a long
-article stay in their natural flow. Author so that injection is enough:
+`--print-to-pdf`** (not a browser screenshot). The exporter injects print rules
+into the PDF-prep copy only (`src/service/export.js`) — **the HTML download is
+your document as authored, no print injection**. Every PDF gets a render-safety
+baseline (animations off, reveal patterns completed, `print-color-adjust:exact`);
+the 16:9 landscape `@page` + one-slide-per-page rules are added **only when the
+doc DECLARES itself a deck**. Plain semantic `<section>`s never do — the web, doc
+and brochure formats are built from sections. Author so the rules apply as intended:
 
-- **A deck is multiple `<section>`s** — one per slide. That is what triggers the
-  landscape `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page
-  pagination. A single `<section>` reads as a one-pager and is left in portrait
-  flow, so don't wrap a real multi-slide deck in one giant `<section>`.
+- **Declare a deck.** A slide is `<section class="wi-slide">` (formats/ppt.md),
+  `.slide`, or `[data-slide]`; 2+ of them at the top of the body, or inside ONE
+  wrapper, make the doc a deck. Deeper than that (e.g. `<main>` > `<div>` >
+  slides, or a carousel inside a page) is a component, not a deck — declare it
+  explicitly instead: `data-wi-kind="deck"` on a wrapper element around the
+  slides (not on `<html>`/`<body>` — the version store keeps body content only),
+  or create the doc with `style: "ppt"`. Only a declared deck gets the exporter's
+  `@page { size: 13.333in 7.5in; margin: 0 }` and one-slide-per-page pagination.
+- **Only `@page` pins the paper.** If you declare `@page { size: … }` (a print
+  brochure, an A4 report), the exporter never changes the paper — the PDF is what
+  Chrome prints of your HTML. `.page`/`.wi-page` wrappers or `break-after: page`
+  alone do NOT pin a size: they only stop the exporter from forcing one slide per
+  page (your breaks are kept; a declared deck without `@page` still gets the 16:9
+  paper). Declare the size you mean.
+- **An explicit deck keeps its slides on your paper.** `style: "ppt"` or
+  `data-wi-kind="deck"` plus your own `@page { size: A4 landscape }` gives one
+  slide per A4-landscape page; a weak `.slide` marker plus `@page` is a document
+  (the paper is yours, no slide pagination).
+- **The `.html` download prints as authored.** No print rules are injected into
+  it — if your deck must print standalone from a browser, write your own
+  `@media print` rules (reveal patterns completed, `print-color-adjust: exact`).
 - **Screen-scope responsive rules.** `--print-to-pdf` lays out at a narrow width,
   so a bare `@media (max-width: N)` FIRES during the PDF render and collapses your
   grids. Always scope phone/tablet rules `@media screen and (max-width: N) { … }`,
   and pin multi-column grids inside `@media print` if they must stay columned.
-- **Don't rely on gradient-clipped text for meaning.** `background:linear-gradient`
-  + `-webkit-background-clip:text` + transparent fill paints a solid box in PDF;
-  the exporter neutralizes it to a solid color. If a heading/number must be a
-  specific color in print, set a solid `color` too, not only the gradient.
+- **Don't rely on gradient-clipped text for meaning in a deck.** In a DECK the
+  exporter paints `-webkit-background-clip:text` runs solid (the slide contract);
+  if a heading/number must be a specific color in print, set a solid `color` too.
 - **Backgrounds and fills survive** via `print-color-adjust:exact` (injected on
-  `*`), so dark slide backgrounds and gradient FILLS on real elements render. But
-  `box-shadow`/`text-shadow` are stripped in print (they print as hard rectangles),
-  so don't depend on a glow to convey state.
-- **One idea per slide, fits one screen.** Deck slides are forced to `100vh` with
-  `overflow:hidden`; content that overflows a slide is clipped, not paginated —
-  split it into another `<section>`.
+  `*`), so dark slide backgrounds and gradient FILLS on real elements render. In a
+  DECK, `box-shadow`/`text-shadow` are stripped in print, so don't depend on a glow
+  to convey state; a document prints its shadows and gradient text as authored.
+- **One idea per slide, fits one screen.** Declared deck slides are forced to `100vh`
+  with `overflow:hidden`; content that overflows a slide is clipped, not paginated —
+  split it into another slide.
 
 **Verification note (load-bearing):** reproduce any PDF-export issue with the REAL
 `chromeRenderer` `--print-to-pdf` command (e.g. call `exportPdf`/`exportHtml`), NOT

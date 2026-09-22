@@ -4,7 +4,152 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.9.3] — 2026-09-14
+
 ### Fixed
+- **Bus identity per served root — two bridges on one bus no longer share a cursor**
+  (F-RC1-120, #227; DES-L7 §5 I1). Every bridge registered the FIXED plugin names
+  `wi-service-bridge` / `wi-service-commands`; wicked-bus keys one cursor per (plugin, filter),
+  so a second bridge on another docs root (a crew project partition, a second daemon) drained
+  the first root's commands — and, finding no such doc under its root, **acked them silently**:
+  "I asked for a demo and nothing recorded — the other project's bridge ate it." Now the plugin
+  names are `wi-service-bridge@<h8>` / `wi-service-commands@<h8>`, `h8` = first 8 hex of sha256
+  over the resolved root (`bridgeRootId`), so each root holds its own two cursors (`latest`
+  init, live events only). Legacy rows stay inert — never polled, never deregistered (a
+  still-running 0.9.2 bridge would hit WB-006). `wicked-interactive serve` prints `bus identity:
+  <h8>`.
+- **Frames for a doc that is not under this root are refused loudly, BEFORE the SSE fan-out**
+  (#210/#278 "the thread forgets"). The bridge handler fanned every bus frame to its SSE clients
+  and tried the transcript write under the wrong root (ENOENT, swallowed) before checking the
+  doc; the command handler acked unknown docs with a bare `return`. Both now `refuse()` first:
+  `GET /api/health` gains `plugin: {bridge, commands}` and a counter `unknown_doc_refused`, and
+  one `warn` line per (handler, doc) names the type, doc and root. On any host where two roots
+  share a bus, `unknown_doc_refused ≥ 1` is EXPECTED — it is the mechanism proof, not an alarm;
+  each handler counts its own refusal (a foreign command is refused by both, so it counts twice).
+  An own-root transcript write that fails now warns once per doc instead of staying silent, and
+  `wicked-interactive create --help` no longer describes the deleted loopback default.
+- **No hidden crew-API default — `WICKED_CREW_API` unset fails closed everywhere** (F-RC1-122,
+  R-L7-a). Six sites defaulted to `http://127.0.0.1:7701`, so a bridge nobody pointed at a daemon
+  talked to whatever sat on that port. `resolveCrewApi()` now returns `null` when unset and every
+  consumer says so: `GET /api/preflight.crew_available` = `false` (nothing dialed);
+  `GET /api/crew/projects` → `{available:false, projects:[], reason:"WICKED_CREW_API unset"}`;
+  `POST /api/crew/projects` → **503** `no crew API configured (set WICKED_CREW_API)`;
+  `POST /api/docs` with `project` → **502** with the same message and nothing created;
+  `GET /api/docs/:doc/activity` skips the runs probe (`run: null`); `wicked-interactive adopt`
+  without `--crew-api` → exit 1 with the message; `serve` prints `crew API: none (WICKED_CREW_API
+  unset — project binding and the project picker are off)`. Crew-spawned bridges always carry the
+  variable; a hand-started bridge crew adopts keeps whatever env it has — stop it and let the
+  next request respawn it.
+- **`install_command` and the doctor remedy carry `PLAYWRIGHT_BROWSERS_PATH`** (F-RC1-121, #228,
+  R-L7-d). The variable moves where Playwright LOOKS, not only where it installs, so a bare
+  `wicked-interactive doctor --install` run in a terminal filled the GLOBAL cache while a bridge
+  spawned with the variable kept reporting the browser missing. When the variable is in force,
+  `install_command` = `PLAYWRIGHT_BROWSERS_PATH="<path>" node "<cli>" install <browser>` and
+  `remedy` = `PLAYWRIGHT_BROWSERS_PATH="<path>" wicked-interactive doctor --install` (wire,
+  doctor, and the classified launch errors alike); `serve` prints `recorder browsers: <path>`.
+- **Doc-name slugs never end in `-`** (#212): `slugify` cut the 64-char limit AFTER stripping
+  edge hyphens, so a cut that fell on a separator shipped `…-`; it now cuts, then strips.
+
+### Removed
+- **`wicked-web` runtime dependency** (L10-10). The site chrome was pinned in the ROOT
+  `package.json` although only `site/` (its own package) consumes it — every `npm install` of the
+  bridge pulled the whole Astro/Vite tree (279 packages) for nothing. Removed; `site/package.json`
+  keeps its own pin.
+
+## [0.9.2] — 2026-09-13
+
+### Fixed
+- **The demo recorder preflights and provisions its browser; a missing browser is a typed,
+  terminal error — never a retry loop** (F-RECON-012 BLOCKER, F-RECON-014). `npm install`
+  never provisions Playwright's browser, nothing in the install chain ran `playwright install`,
+  and nothing preflighted the recorder — so on a fresh machine every recording died on its first
+  line (`browserType.launch: Executable doesn't exist at …/chromium_headless_shell-<rev>/…`), the
+  command loop retried the deterministic failure three times in four seconds and dead-lettered
+  it, the thread showed Playwright's ASCII box three times, and the studio blamed "the generation
+  service". Now: (1) a launch-free **preflight** (`src/service/recorder-preflight.js`) asks the
+  BUNDLED Playwright CLI what a recording needs (`install --dry-run` — headless shell **and**
+  ffmpeg, which video capture requires) and checks each install location for Playwright's own
+  completion marker; (2) on the first `demo.requested` the materializer **provisions** what is
+  missing with that same bundled CLI (never a foreign `npx playwright`, whose version's browsers
+  the bridge would not launch) — progress narrated on the thread, 10-minute cap
+  (`WI_RECORDER_INSTALL_TIMEOUT_MS`), opt-out `WI_RECORDER_AUTO_INSTALL=0`; (3) every recorder
+  failure is a **typed `RecorderError`** on the wire — `wicked.interactive.status.posted
+  {state:"error", code, source:"recorder", retryable:false, remedy, …}` plus
+  `wicked.interactive.error.raised {source:"recorder", error:<code>, context}` — with stable
+  codes `recorder_browser_missing` · `recorder_browser_install_failed` · `recorder_launch_failed`
+  · `recording_spec_missing` · `recording_spec_invalid` · `recording_step_failed` (names the
+  step) · `recording_failed` · `recording_in_flight`, and the one-line remedy
+  (`wicked-interactive doctor --install`, plus the exact `node <bundled cli> install …`); (4) the
+  materializer **acks** a recording failure (one honest error per request — the same spec on
+  the same machine replays the same failure) instead of throwing into the retry → dead-letter
+  path; (5) **"Re-record" follows the wire**: `POST /api/events` refuses a `demo.requested`
+  while one is in flight for the doc (`409 recording_in_flight`) and, with auto-install off,
+  refuses it up front when the browser is missing (`503 recorder_browser_missing`) instead of a
+  200 that fails seconds later; `GET /d/:doc/api/demo/status` exposes the per-doc recording
+  state (`idle` · `preflight` · `installing` · `recording` · `recorded` · `failed`, with
+  `error`, `step`, `progress`, `in_flight`) plus the browser snapshot; (6) `GET /api/preflight`
+  carries the recorder snapshot (`recorder.ok/missing/remedy/install_command/auto_install`) so a
+  skin can say so BEFORE a multi-minute spec run is spent, and `POST /api/demo/browser/install`
+  provisions on demand; (7) a new CLI **`wicked-interactive doctor [--install] [--json]`**
+  (alias `--check`) reports the recorder browser, the sibling install gate and crew
+  reachability — exit 1 while the recorder cannot record. CI gains a `recorder-provision` job
+  that runs the real path on ubuntu: doctor MISSING → `doctor --install` → READY → a real
+  two-step recording.
+- **Every block with visible text carries a `data-wid`** (F-RECON-004). Only the semantic tags
+  (`h*`, `p`, `li`, `td`, …) were anchored, so a brochure's hero fact strip (`div > span…`),
+  footer requirements block, flow badges and KPI tiles were un-pinnable: a comment pinned on the
+  strip resolved to the nearest anchored block (the hero paragraph) and the design edit landed,
+  with perfect anchor fidelity, on the wrong block. `instrument()` now runs a second pass that
+  anchors every remaining **text block** — an element with visible text whose text is its own
+  or lives in inline children — as `slide-{n}-block-{k}` (block-level tags) or
+  `slide-{n}-text-{k}` (inline), skipping `aria-hidden` decoration and the new author opt-out
+  `data-wi-no-anchor`. Additive: semantic ids and section anchors are unchanged (own counters),
+  pre-existing ids are preserved (INV-1), re-instrumenting is a no-op. New helper
+  `unanchoredTextBlocks(html)` states the invariant (empty after instrumentation).
+- **No phantom versions** (F-RECON-005). A feedback batch that changed nothing — structural-only
+  (the edit is the agent's to make), or deterministic edits that were all stale / rejected /
+  no-ops — still landed `_v{n}.html` byte-identical to its parent and announced
+  `version.created`, so the version strip, the export menu and the thread ("v3 landed") offered
+  a version that changed nothing, and the real edit landed as v4. Now a version is minted only
+  when the prepared bytes differ (sha-256). The unchanged batch keeps its reserved number on
+  `_v{n}.md` (the handoff id crew's edit seam dedupes on — unchanged wire semantics), announces
+  no `version.created`, and `feedback.processed` gains additive `landed:false` / `unchanged:true`
+  / `base_version` / `feedback_file`; the follow-on `edit.completed {version:n}` resolves its base
+  through the feedback file's `base_html` and lands as **v{n}** — the number the ask reserved —
+  recording `feedback_file: "_v{n}.md"` on it.
+
+## [0.9.1] — 2026-09-11
+
+### Fixed
+- **Export honours the author's page geometry — plain `<section>`s are not a slide deck**
+  (F-050 / F-4R2-015). The exporter classified any document with 2+ top-level `<section>`s as a
+  deck and injected `@page { size: 13.333in 7.5in }` + `100vh; overflow:hidden; break-after: page`
+  onto every section — into the PDF render AND the HTML download — so a correct two-page A4
+  brochure exported as 9 landscape 16:9 pages (three of them blank), and the delivered `.html`
+  printed the same way from any browser. Now: (1) an author-declared `@page` is never overridden
+  (only `@page` pins the paper; author `.page`/`.wi-page` wrappers or `break-after: page` are
+  kept and stop the exporter from forcing one slide per page), and a doc created with `style`
+  `web`/`doc`/`brochure` always exports as a document; `@page` is read from print-scoped CSS
+  only — a comment, a string literal, `@media screen` or `<style media="screen">` never counts;
+  (2) a deck must DECLARE itself — `[data-slide]` / `.slide` / `.wi-slide` markers at document
+  level, `data-wi-kind="deck"` on a wrapper, or `style: "ppt"` — plain semantic sections never
+  do; an EXPLICIT deck (`style: "ppt"` / `data-wi-kind`) that also declares `@page` keeps one
+  slide per page on the author's paper; (3) the HTML export carries no print
+  injection at all (document head only), and the PDF-prep copy gets page geometry only for a
+  declared deck (a document gets a render-safety baseline: animations off, reveals completed,
+  `print-color-adjust`); (4) `POST /api/docs` `style` is now recorded on the manifest (it was
+  dropped after the `doc.created` emit) and surfaced by `GET /api/docs`; (5) the export response
+  and `wicked.interactive.export.generated` carry additive `layout` (`document`|`deck`),
+  `layout_source` (documented vocabulary, `LAYOUT_SOURCES`), `page_size` (measured from the
+  PDF, e.g. `A4 portrait`) and `pages` so the UI can show what was produced. Behaviour change for undeclared decks: a deck built from plain
+  `<section>`s now prints in its own flow — add `class="wi-slide"` (or `data-wi-kind="deck"`)
+  to get 16:9 one-slide-per-page again; the skill references are updated accordingly.
+- **`.codegraph/estate.db` (+ `-shm`/`-wal`) is no longer tracked** (#213). A fresh clone shipped an in-tree
+  code graph that an older wicked-core adopted as the live graph and wrote into, dirtying every onboarded
+  checkout; the graph is per-checkout, built by `wicked-estate index` under the daemon state home
+  (wicked-core#406). The files are untracked (local copies are left on disk) and `.codegraph/` is ignored.
 - **`DELETE /api/docs/:doc` outbox: `wicked.interactive.doc.retired` can no longer be lost
   forever** (#198). The tombstone write preceded the bus emit, so a failed emit (bus
   unavailable, process death in the post-write window) left the event permanently missing;
@@ -80,3 +225,6 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
+
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.2...v0.9.3

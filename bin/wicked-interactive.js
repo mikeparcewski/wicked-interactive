@@ -26,6 +26,12 @@
 //   --daemon self-detaches: spawns the server in the background (survives the launching shell/agent
 //   call — no nohup/disown), waits until the bridge answers, prints the URL, exits 0. `--restart`
 //   stops an existing daemon for the root first (clean upgrade); plain re-run reuses the live one.
+//
+//   wicked-interactive doctor [--install] [--headed] [--json]        (alias: wicked-interactive --check)
+//       Is this install able to RECORD? Reports the demo recorder's browser (Playwright's bundled
+//       headless shell + ffmpeg — F-RECON-012: `npm install` never provisions it), the sibling
+//       install gate and crew reachability. Exit 1 when the recorder browser is missing; `--install`
+//       provisions it with the BUNDLED Playwright CLI (the version this bridge launches).
 
 import { readFileSync, openSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -38,6 +44,7 @@ import {
   normalizeOrigin, readStudioOrigin,
 } from "../src/service/serve-bridge.mjs";
 import { registerInstance, deregisterInstance } from "../src/service/instances.mjs";
+import { resolveCrewApi } from "../src/service/project.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -112,6 +119,12 @@ async function runServer(root, requested, { restart = false, standalone = false,
   registerInstance(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, version: pkgVersion() }); // cross-instance registry (the UI project switcher)
   printBanner("wicked-interactive (multi-doc) serving", root, base, standalone);
   if (!standalone) console.log(`  studio: ${origin || "not recorded yet — crew records it on start/adopt (POST /api/studio-origin)"}`);
+  // Disclose the two env-driven seams THIS process runs with (R-L7-a / R-L7-d): no crew API means
+  // project binding and the picker are OFF (fail closed, never a hidden default); the browsers
+  // path is where the recorder both installs and looks.
+  const crewApi = resolveCrewApi();
+  console.log(`  crew API: ${crewApi || "none (WICKED_CREW_API unset — project binding and the project picker are off)"}`);
+  console.log(`  recorder browsers: ${process.env.PLAYWRIGHT_BROWSERS_PATH || "Playwright default cache (PLAYWRIGHT_BROWSERS_PATH unset)"}`);
   if (requested && requested !== actualPort) console.log(`  note:   port ${requested} was taken — using ${actualPort} instead`);
   if (!wrote) console.log(`  note:   could not write .wi-serve.json — other sessions won't auto-discover this bridge`);
 
@@ -159,9 +172,59 @@ async function daemonize(root, requested, { restart = false, standalone = false,
   return 1;
 }
 
+// `doctor` — can this install record a demo? (F-RECON-012). Human report by default, `--json`
+// for machines, `--install` to provision. Exit code: 0 = recorder ready, 1 = not ready.
+async function runDoctor(args) {
+  const { recorderBrowserStatus, ensureRecorderBrowser, invalidateRecorderStatusCache } = await import("../src/service/recorder-preflight.js");
+  const { preflight, crewAvailable } = await import("../src/service/preflight.js");
+  const headless = !args.headed;
+  const json = !!args.json;
+  const say = (line) => { if (!json) console.log(line); };
+  const report = { version: pkgVersion(), node: process.version, recorder: null, plugins: null, crew_available: null };
+  let recorder = await recorderBrowserStatus({ headless, ttlMs: 0 });
+  if (!recorder.ok && args.install) {
+    say(`recorder browser missing (${recorder.missing.join(" + ")}) — installing with the bundled Playwright ${recorder.playwright_version}…`);
+    try {
+      recorder = await ensureRecorderBrowser({
+        headless, autoInstall: true,
+        onProgress: (p) => { if (p.message) say(`  ${p.message}`); else if (p.percent != null) say(`  ${p.percent}% of ${p.size}`); },
+      });
+    } catch (e) {
+      report.install_error = e.toJSON ? e.toJSON() : { error: e.message };
+      invalidateRecorderStatusCache();
+      recorder = await recorderBrowserStatus({ headless, ttlMs: 0 });
+    }
+  }
+  report.recorder = recorder;
+  try { report.plugins = preflight(); } catch (e) { report.plugins = { error: e.message }; }
+  report.crew_available = await crewAvailable();
+  if (json) { console.log(JSON.stringify(report, null, 2)); return recorder.ok ? 0 : 1; }
+
+  say(`wicked-interactive ${report.version ?? "?"} · node ${process.version} · playwright ${recorder.playwright_version ?? "?"}`);
+  say(`recorder browser (${recorder.browser}${headless ? "" : ", headed"}): ${recorder.ok ? "READY" : "MISSING"}`);
+  for (const c of recorder.components || []) say(`  ${c.present ? "✓" : "✗"} ${c.name}${c.revision ? ` v${c.revision}` : ""} — ${c.dir}`);
+  if (recorder.probe_error) say(`  ! ${recorder.probe_error}`);
+  if (!recorder.ok) {
+    say(`  browsers path: ${recorder.browsers_path || "Playwright default cache"} · auto-install on first record: ${recorder.auto_install ? "on" : "off (WI_RECORDER_AUTO_INSTALL=0)"}`);
+    say(`  fix: ${recorder.remedy}   (or: ${recorder.install_command})`);
+    if (report.install_error) say(`  install failed: ${report.install_error.error}`);
+  }
+  const pl = report.plugins;
+  if (pl && !pl.error) say(`sibling plugins: ${pl.ok ? "ok" : `missing ${pl.missing.join(", ")}`}${pl.playwright?.detected ? "" : " · playwright package NOT resolvable"}`);
+  say(`crew daemon: ${report.crew_available ? "reachable"
+    : resolveCrewApi() ? "not reachable (governed answering unavailable; the bridge still serves)"
+    : "not configured (WICKED_CREW_API unset — project binding and the picker are off; the bridge still serves)"}`);
+  return recorder.ok ? 0 : 1;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0];
+
+  // Health of the recorder + install gate (F-RECON-012). `--check` is the flag-shaped alias.
+  if (cmd === "doctor" || args.check) {
+    process.exit(await runDoctor(args));
+  }
 
   // Artifact subcommands — dynamically imported so serve-specific modules are not loaded.
   if (cmd === "create") {
@@ -182,12 +245,13 @@ async function main() {
   }
 
   if (cmd !== "serve") {
-    console.error("usage: wicked-interactive <create|publish|validate|adopt|serve> [options]");
+    console.error("usage: wicked-interactive <create|publish|validate|adopt|serve|doctor> [options]");
     console.error("  create   --from-crew <id> | --from-garden <id> | --from-file <path>  [--output <path>] [--project <id>]");
     console.error("  publish  <artifact-path> [--api-key <key>]");
     console.error("  validate <artifact-path>");
     console.error("  adopt    [--root <docs-dir>] [--crew-api <base-url>]   re-register doc→project breadcrumbs");
     console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart] [--standalone] [--studio-origin <url>]");
+    console.error("  doctor   [--install] [--headed] [--json]   is the demo recorder's browser installed? (--install provisions it)");
     process.exit(1);
   }
   // ONE shared instance by default (ADR-0022 amended): every session converges on the canonical

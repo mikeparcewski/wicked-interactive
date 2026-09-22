@@ -274,3 +274,4 @@ page and is not in any way dead weight.
 | [ADR-0025](adr/0025-one-shared-instance.md) | one shared instance by default (amends ADR-0022) | active |
 | [ADR-0026](adr/0026-brain-retired-estate-grounding.md) | wicked-brain retired; grounding moves to wicked-estate via wicked-garden | active <!-- historical --> |
 | [ADR-0027](adr/0027-reword-dont-archive.md) | Reword, don't archive: this repo stays live as the family's document engine | active |
+| [ADR-0028](adr/0028-recorder-preflight-terminal-failures.md) | Recorder preflight + provisioning; recording failures are typed and terminal | active |

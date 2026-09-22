@@ -251,3 +251,20 @@ test("crewAvailable reflects a live daemon and preflightWithCrew carries it (#15
     }
   }
 });
+
+test("crewAvailable is false — and dials NOTHING — when WICKED_CREW_API is unset (R-L7-a fail-closed, no loopback default)", async () => {
+  const prev = process.env.WICKED_CREW_API;
+  delete process.env.WICKED_CREW_API;
+  const realFetch = globalThis.fetch;
+  const dialed = [];
+  globalThis.fetch = async (url, init) => { dialed.push(String(url)); return realFetch(url, init); };
+  try {
+    assert.equal(await crewAvailable(), false, "unset ⇒ not available");
+    const out = await preflightWithCrew();
+    assert.equal(out.crew_available, false);
+    assert.deepEqual(dialed, [], "no 127.0.0.1:7701 (or any) probe when nobody named a daemon");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (prev === undefined) delete process.env.WICKED_CREW_API; else process.env.WICKED_CREW_API = prev;
+  }
+});

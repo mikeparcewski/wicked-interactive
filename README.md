@@ -32,7 +32,9 @@ You normally never start this service yourself:
 2. **Directly, as an API.** `npx wicked-interactive serve --root ~/wicked-interactive/docs` runs the API-only service on a dynamic port (ADR-0022/0025). `GET /` redirects to the recorded studio origin; there is no bundled UI on the supported path.
 3. **The dev escape hatch.** `wicked-interactive serve --standalone` (or `WI_STANDALONE=1`) serves the retired SPA shell for local development of the engine itself — not the supported UI.
 
-The package also ships a CLI for artifact work — `wicked-interactive create | publish | validate | adopt` — and Claude Code skills (`serve`, `assist`) that put an agent session into the supervising loop the feedback cycle needs (ADR-0010). The plugin install is two steps:
+**Recording demos needs a browser that `npm install` does not provide.** The recorder drives Playwright's bundled headless Chromium (+ ffmpeg for video); on a fresh machine it is provisioned automatically on the first recording (a one-time ~100 MB download, progress on the document thread; opt out with `WI_RECORDER_AUTO_INSTALL=0`). To check or provision it yourself: `npx wicked-interactive doctor` (exit 1 while it cannot record) / `npx wicked-interactive doctor --install`. A recording that cannot run answers with a typed error (`recorder_browser_missing`, `recording_step_failed`, …) carrying the one-line remedy — it is never retried into a dead letter (ADR-0028).
+
+The package also ships a CLI for artifact work — `wicked-interactive create | publish | validate | adopt` (+ `doctor`) — and Claude Code skills (`serve`, `assist`) that put an agent session into the supervising loop the feedback cycle needs (ADR-0010). The plugin install is two steps:
 
 ```
 /plugin marketplace add mikeparcewski/wicked-interactive

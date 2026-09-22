@@ -489,7 +489,12 @@ straight to recording without editorial sign-off is the mistake to avoid.
 Then drive the live URL yourself (Playwright is installed) to learn the selectors. Write
 `<DOCS>/<doc>/demo.spec.mjs` — a plain ES module exporting `meta` and an async `run`. You express
 **only** the click-path; the service supplies `page` and the `step` annotator and owns the
-browser/recording lifecycle.
+browser/recording lifecycle — including the browser itself: on the first recording the service
+provisions Playwright's headless shell + ffmpeg (a one-time download, progress on the thread). A
+recording that cannot run comes back ONCE as a typed `wicked.interactive.status.posted
+{state:"error", code, retryable:false, remedy}` (e.g. `recorder_browser_missing` →
+`wicked-interactive doctor --install`; `recording_step_failed` names the step) — it is never
+retried; fix what the `remedy` says, then re-emit `demo.requested`.
 
 ```js
 export const meta = {

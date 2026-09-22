@@ -202,7 +202,7 @@ export async function playwrightUrlRenderer(url, pdfPath, opts = {}) {
   try {
     ({ chromium } = await importPlaywright());
   } catch {
-    throw new Error("Playwright is not installed — run `npx playwright install` (the install gate should have caught this)");
+    throw new Error("Playwright is not installed — run `wicked-interactive doctor --install` (the install gate should have caught this)");
   }
 
   // Pin the validated IP into Chromium so the address it connects to is exactly the one the SSRF

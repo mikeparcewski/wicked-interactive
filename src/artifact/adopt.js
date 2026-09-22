@@ -9,7 +9,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { loadBreadcrumb, registerDocMembership, resolveCrewApi, writeBreadcrumb } from "../service/project.js";
+import { loadBreadcrumb, registerDocMembership, resolveCrewApi, writeBreadcrumb, NO_CREW_API } from "../service/project.js";
 
 const HELP = `wicked-interactive adopt — re-register doc→project memberships from breadcrumbs
 
@@ -28,6 +28,12 @@ export async function runAdopt(args) {
   }
   const root = args.root ? resolve(String(args.root)) : resolve(homedir(), "wicked-interactive", "docs");
   const crewApi = args["crew-api"] ? String(args["crew-api"]) : resolveCrewApi();
+  if (!crewApi) {
+    // Fail closed (R-L7-a): re-registering memberships against an ASSUMED daemon is exactly the
+    // "talks to whatever sits on the default port" failure — name the variable and stop.
+    console.error(`adopt: ${NO_CREW_API} or pass --crew-api <base-url>`);
+    return 1;
+  }
   if (!existsSync(root)) {
     console.error(`adopt: docs root not found: ${root}`);
     return 1;

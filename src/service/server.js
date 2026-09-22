@@ -11,8 +11,8 @@
 import express from "express";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { randomUUID, createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
@@ -26,9 +26,13 @@ import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
 import { exportHtml, exportPdf } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
+import {
+  recorderBrowserStatus, ensureRecorderBrowser, recorderAutoInstallEnabled, missingBrowserError,
+  recorderErrorPayload, RecorderError, RECORDER_ERROR_CODES,
+} from "./recorder-preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
-import { bindDocToProject, projectIdFor } from "./project.js";
+import { bindDocToProject, projectIdFor, resolveCrewApi, NO_CREW_API } from "./project.js";
 import { resolveLearnedTheme, learnedThemePath } from "./theme-source.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -89,9 +93,30 @@ const COMMAND_TYPES = new Set([
  * @param {string} [opts.frontendDir]
  * @param {boolean} [opts.standalone]  serve the retired SPA shell (dev only, DES-MERGE-001 §7.13)
  */
-export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault() } = {}) {
+export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
+
+  // Per-doc RECORDING STATE (F-RECON-014): idle → preflight → installing → recording → recorded |
+  // failed. Fed by materializeDemo via ctx.recorder.onState, read by GET /api/demo/status and by
+  // the multi-server's demo.requested gate — so a skin's "Re-record" button follows the wire
+  // instead of guessing, and a second click while one is in flight is refused (409), not queued
+  // into an identical failure. `recorder.status/install/autoInstall` are the injectable
+  // preflight seams (tests never probe the developer's machine).
+  const demoState = { state: "idle", since: new Date().toISOString(), started_at: null, finished_at: null, version: null, step: null, progress: null, error: null };
+  // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
+  const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
+  function onDemoState(next) {
+    const now = new Date().toISOString();
+    if (demoState.state !== next.state) { demoState.state = next.state; demoState.since = now; }
+    if (next.state === "preflight") { demoState.started_at = now; demoState.finished_at = null; demoState.error = null; demoState.step = null; demoState.progress = null; }
+    if (next.state === "recorded" || next.state === "failed") demoState.finished_at = now;
+    if (next.step) demoState.step = next.step;
+    if (next.progress !== undefined) demoState.progress = next.progress;
+    if (next.version !== undefined) demoState.version = next.version;
+    if (next.error) demoState.error = next.error;
+  }
+  const demoStatus = () => ({ ...demoState, in_flight: DEMO_IN_FLIGHT.has(demoState.state) });
 
   // FIFO serialization (ADR-0007): process one mutation at a time so concurrent
   // regenerations never race on the manifest. Returns a promise reflecting THIS task so the
@@ -103,8 +128,16 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     return run;
   }
 
-  // Plugin install-gate (ADR-0016): which sibling tools are present.
-  app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
+  // Plugin install-gate (ADR-0016): which sibling tools are present (+ the recorder's browser).
+  app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew({ recorderStatus })));
+
+  // Recording state for this doc (F-RECON-014) + the recorder browser's presence (F-RECON-012):
+  // what a "Re-record" control renders from. `browser` is the snapshot for a headless recording.
+  app.get("/api/demo/status", async (_req, res) => {
+    let browser;
+    try { browser = await recorderStatus({ headless: true }); } catch (e) { browser = { ok: false, probe_error: e.message }; }
+    res.json({ document_id: documentId, ...demoStatus(), browser });
+  });
 
   app.get("/api/versions", (_req, res) => {
     try { res.json(loadManifest(dir)); } catch (e) { res.status(404).json({ error: e.message }); }
@@ -147,7 +180,15 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       emit("wicked.interactive.export.requested", { version, format });
       // Export gate: announce the freshly-rendered artifact + its on-disk path so the supervising
       // agent can vision-review it before the user trusts it (the agent replies wicked.interactive.export.reviewed).
-      emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download });
+      // Additive (F-050 rule 4): what the export DID — `layout` (document|deck), `layout_source`,
+      // the page size and, for a PDF, the page count actually produced — so the UI can show
+      // "document · A4 portrait · 2 pages" before the customer opens the file.
+      const report = {
+        layout: result.layout ?? (format === "pptx" ? "deck" : undefined),
+        layout_source: result.layout_source ?? (format === "pptx" ? "format: pptx" : undefined),
+        page_size: result.page_size ?? null, pages: result.pages ?? null,
+      };
+      emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download, ...report });
       res.json({ format, ...result, file, download });
     } catch (e) {
       res.status(400).json({ error: e.message });
@@ -317,7 +358,7 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       case "wicked.interactive.feedback.submitted": return enqueue(() => materializeFeedback(dir, p, ctx));
       case "wicked.interactive.edit.completed":     return enqueue(() => materializeEdit(dir, p, ctx));
       case "wicked.interactive.draft.completed":    return enqueue(() => materializeDraft(dir, p, ctx));
-      case "wicked.interactive.demo.requested":     return enqueue(() => materializeDemo(dir, p, ctx));
+      case "wicked.interactive.demo.requested":     return enqueue(() => materializeDemo(dir, p, { ...ctx, recorder: { autoInstall: recorder.autoInstall, status: recorderStatus, ...(recorder.install ? { install: (o) => recorder.install(o) } : {}), onState: onDemoState } }));
       case "wicked.interactive.theme.requested":    return enqueue(() => materializeThemeRequested(dir, p, ctx));
       case "wicked.interactive.source.attached":    return enqueue(() => materializeSourceAttached(dir, p));
       case "wicked.interactive.source.updated":     return enqueue(() => materializeSourceUpdated(dir, p));
@@ -341,8 +382,11 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     if (server) await new Promise((r) => server.close(r));
   }
 
-  return { app, start, stop, enqueue, runCommand, emit, dir, documentId };
+  return { app, start, stop, enqueue, runCommand, emit, dir, documentId, demoStatus };
 }
+
+/** Recording states during which a second demo.requested is refused rather than queued (F-RECON-014). */
+const DEMO_IN_FLIGHT = new Set(["preflight", "installing", "recording"]);
 
 // ---------------------------------------------------------------------------
 // Multi-document mode (ADR-0015): one express server hosting many workspaces under a docs
@@ -357,14 +401,62 @@ const DOC_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/; // slug-safe, no path separators
 const PENDING_RETIRE_EVENT = "retired-event-pending.json";
 
 function slugify(name) {
+  // Cut THEN strip (#212): the 64-char cut can land on a separator, so stripping edge hyphens
+  // must come last — the other order shipped names like `…-` that DOC_NAME happily accepts.
   return String(name || "").toLowerCase().trim().replace(/[^a-z0-9-]+/g, "-")
-    .replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 64);
+    .replace(/-+/g, "-").slice(0, 64).replace(/^-|-$/g, "");
+}
+
+/**
+ * Bus identity for a served root (F-RC1-120 / D-19 R20): the first 8 hex of sha256 over the
+ * RESOLVED root. Two bridges on one bus db used to share the fixed plugin names — and with
+ * them ONE cursor per (plugin, filter) — so the wrong bridge consumed (and silently acked) the
+ * other root's commands. The plugin name is the bus's existing identity dimension (the filter
+ * is `type@domain` and cannot carry the root), so keying it by root needs no new mechanism.
+ * realpath first (symlinked roots collapse to one identity); a root that cannot be realpath'd
+ * falls back to its absolute form. A moved root is a NEW identity: fresh cursors at `latest`,
+ * the old rows stay inert (never polled, never deregistered — a still-running 0.9.2 bridge
+ * on the legacy names would hit WB-006 if we did).
+ */
+export function bridgeRootId(root) {
+  let canonical;
+  try { canonical = realpathSync(root); } catch { canonical = resolve(root); }
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 8);
+}
+/** The two per-root plugin names a bridge registers on the bus. */
+export function bridgePluginNames(root) {
+  const id = bridgeRootId(root);
+  return Object.freeze({ bridge: `wi-service-bridge@${id}`, commands: `wi-service-commands@${id}` });
 }
 
 /** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
-export function createMultiServer({ root, frontendDir, standalone = standaloneDefault() } = {}) {
+export function createMultiServer({ root, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
   if (!root) throw new Error("createMultiServer: root is required");
+  // Recorder preflight seams (F-RECON-012), shared by every doc app + the top-level gates.
+  // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
+  const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
+  const recorderAutoInstall = () => (recorder.autoInstall ?? recorderAutoInstallEnabled());
   mkdirSync(root, { recursive: true });
+  // Per-root bus identity (see bridgeRootId) — mkdirSync above guarantees realpath can resolve.
+  const rootId = bridgeRootId(root);
+  const PLUGIN = bridgePluginNames(root);
+  // Frames for a doc that is NOT under this root (another bridge's doc on the shared bus, or a
+  // malformed id) are REFUSED loudly instead of acked silently: counted on /api/health and
+  // warned once per (handler, doc). On any two-root host `unknown_doc_refused ≥ 1` is EXPECTED —
+  // each handler counts its own refusal (a foreign COMMAND is refused by both, so it counts
+  // twice); it is the mechanism proof, not an alarm (hence warn level).
+  let unknownDocRefused = 0;
+  const warnedOnce = new Set();   // "<kind>:<doc>" — bounded like the status maps
+  function warnOnce(key, message) {
+    if (warnedOnce.has(key)) return;
+    warnedOnce.add(key);
+    if (warnedOnce.size > 500) warnedOnce.delete(warnedOnce.values().next().value);
+    console.warn(`[wi-service ${rootId}] ${message}`);
+  }
+  function refuse(handler, name, event) {
+    unknownDocRefused += 1;
+    warnOnce(`${handler}:${name || "(none)"}`, `refused ${event?.event_type ?? "?"} for doc ${name || "(none)"}: not under ${root}`);
+  }
   const top = express();
   top.use(express.json({ limit: "5mb" }));
 
@@ -483,7 +575,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
     if (retiredInfo(name)) throw new Error(`doc retired: ${name}`);
     const dir = docDir(name);
-    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone });
+    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone, recorder });
     top.use(`/d/${name}`, svc.app);
     docs.set(name, { svc, dir });
     return docs.get(name);
@@ -506,7 +598,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
         if (manifestRetired(m) && !includeRetired) continue;
         const last = m.versions[m.versions.length - 1] || {};
         out.push({
-          name, kind: m.kind || "doc", head: m.head, versions: m.versions.length, updated_at: last.created_at || null,
+          name, kind: m.kind || "doc", ...(m.style ? { style: m.style } : {}), head: m.head, versions: m.versions.length, updated_at: last.created_at || null,
           ...(manifestRetired(m) ? { retired: true, retired_at: m.retired_at } : {}),
         });
       } catch { /* skip malformed */ }
@@ -530,9 +622,12 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // probe below, never to a wrong answer.
   const lastStatus = new Map();
   function onBridge(event) {
-    bridgeSend(event);
+    // Guard BEFORE the fan-out (review F6): a foreign root's frame must reach neither this
+    // bridge's SSE clients nor its transcript writer (which would ENOENT under the wrong root
+    // while the owning bridge never gets the line — the "thread forgets" half of #210/#278).
     const name = event.payload?.document_id;
-    if (!name || !DOC_NAME.test(name)) return;
+    if (!name || !DOC_NAME.test(name) || !isExistingDoc(name)) { refuse("bridge", name, event); return; }
+    bridgeSend(event);
     const dir = docDir(name);
     try {
       if (event.event_type === "wicked.interactive.chat.posted") {
@@ -564,7 +659,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
           }
         }
       }
-    } catch { /* transcript logging is best-effort */ }
+    } catch (e) {
+      // Best-effort, but no longer silent (DES §5 ":615"): an OWN-root transcript write that fails
+      // warns once per doc — the foreign-root ENOENT that used to land here is closed by the guard.
+      warnOnce(`transcript:${name}`, `transcript write failed for doc ${name}: ${e?.message ?? e}`);
+    }
   }
 
   // Commands: materialize state. Drops our own facts (loop safety) and non-command types.
@@ -575,11 +674,14 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const key = event.idempotency_key;
     if (key && processedKeys.has(key)) return;
     const name = event.payload?.document_id;
-    if (!name || !DOC_NAME.test(name)) return;
+    if (!name || !DOC_NAME.test(name)) { refuse("commands", name, event); return; }
     if (retiredInfo(name)) return;  // retired doc (#189) — the tombstone is final; ack, don't DLQ
     let entry = docs.get(name);
     if (!entry && isExistingDoc(name)) entry = await mountDoc(name);
-    if (!entry) return;  // unknown doc — nothing to materialize against
+    // Unknown doc: nothing to materialize against HERE — the doc belongs to another bridge's root
+    // (or nowhere). Ack loudly (counter + warn), never silently: the silent ack is how bridge B
+    // "ate" root A's demo.requested (F-RC1-120). Not thrown — a retry/DLQ cannot make it ours.
+    if (!entry) { refuse("commands", name, event); return; }
     await entry.svc.runCommand(event);
     if (key) processedKeys.add(key);
   }
@@ -587,14 +689,23 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // ── Top-level endpoints ─────────────────────────────────────────────────────
   // Identity probe (ADR-0022): says WHICH instance this is (the docs root it serves) so a
   // launching agent can tell "my bridge is already up" from "someone else is on this port".
-  top.get("/api/health", (_req, res) => res.json({ ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null }));
+  // `plugin` = this bridge's per-root bus identity; `unknown_doc_refused` = frames for docs not
+  // under this root that were refused (≥ 1 is expected wherever two roots share a bus).
+  top.get("/api/health", (_req, res) => res.json({
+    ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null,
+    plugin: PLUGIN, unknown_doc_refused: unknownDocRefused,
+  }));
   // Crew projects for the creation wizard's picker (#162): docs must be project-bound to route
   // through the governed crew, and the ONLY place a browser user can bind is at creation. Proxied
   // here (same-origin) because the frontend cannot call the crew API cross-origin. `available:
   // false` (crew down/absent) renders the wizard without a picker — the assist-only path.
-  const crewApiBase = () => (process.env.WICKED_CREW_API || "http://127.0.0.1:7701").replace(/\/+$/, "");
+  // `null` when WICKED_CREW_API is unset (R-L7-a): every consumer below fails closed and names
+  // the variable — no hidden loopback default, so a bridge nobody pointed at a daemon never
+  // talks to whatever sits on the default port.
+  const crewApiBase = () => { const b = resolveCrewApi(); return b ? b.replace(/\/+$/, "") : null; };
   top.get("/api/crew/projects", async (_req, res) => {
     const base = crewApiBase();
+    if (!base) return res.json({ available: false, projects: [], reason: "WICKED_CREW_API unset" });
     try {
       const r = await fetch(`${base}/api/v1/projects`, { signal: AbortSignal.timeout(750) });
       if (!r.ok) return res.json({ available: false, projects: [] });
@@ -615,6 +726,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     const name = String(req.body?.name || "").trim();
     if (!name) return res.status(400).json({ error: "a project name is required" });
     const base = crewApiBase();
+    if (!base) return res.status(503).json({ error: NO_CREW_API });
     try {
       const r = await fetch(`${base}/api/v1/projects`, {
         method: "POST",
@@ -651,17 +763,20 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   async function activityFor(name) {
     const status = lastStatus.get(name) || null;
     let run = null;
-    try {
-      const r = await fetch(`${crewApiBase()}/api/v1/runs`, { signal: AbortSignal.timeout(750) });
-      if (r.ok) {
-        const body = await r.json();
-        const marker = `the wicked-interactive document "${name}"`;
-        const hit = (body.runs || []).find((v) =>
-          typeof v?.session?.problem === "string" && v.session.problem.includes(marker) &&
-          RUN_ACTIVE_STATUSES.has(v.session.status));
-        if (hit) run = { id: hit.session.id, workflow_id: hit.session.workflow_id, status: hit.session.status };
-      }
-    } catch { /* crew unreachable — the status snapshot is still the honest answer */ }
+    const base = crewApiBase();
+    if (base) {   // unset ⇒ the probe is skipped outright (run: null), never dialed at a default
+      try {
+        const r = await fetch(`${base}/api/v1/runs`, { signal: AbortSignal.timeout(750) });
+        if (r.ok) {
+          const body = await r.json();
+          const marker = `the wicked-interactive document "${name}"`;
+          const hit = (body.runs || []).find((v) =>
+            typeof v?.session?.problem === "string" && v.session.problem.includes(marker) &&
+            RUN_ACTIVE_STATUSES.has(v.session.status));
+          if (hit) run = { id: hit.session.id, workflow_id: hit.session.workflow_id, status: hit.session.status };
+        }
+      } catch { /* crew unreachable — the status snapshot is still the honest answer */ }
+    }
     // Active = crew reports a live run, OR the last pulse is fresh (covers the assist-skill
     // answerer, which has no crew run, and a crew API the service can't reach).
     const at = status ? Date.parse(status.at) : NaN;
@@ -686,7 +801,22 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       .sort((a, b) => (a.current === b.current ? a.name.localeCompare(b.name) : a.current ? -1 : 1));
     res.json({ root: here, projects });
   });
-  top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew()));
+  top.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew({ recorderStatus })));
+
+  // Provision the demo recorder's browser on demand (F-RECON-012): the bundled Playwright CLI
+  // downloads the headless shell + ffmpeg into Playwright's cache. Blocks for the download
+  // (minutes on a slow link — a local bridge, so the caller waits), answers the fresh presence
+  // snapshot, or the typed 503 when it could not be provisioned. Forces the install regardless
+  // of WI_RECORDER_AUTO_INSTALL: an explicit request IS the operator's consent.
+  top.post("/api/demo/browser/install", async (req, res) => {
+    const headless = req.body?.headless !== false;
+    try {
+      const status = await ensureRecorderBrowser({ headless, autoInstall: true, status: recorderStatus, ...(recorder.install ? { install: (o) => recorder.install(o) } : {}) });
+      res.json({ ok: true, ...status });
+    } catch (e) {
+      res.status(503).json(recorderErrorPayload(e));
+    }
+  });
   top.get("/api/docs", (req, res) => {
     const includeRetired = ["1", "true"].includes(String(req.query?.includeRetired ?? "").toLowerCase());
     res.json(listDocs({ includeRetired }));
@@ -810,6 +940,28 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!docs.has(name) && !isExistingDoc(name)) return res.status(404).json({ error: "unknown doc" });
     const tomb = retiredInfo(name);
     if (tomb) return res.status(410).json({ error: "doc retired", document_id: name, retired_at: tomb.retired_at });
+    // Demo (re-)record gate (F-RECON-012 / F-RECON-014): refuse, with the typed reason, what
+    // would only replay a known failure. (a) A recording is in flight for this doc → 409 — a
+    // second click must not queue an identical run. (b) The recorder's browser is missing and
+    // auto-install is OFF → 503 `recorder_browser_missing` with the one-line remedy, instead of a
+    // 200 that fails seconds later on the thread. With auto-install on, the request is accepted
+    // and the materializer provisions the browser first (progress narrated on the thread).
+    if (type === "wicked.interactive.demo.requested") {
+      let entry = docs.get(name);
+      if (!entry) { try { entry = await mountDoc(name); } catch (e) { return res.status(400).json({ error: e.message }); } }
+      const st = entry.svc.demoStatus();
+      if (st.in_flight) {
+        const err = new RecorderError(RECORDER_ERROR_CODES.IN_FLIGHT,
+          `a recording is already ${st.state} for ${name} (since ${st.since}) — wait for it to finish or fail, then Re-record.`,
+          { remedy: "wait for the current recording to finish", state: st.state, started_at: st.started_at });
+        err.retryable = true;   // the one recorder condition that clears by itself
+        return res.status(409).json({ ...recorderErrorPayload(err), document_id: name });
+      }
+      const browser = await recorderStatus({ headless: payload.headless !== false });
+      if (!browser.ok && !recorderAutoInstall()) {
+        return res.status(503).json({ ...recorderErrorPayload(missingBrowserError(browser)), document_id: name, auto_install: false });
+      }
+    }
     try {
       const correlationId = randomUUID();
       // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)
@@ -913,7 +1065,9 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       const dir = docDir(name);
       // Registration (the authority) precedes content; bindProject owns the dir lifecycle.
       const bound = bindProject ? await bindProject(dir, name) : null;
-      initWorkspace(dir, html);
+      // The requested output format is recorded on the manifest (F-050): the exporter reads it
+      // so a brochure / doc / web page is never paginated as a slide deck, and a ppt IS one.
+      initWorkspace(dir, html, { style });
       await mountDoc(name);
       // Seed the original ask as the first conversation entry — the durable "intent" the Intent
       // review (semantic-reviewer) checks the current version against. Best-effort.
@@ -967,8 +1121,11 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     await drainAllPendingRetireEvents(); // recover any doc.retired lost to a previous crash (#198)
     // Two subscriptions on the one bus: the bridge (fan-out + transcript, best-effort) and
     // the command loop (materialize, retry+DLQ). cursor_init "latest" — live events only.
-    subs.push(startSubscription({ plugin: "wi-service-bridge", filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
-    subs.push(startSubscription({ plugin: "wi-service-commands", filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
+    // Plugin names are keyed by the served root (bridgeRootId) so two bridges on one bus db
+    // hold two cursors each — never one shared cursor that the wrong bridge drains.
+    console.log(`[wi-service] bus identity: ${rootId} (root ${root})`);
+    subs.push(startSubscription({ plugin: PLUGIN.bridge, filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
+    subs.push(startSubscription({ plugin: PLUGIN.commands, filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
     return new Promise((res, rej) => {
       topServer = top.listen(port, () => res(topServer.address().port));
       topServer.once("error", rej); // surface EADDRINUSE as a rejection so the CLI can fall forward (ADR-0022)
@@ -984,5 +1141,8 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     closeBus();
   }
 
-  return { app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; } };
+  return {
+    app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; },
+    plugin: PLUGIN, rootId, get unknownDocRefused() { return unknownDocRefused; },
+  };
 }

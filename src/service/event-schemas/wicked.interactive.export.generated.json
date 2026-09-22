@@ -35,6 +35,31 @@
     "project_id": {
       "type": "string",
       "description": "ADDITIVE (DES-PROJECT-001 \u00a72.3): the crew project this doc is bound to. Absent for unbound docs; consumers that don't know the field ignore it."
+    },
+    "layout": {
+      "enum": [
+        "document",
+        "deck"
+      ],
+      "description": "ADDITIVE (F-050): how the export was laid out on paper — `document` keeps the author's page geometry untouched; `deck` is a DECLARED slide deck (16:9, one slide per page). Consumers that don't know the field ignore it."
+    },
+    "layout_source": {
+      "type": "string",
+      "description": "ADDITIVE (F-050): which rule decided `layout`. Vocabulary (src/service/export.js LAYOUT_SOURCES): `style: <web|doc|brochure>` (recorded document style), `style: <ppt|slides>` (recorded deck style — explicit deck), `declared data-wi-kind=\"deck\"` (explicit deck marker), `author @page` (author-declared page size, no explicit deck), `declared slides (N × [data-slide], .slide, .wi-slide)` (slide markers at document level), `author page breaks` (document paginated by the author), `no deck declaration` (document, natural flow), `format: pptx` (a PPTX export)."
+    },
+    "page_size": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ADDITIVE (F-050): the page size — measured from the PDF when produced (`A4 portrait`, `16:9 (960 × 540 pt)`), else the declared size, else null (browser default)."
+    },
+    "pages": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "ADDITIVE (F-050): page count read from the produced PDF; null for html/pptx or when the PDF did not expose it."
     }
   },
   "additionalProperties": true
