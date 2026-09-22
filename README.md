@@ -28,7 +28,7 @@ The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-
 
 You normally never start this service yourself:
 
-1. **Through crew — the supported path.** `npx wicked-crew serve` (studio's UI is bundled) spawns this package from npm as a local bridge (`wicked-interactive@^0.8.1`, one bridge per project docs root) and reverse-proxies its entire HTTP surface at `/api/v1/projects/:projectId/interactive/*` on crew's own origin — pure transport, SSE streamed unbuffered both ways. The studio client only ever talks to crew.
+1. **Through crew — the supported path.** `npx wicked-crew serve` (studio's UI is bundled) spawns this package from npm as a local bridge (`wicked-interactive@^0.9.3` — crew's `INTERACTIVE_DEFAULT_RANGE`, overridable with `WICKED_INTERACTIVE_SPEC`; one bridge per project docs root) and reverse-proxies its entire HTTP surface at `/api/v1/projects/:projectId/interactive/*` on crew's own origin — pure transport, SSE streamed unbuffered both ways. The studio client only ever talks to crew.
 2. **Directly, as an API.** `npx wicked-interactive serve --root ~/wicked-interactive/docs` runs the API-only service on a dynamic port (ADR-0022/0025). `GET /` redirects to the recorded studio origin; there is no bundled UI on the supported path.
 3. **The dev escape hatch.** `wicked-interactive serve --standalone` (or `WI_STANDALONE=1`) serves the retired SPA shell for local development of the engine itself — not the supported UI.
 
@@ -80,7 +80,7 @@ document). It remains fully reachable over the API — `POST /api/events` with
 
 Asked and answered (twice — 2026-08-24 parity audit, re-verified 2026-08-29; the full record is
 ADR-0027 in [`docs/architecture-decisions.md`](docs/architecture-decisions.md)): the UI merge did
-**not** move the engine, so this repo cannot be archived. crew resolves `wicked-interactive@^0.8.1`
+**not** move the engine, so this repo cannot be archived. crew resolves `wicked-interactive@^0.9.3`
 from the public npm registry at runtime — archiving would strand a live dependency, deprecating
 would announce a migration that never happened, and unpublishing would kill every route under
 crew's interactive proxy. The repo stays live, reworded to the engine story it now is.
