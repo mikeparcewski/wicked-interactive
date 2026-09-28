@@ -17,7 +17,7 @@ const TARGET = "http://app.test";
 
 /** A fake `playwright` module. `actions` maps a selector to the requests its click sends. */
 function fakePlaywright({ actions = {}, failWaitForUrl = false } = {}) {
-  const seen = { contextOpts: null, continued: [], aborted: [], tracing: 0 };
+  const seen = { contextOpts: null, continued: [], aborted: [], tracing: 0, wsDropped: [], wsForwarded: [], late: [] };
   let handler = null;
   const send = async (method, url) => {
     let outcome = "unrouted";
@@ -28,18 +28,33 @@ function fakePlaywright({ actions = {}, failWaitForUrl = false } = {}) {
     });
     return outcome;
   };
+  // A page → server WebSocket frame: the route the recorder installed decides whether it reaches the server.
+  const wsSend = (url) => {
+    let onMessage = null;
+    wsHandler({ url: () => url, connectToServer: () => ({}), onMessage: (fn) => { onMessage = fn; } });
+    if (onMessage) { onMessage("frame"); seen.wsDropped.push(url); } else seen.wsForwarded.push(url);
+  };
   const page = {
     goto: async (url) => { await send("GET", url); },
-    click: async (sel) => { for (const [m, u] of actions[sel] ?? []) await send(m, u); },
+    click: async (sel) => {
+      for (const [m, u] of actions[sel] ?? []) {
+        if (m === "WS") wsSend(u);
+        else if (m === "LATE") seen.late.push(u);
+        else await send(m, u);
+      }
+    },
     waitForURL: async (pattern) => { if (failWaitForUrl) throw new Error(`page.waitForURL: Timeout 30000ms exceeded waiting for ${pattern}`); },
     evaluate: async () => {},
-    waitForTimeout: async () => {},
+    // Time passing lets a late write (queued by a click) reach the network.
+    waitForTimeout: async () => { for (const u of seen.late.splice(0)) await send("POST", u); },
     screenshot: async () => {},
     video: () => null,
     close: async () => {},
   };
+  let wsHandler = null;
   const context = {
     route: async (_pattern, fn) => { handler = fn; },
+    routeWebSocket: async (_pattern, fn) => { wsHandler = fn; },
     tracing: { start: async () => { seen.tracing += 1; }, stop: async () => {} },
     newPage: async () => page,
     close: async () => {},
@@ -169,4 +184,29 @@ test("a write sent before the first step (run() itself) fails the dry run", asyn
   assert.equal(err?.code, "side_effect_blocked");
   assert.match(err.message, /before the first step/);
   assert.equal(err.step, undefined);
+});
+
+test("a page → server WebSocket frame is dropped and fails the step (a terminal keystroke is a write)", async () => {
+  const dir = specDir(`
+    await page.goto(meta.url);
+    await step("Type in the terminal", async () => { await page.click("#term"); });
+  `);
+  const pw = fakePlaywright({ actions: { "#term": [["WS", "ws://app.test/terminal/t1"]] } });
+  const err = await recordDemo(dir, { dryRun: true, importPlaywright: pw.importPlaywright }).then(() => null, (e) => e);
+  assert.equal(err?.code, "side_effect_blocked");
+  assert.deepEqual(err.step, { index: 1, label: "Type in the terminal" });
+  assert.equal(err.request.method, "WEBSOCKET SEND");
+  assert.deepEqual(pw.seen.wsDropped, ["ws://app.test/terminal/t1"]);
+  assert.deepEqual(pw.seen.wsForwarded, []);
+});
+
+test("a write the last step's click sends a tick late still fails the dry run", async () => {
+  const dir = specDir(`
+    await page.goto(meta.url);
+    await step("Launch", async () => { await page.click("#late"); });
+  `);
+  const pw = fakePlaywright({ actions: { "#late": [["LATE", `${TARGET}/api/v1/runs`]] } });
+  const err = await recordDemo(dir, { dryRun: true, importPlaywright: pw.importPlaywright }).then(() => null, (e) => e);
+  assert.equal(err?.code, "side_effect_blocked");
+  assert.deepEqual(pw.seen.aborted, [`POST ${TARGET}/api/v1/runs`]);
 });

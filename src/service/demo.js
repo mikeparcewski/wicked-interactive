@@ -35,6 +35,8 @@ export const DEMO_SPEC = "demo.spec.mjs";
 // "interactive" mode: nothing stands up a disposable target to mutate, so a spec that asks for one
 // is refused rather than trusted.
 export const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+/** How long the recorder waits after the last step for a late write to surface. */
+const SETTLE_MS = 300;
 
 // Escapes the full set so the same helper is safe in both text and attribute (href/src)
 // contexts — the target URL and title are rendered into attributes in storyboard().
@@ -237,6 +239,14 @@ export async function recordDemo(dir, opts = {}) {
       blocked.push({ method, url: req.url(), stepIndex: index });
       return route.abort("blockedbyclient");
     });
+    // A WebSocket is opened with a GET upgrade the route above lets through, and after that the
+    // page can send anything down it (a terminal's keystrokes, a command channel). Server → page
+    // frames keep flowing (live views stay live in the clip); every page → server frame is dropped
+    // and fails the step like any other write.
+    await context.routeWebSocket(() => true, (ws) => {
+      ws.connectToServer();
+      ws.onMessage(() => { blocked.push({ method: "WEBSOCKET SEND", url: ws.url(), stepIndex: index }); });
+    });
     const throwIfBlocked = (stepInfo) => {
       const b = blocked.shift();
       if (!b) return;
@@ -315,6 +325,9 @@ export async function recordDemo(dir, opts = {}) {
       if (!(e instanceof RecorderError)) throwIfBlocked({ index, label: null });
       throw e;
     }
+    // A click handler may send its write a tick after the step returned: let it surface before
+    // the context closes, so a dry run cannot pass a spec whose last step writes late.
+    await page.waitForTimeout(SETTLE_MS).catch(() => {});
     throwIfBlocked({ index, label: null });
 
     if (dryRun) {
