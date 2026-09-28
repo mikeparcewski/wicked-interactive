@@ -32,6 +32,13 @@
 //       headless shell + ffmpeg — F-RECON-012: `npm install` never provisions it), the sibling
 //       install gate and crew reachability. Exit 1 when the recorder browser is missing; `--install`
 //       provisions it with the BUNDLED Playwright CLI (the version this bridge launches).
+//
+//   wicked-interactive dry-run <demo.spec.mjs> [--headed] [--json]
+//       Execute a demo spec WITHOUT recording it (wicked-crew#500/#565): headless, read-only (any
+//       non-GET request is blocked and fails its step as `side_effect_blocked`), no video, no
+//       version. Exit 0 when every step ran; exit 1 with the typed RecorderError otherwise. crew
+//       runs this as a phase of the governed spec run, so an unrunnable spec fails the RUN before
+//       anything is installed or recorded.
 
 import { readFileSync, openSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -172,6 +179,43 @@ async function daemonize(root, requested, { restart = false, standalone = false,
   return 1;
 }
 
+// `dry-run` — does this demo spec actually run? (wicked-crew#500). Provisions the recorder's
+// browser like a recording would (same auto-install opt-out), then executes the spec read-only.
+async function runDryRun(args) {
+  const { dirname } = await import("node:path");
+  const { recordDemo } = await import("../src/service/demo.js");
+  const { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload, recorderAutoInstallEnabled } = await import("../src/service/recorder-preflight.js");
+  const json = !!args.json;
+  const specArg = args._[1];
+  if (!specArg) {
+    console.error("usage: wicked-interactive dry-run <demo.spec.mjs> [--headed] [--json]");
+    return 2;
+  }
+  const specPath = resolve(specArg);
+  const headless = !args.headed;
+  try {
+    await ensureRecorderBrowser({
+      headless, autoInstall: recorderAutoInstallEnabled(),
+      onProgress: (p) => { if (!json && p.message) console.log(`  ${p.message}`); },
+    });
+    const out = await recordDemo(dirname(specPath), {
+      specPath, headless, dryRun: true,
+      onStep: ({ index, label }) => { if (!json) console.log(`  step ${index}: ${label}`); },
+    });
+    if (json) console.log(JSON.stringify({ ok: true, steps: out.steps.length }));
+    else console.log(`dry run PASSED — ${out.steps.length} step(s) ran read-only against the target: ${specPath}`);
+    return 0;
+  } catch (e) {
+    const wire = recorderErrorPayload(classifyRecorderError(e, { headless }));
+    if (json) console.log(JSON.stringify({ ok: false, ...wire }));
+    else {
+      console.log(`dry run FAILED [${wire.code}] ${wire.error}`);
+      if (wire.remedy) console.log(`  remedy: ${wire.remedy}`);
+    }
+    return 1;
+  }
+}
+
 // `doctor` — can this install record a demo? (F-RECON-012). Human report by default, `--json`
 // for machines, `--install` to provision. Exit code: 0 = recorder ready, 1 = not ready.
 async function runDoctor(args) {
@@ -226,6 +270,10 @@ async function main() {
     process.exit(await runDoctor(args));
   }
 
+  if (cmd === "dry-run") {
+    process.exit(await runDryRun(args));
+  }
+
   // Artifact subcommands — dynamically imported so serve-specific modules are not loaded.
   if (cmd === "create") {
     const { runCreate } = await import("../src/artifact/create.js");
@@ -245,13 +293,14 @@ async function main() {
   }
 
   if (cmd !== "serve") {
-    console.error("usage: wicked-interactive <create|publish|validate|adopt|serve|doctor> [options]");
+    console.error("usage: wicked-interactive <create|publish|validate|adopt|serve|doctor|dry-run> [options]");
     console.error("  create   --from-crew <id> | --from-garden <id> | --from-file <path>  [--output <path>] [--project <id>]");
     console.error("  publish  <artifact-path> [--api-key <key>]");
     console.error("  validate <artifact-path>");
     console.error("  adopt    [--root <docs-dir>] [--crew-api <base-url>]   re-register doc→project breadcrumbs");
     console.error("  serve    [--root <docs-dir>] [--port N] [--daemon] [--restart] [--standalone] [--studio-origin <url>]");
     console.error("  doctor   [--install] [--headed] [--json]   is the demo recorder's browser installed? (--install provisions it)");
+    console.error("  dry-run  <demo.spec.mjs> [--headed] [--json]   run a demo spec read-only without recording it");
     process.exit(1);
   }
   // ONE shared instance by default (ADR-0022 amended): every session converges on the canonical

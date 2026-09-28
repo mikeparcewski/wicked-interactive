@@ -104,6 +104,15 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   // into an identical failure. `recorder.status/install/autoInstall` are the injectable
   // preflight seams (tests never probe the developer's machine).
   const demoState = { state: "idle", since: new Date().toISOString(), started_at: null, finished_at: null, version: null, step: null, progress: null, error: null };
+  // The LAST OUTCOME survives a bridge restart (wicked-studio#278): crew recycles bridges on upgrade
+  // and a reboot restarts them, and a failed recording must still read `failed` (step, reason,
+  // remedy) on the storyboard afterwards — not `idle`, as though nothing had happened. Only the
+  // terminal states are written; an in-flight state cannot outlive the process that was running it.
+  const demoStatusFile = resolve(dir, DEMO_STATUS_FILE);
+  try {
+    const saved = JSON.parse(readFileSync(demoStatusFile, "utf-8"));
+    if (saved && (saved.state === "recorded" || saved.state === "failed")) Object.assign(demoState, saved);
+  } catch { /* none yet, or unreadable — start idle */ }
   // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
   const recorderStatus = (o) => (recorder.status || recorderBrowserStatus)(o);
   function onDemoState(next) {
@@ -115,6 +124,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     if (next.progress !== undefined) demoState.progress = next.progress;
     if (next.version !== undefined) demoState.version = next.version;
     if (next.error) demoState.error = next.error;
+    if (next.state === "recorded" || next.state === "failed") {
+      try { atomicWrite(demoStatusFile, JSON.stringify(demoState)); } catch { /* best-effort: the live state still answers */ }
+    }
   }
   const demoStatus = () => ({ ...demoState, in_flight: DEMO_IN_FLIGHT.has(demoState.state) });
 
@@ -387,6 +399,8 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
 
 /** Recording states during which a second demo.requested is refused rather than queued (F-RECON-014). */
 const DEMO_IN_FLIGHT = new Set(["preflight", "installing", "recording"]);
+/** The doc's last recording outcome on disk (see createServer's demoState). */
+const DEMO_STATUS_FILE = "demo-status.json";
 
 // ---------------------------------------------------------------------------
 // Multi-document mode (ADR-0015): one express server hosting many workspaces under a docs

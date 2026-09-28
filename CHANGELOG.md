@@ -4,7 +4,22 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Demo recordings are read-only** (wicked-crew#565, #235). A spec step that submitted a form or
+  clicked Launch / Approve on the live app it recorded did that work for real. The recorder's
+  browser context now aborts every request whose method is not GET/HEAD/OPTIONS, on every origin
+  (service workers blocked; page → server WebSocket frames dropped), and fails the step that sent it with a typed RecorderError
+  `side_effect_blocked` carrying `step` and `request: {method, url}` (query dropped). A write sent
+  outside any step fails the recording too. `meta.mode` other than `"read-only"` is refused as
+  `recording_spec_invalid`: nothing stands up a disposable target a demo may change.
+- **`wicked-interactive dry-run <demo.spec.mjs>`** (wicked-crew#500): executes a spec headless and
+  read-only with no video, trace, thumbnails, caption holds or version, and exits 1 with the typed
+  error on the first failing step. `recordDemo(dir, { dryRun: true, specPath })` is the same path.
+  crew runs it as a phase of the governed spec run, so an unrunnable spec fails the run instead
+  of the recording.
+- **A failed recording still reads `failed` after a bridge restart** (wicked-studio#278). The last
+  terminal recording state (`recorded` / `failed`, with the step, reason and remedy) is written to
+  `<doc>/demo-status.json` and read back by `GET /api/demo/status` when the bridge starts.
 
 ## [0.9.3] — 2026-09-14
 
