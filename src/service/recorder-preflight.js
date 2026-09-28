@@ -40,6 +40,8 @@ export const RECORDER_ERROR_CODES = Object.freeze({
   STEP_FAILED: "recording_step_failed",
   FAILED: "recording_failed",
   IN_FLIGHT: "recording_in_flight",
+  // A read-only recording refused a write (wicked-crew#565): the spec tried to change the app.
+  SIDE_EFFECT_BLOCKED: "side_effect_blocked",
 });
 
 /** Playwright's own "this browser install finished" marker (written into the install location). */
@@ -86,7 +88,7 @@ export class RecorderError extends Error {
   toJSON() { return recorderErrorPayload(this); }
 }
 
-const WIRE_FIELDS = ["remedy", "browser", "missing", "executable_path", "install_command", "playwright_version", "browsers_path", "step", "cause", "state", "started_at"];
+const WIRE_FIELDS = ["remedy", "browser", "missing", "executable_path", "install_command", "playwright_version", "browsers_path", "step", "request", "cause", "state", "started_at"];
 
 /** Flatten a RecorderError (or any error) into the additive wire fields consumers key on. */
 export function recorderErrorPayload(err) {

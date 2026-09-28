@@ -18,12 +18,23 @@ import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
+import { RecorderError, RECORDER_ERROR_CODES } from "./recorder-preflight.js";
 
 export const RECORDINGS_DIR = "recordings";
 // The agent authors this file: a plain ES module exporting `meta` (url, title, steps[])
 // and `async run({ page, step, meta })`. The service supplies page/step; the agent only
 // expresses the click-path. Kept out of the version artifacts (it's the source, not output).
 export const DEMO_SPEC = "demo.spec.mjs";
+
+// READ-ONLY RECORDING (wicked-crew#565, interactive#235). A demo is recorded against a LIVE app —
+// usually the customer's own studio, served by the daemon that launched the spec run — so a spec
+// step that submits a form or clicks Launch / Approve / Delete would do real, governed work as a
+// by-product of recording a clip. Every recording (and every dry run) is therefore read-only: the
+// browser context aborts any request whose method is not a read, on every origin, and the step
+// that caused it FAILS with a typed `side_effect_blocked` naming the method and URL. There is no
+// "interactive" mode: nothing stands up a disposable target to mutate, so a spec that asks for one
+// is refused rather than trusted.
+export const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 // Escapes the full set so the same helper is safe in both text and attribute (href/src)
 // contexts — the target URL and title are rendered into attributes in storyboard().
@@ -152,17 +163,23 @@ function fmtTime(seconds) {
  * @param {string}   [opts.documentId]  doc name (used for the recording URL + events)
  * @param {Function} [opts.onStep]      progress callback ({ index, total, label })
  * @param {boolean}  [opts.headless]    default true
+ * @param {boolean}  [opts.dryRun]      execute the spec WITHOUT recording (wicked-crew#500): no
+ *                                      video, trace, thumbnails, caption holds or version — the
+ *                                      behaviour check a spec must pass before it is installed
+ * @param {string}   [opts.specPath]    the spec file (default `<dir>/demo.spec.mjs`)
  * @param {Function} [opts.importPlaywright]  injectable `() => import("playwright")` (tests)
- * @returns {Promise<{version:number, parent:number, video:string, steps:Array}>}
+ * @returns {Promise<{version:number, parent:number, video:string, steps:Array}|{dryRun:true, steps:Array}>}
  *
- * Failure semantics (F-RECON-012/014): this function THROWS plain errors; the caller
- * (handlers.materializeDemo) classifies them into a typed RecorderError and never retries — a
+ * Failure semantics (F-RECON-012/014): this function THROWS; the caller
+ * (handlers.materializeDemo) classifies the error into a typed RecorderError and never retries — a
  * missing browser or a failing step is deterministic, so a replay only repeats it. A step failure
- * is tagged with `err.recorderStep = { index, label }` so the typed error names the step.
+ * is tagged with `err.recorderStep = { index, label }` so the typed error names the step. A blocked
+ * write (READ_METHODS) throws a RecorderError `side_effect_blocked` directly.
  */
 export async function recordDemo(dir, opts = {}) {
   const documentId = opts.documentId ?? dir;
-  const specPath = join(dir, DEMO_SPEC);
+  const dryRun = opts.dryRun === true;
+  const specPath = opts.specPath ?? join(dir, DEMO_SPEC);
   if (!existsSync(specPath)) throw new Error(`no ${DEMO_SPEC} authored yet — the agent must write the spec before recording`);
 
   // Resolve Playwright lazily so the service runs fine without it until a demo is recorded
@@ -180,13 +197,22 @@ export async function recordDemo(dir, opts = {}) {
   const meta = spec.meta || {};
   const url = String(meta.url || "").trim();
   if (typeof spec.run !== "function") throw new Error(`${DEMO_SPEC} must export an async run({ page, step, meta })`);
+  if (meta.mode !== undefined && meta.mode !== "read-only") {
+    throw new RecorderError(RECORDER_ERROR_CODES.SPEC_INVALID,
+      `the demo spec asks for meta.mode ${JSON.stringify(meta.mode)}, but recordings are read-only — nothing stands up a disposable target a demo may change. Re-author the spec to show the flow without submitting it, then Re-record.`,
+      { remedy: "re-author demo.spec.mjs as a read-only walkthrough (drop meta.mode), then Re-record", cause: `meta.mode ${JSON.stringify(meta.mode)}` });
+  }
 
   const recDir = join(dir, RECORDINGS_DIR);
-  mkdirSync(recDir, { recursive: true });
-  const manifest = loadManifest(dir);
-  const version = nextVersionNumber(manifest);
-  const videoFile = `_v${version}.webm`;
-  const traceFile = `_v${version}.trace.zip`;
+  let version = null;
+  let videoFile = null;
+  let traceFile = null;
+  if (!dryRun) {
+    mkdirSync(recDir, { recursive: true });
+    version = nextVersionNumber(loadManifest(dir));
+    videoFile = `_v${version}.webm`;
+    traceFile = `_v${version}.trace.zip`;
+  }
 
   const browser = await chromium.launch({ headless: opts.headless !== false });
   const stepTimings = [];
@@ -195,9 +221,30 @@ export async function recordDemo(dir, opts = {}) {
   try {
     context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
-      recordVideo: { dir: recDir, size: { width: 1280, height: 720 } },
+      // A service worker can answer (and issue) requests the context route never sees.
+      serviceWorkers: "block",
+      ...(dryRun ? {} : { recordVideo: { dir: recDir, size: { width: 1280, height: 720 } } }),
     });
-    await context.tracing.start({ screenshots: true, snapshots: true });
+
+    // Read-only enforcement (see READ_METHODS). Blocked writes queue here; the step that was
+    // running when one was blocked fails with it (a write before the first step fails the run).
+    let index = 0;
+    const blocked = [];
+    await context.route("**/*", (route) => {
+      const req = route.request();
+      const method = String(req.method()).toUpperCase();
+      if (READ_METHODS.has(method)) return route.continue();
+      blocked.push({ method, url: req.url(), stepIndex: index });
+      return route.abort("blockedbyclient");
+    });
+    const throwIfBlocked = (stepInfo) => {
+      const b = blocked.shift();
+      if (!b) return;
+      blocked.length = 0;
+      throw sideEffectBlocked(b, stepInfo);
+    };
+
+    if (!dryRun) await context.tracing.start({ screenshots: true, snapshots: true });
     const page = await context.newPage();
 
     // On-screen narration: the caption is the curated `say` — describe what's HAPPENING and
@@ -207,15 +254,17 @@ export async function recordDemo(dir, opts = {}) {
     // shown BEFORE the action (covers same-page steps) AND re-asserted AFTER it — a step that
     // navigates (page.goto / waitForURL) wipes the injected node, so the post-action re-show is
     // what guarantees it's visible on the settled view. meta.captions:false suppresses all;
-    // tune the read-pause with meta.captionHoldMs or per step via { say, holdMs }.
-    const captionsOn = meta.captions !== false;
+    // tune the read-pause with meta.captionHoldMs or per step via { say, holdMs }. A dry run
+    // shows no captions and holds nothing — it only proves the steps work.
+    const captionsOn = !dryRun && meta.captions !== false;
     const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? Math.max(0, meta.captionHoldMs) : 2500;
 
     // `step` annotates a labelled segment so the storyboard can show ordered, timed steps
     // and so a failure points at the exact step. The agent wraps each action in step().
-    let index = 0;
     const step = async (label, fn, sopts = {}) => {
+      throwIfBlocked({ index, label: null }); // a write blocked between steps belongs to the previous one
       index += 1;
+      const stepInfo = { index, label: String(label) };
       const at = (Date.now() - startedAt) / 1000; // chapter start
       const entry = { label: String(label), at };
       stepTimings.push(entry);
@@ -228,11 +277,17 @@ export async function recordDemo(dir, opts = {}) {
       if (showCap) await showCaption(page, say);          // before the action (same-page steps)
 
       // Tag a failing step so the typed error (recorder-preflight.classifyRecorderError) can
-      // say WHICH step broke — the storyboard highlight the user refines.
+      // say WHICH step broke — the storyboard highlight the user refines. A blocked write is the
+      // truer cause of whatever the step then waited for in vain, so it wins.
       if (typeof fn === "function") {
         try { await fn(); }
-        catch (e) { const err = e instanceof Error ? e : new Error(String(e)); err.recorderStep = { index, label: String(label) }; throw err; }
+        catch (e) {
+          throwIfBlocked(stepInfo);
+          const err = e instanceof Error ? e : new Error(String(e)); err.recorderStep = stepInfo; throw err;
+        }
       }
+      throwIfBlocked(stepInfo);
+      if (dryRun) return;
 
       // Re-assert after the action (fn may have navigated and wiped the node), then pause so
       // the viewer reads it against the settled, resulting view.
@@ -253,7 +308,20 @@ export async function recordDemo(dir, opts = {}) {
       } catch { /* skip thumbnail */ }
     };
 
-    await spec.run({ page, step, meta });
+    try {
+      await spec.run({ page, step, meta });
+    } catch (e) {
+      // A write blocked outside any step (run() navigating before its first step) still names itself.
+      if (!(e instanceof RecorderError)) throwIfBlocked({ index, label: null });
+      throw e;
+    }
+    throwIfBlocked({ index, label: null });
+
+    if (dryRun) {
+      await context.close();
+      context = null;
+      return { dryRun: true, steps: stepTimings };
+    }
 
     await context.tracing.stop({ path: join(recDir, traceFile) });
     const pageVideo = page.video();
@@ -313,6 +381,21 @@ export async function recordDemo(dir, opts = {}) {
   });
 
   return { version, parent, video: videoFile, steps: stepTimings };
+}
+
+/** The typed failure for a write the read-only recorder blocked (wicked-crew#565). */
+function sideEffectBlocked(b, stepInfo) {
+  let path = b.url;
+  try { const u = new URL(b.url); path = `${u.origin}${u.pathname}`; } catch { /* keep the raw url */ }
+  const where = stepInfo?.label ? `step ${stepInfo.index} (${stepInfo.label})` : stepInfo?.index ? `after step ${stepInfo.index}` : "before the first step";
+  return new RecorderError(RECORDER_ERROR_CODES.SIDE_EFFECT_BLOCKED,
+    `the demo spec tried to change the app it records: ${where} sent ${b.method} ${path}, which the read-only recorder blocked — a demo may navigate, open panels and type, but never submit, launch, approve or delete. Re-author that step to show the control without pressing it, then Re-record.`,
+    {
+      remedy: `re-author ${stepInfo?.label ? `step ${stepInfo.index} (${stepInfo.label})` : "the spec"} to show the flow without submitting it, then Re-record`,
+      request: { method: b.method, url: path },
+      ...(stepInfo?.label ? { step: { index: stepInfo.index, label: stepInfo.label } } : {}),
+      cause: `${b.method} ${path} blocked`,
+    });
 }
 
 // --- Narration captions -------------------------------------------------------------------

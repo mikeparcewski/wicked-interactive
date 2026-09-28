@@ -499,24 +499,33 @@ retried; fix what the `remedy` says, then re-emit `demo.requested`.
 ```js
 export const meta = {
   url: "https://staging.example.com/app",
-  title: "Checkout demo",
-  steps: ["Sign in", "Add Pro plan", "Checkout"],
+  title: "Plans tour",
+  steps: ["Open plans", "Compare Pro"],
   captionHoldMs: 2500,
 };
 export async function run({ page, step, meta }) {
   await page.goto(meta.url);
-  await step("Sign in", async () => {
-    await page.fill("#email", "demo@example.com");
-    await page.fill("#password", process.env.DEMO_PW || "");
-    await page.click("button[type=submit]");
-    await page.waitForURL("**/dashboard");
+  await step("Open plans", async () => {
+    await page.click("text=Plans");
+    await page.waitForURL("**/plans");
   });
-  await step("Checkout", async () => {
-    await page.click("text=Checkout");
-    await page.waitForSelector("text=Order confirmed");
-  }, { say: "One click and the order's placed — no forms, no waiting.", holdMs: 3500 });
+  await step("Compare Pro", async () => {
+    await page.click("text=Compare");
+    await page.waitForSelector("text=Pro includes");
+  }, { say: "Every plan side by side — pick the one that fits.", holdMs: 3500 });
 }
 ```
+
+**Recordings are READ-ONLY** (wicked-crew#565). The recorder aborts every request whose method is
+not GET/HEAD/OPTIONS, on every origin, and fails the step that sent it with a typed
+`side_effect_blocked` naming the method and URL — a demo is recorded against a live app, and must
+never launch, approve, delete, create or submit anything there. Show a control and narrate it; do
+not press it. A spec that sets `meta.mode` to anything but `"read-only"` is refused
+(`recording_spec_invalid`). Prove a spec before recording it with
+`wicked-interactive dry-run <demo.spec.mjs>`: it runs every step headless and read-only, records
+nothing, and exits non-zero with the typed error on the first step that fails — so after every
+click, wait for the URL or text the click should produce (a click that silently does nothing only
+fails when something waits for its effect).
 
 Rules that keep the recording deterministic and safe (unchanged from the file era): wrap every
 meaningful action in `step(label, fn)`; **always narrate** (caption the meaningful beats via the

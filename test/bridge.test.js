@@ -299,6 +299,24 @@ test("demo.requested with auto-install ON: accepted, the install fails → ONE t
   } finally { bridge.close(); }
 });
 
+test("a failed recording's status survives a bridge restart (wicked-studio#278): demo-status.json is written and read back", async () => {
+  // Runs after the rec-fail test above (node:test runs a file's tests in order).
+  const { existsSync, readFileSync } = await import("node:fs");
+  const file = join(root, "rec-fail", "demo-status.json");
+  assert.ok(existsSync(file), "the terminal state was written beside the doc");
+  assert.equal(JSON.parse(readFileSync(file, "utf-8")).state, "failed");
+  const { createServer } = await import("../src/service/server.js");
+  const fresh = createServer({ dir: join(root, "rec-fail"), documentId: "rec-fail", recorder });
+  try {
+    const port = await fresh.start(0);
+    const st = await (await fetch(`http://localhost:${port}/api/demo/status`)).json();
+    assert.equal(st.state, "failed", "a fresh server (a restarted bridge) still reads the failure");
+    assert.equal(st.in_flight, false);
+    assert.equal(st.error.code, "recorder_browser_install_failed");
+    assert.match(st.error.remedy, /doctor --install/);
+  } finally { await fresh.stop(); }
+});
+
 test("a second demo.requested while one is in flight is refused with 409 recording_in_flight; GET /api/demo/status says so", async () => {
   await createDemo("rec-busy");
   // Hold the doc in flight at the INSTALL step (browser missing, auto-install on): the status
