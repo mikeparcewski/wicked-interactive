@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.9.4] — 2026-09-28
+
 ### Fixed
 - **Demo recordings are read-only** (wicked-crew#565, #235). A spec step that submitted a form or
   clicked Launch / Approve on the live app it recorded did that work for real. The recorder's
@@ -241,5 +245,6 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.2...v0.9.3
