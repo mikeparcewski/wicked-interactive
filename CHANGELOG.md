@@ -11,6 +11,21 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   fork is seen. Without `expect_head` the fork behaves as before; a non-integer value is a 400.
   This lets an Undo of a touch edit refuse instead of burying a version an agent landed in between.
 
+### Security
+
+- **A content-edit applies its value as text, never as markup** (#247). `regenerate()` now sets the
+  target's text instead of its inner HTML, so typed or pasted `<b>x</b>` or `<img onerror=…>` lands
+  as escaped characters in the saved version and in every HTML export. The AC-10 stale check and the
+  INV-2 wid guard are unchanged. A content-edit aimed at a raw-text element (`script`, `style`,
+  `xmp`, `iframe`, `noembed`, `noframes`, `noscript`, `plaintext`, `template`), whose text
+  serializes unescaped, is rejected with `content-edit-raw-text-element:<tag>`. The assist skill's
+  edit-routing reference now says content edits are plain text only.
+- **A style-edit must fit a declared property/value grammar** (#247, `src/core/style-grammar.js`).
+  Properties outside the allowlist, functions other than `rgb/rgba/hsl/hsla/calc/min/max/clamp`
+  (so `url(`, `expression(`, `image-set(`), declaration breakouts (`;`, `{`, `}`), CSS escapes and
+  `!important` reject the whole item with a `style-edit-rejected:<detail>` reason; nothing is
+  partially applied.
+
 ## [0.9.4] — 2026-09-28
 
 ### Fixed
