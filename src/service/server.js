@@ -166,14 +166,28 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
 
   // Fork / "start again from here" (ADR-0008, AC-21): non-destructive. Enqueued so it can't
   // race a bus-driven regeneration on the manifest.
+  // Optional `expect_head` guard: the caller states the head it believes is current (e.g. an
+  // Undo of its own edit). If another version landed in between, refuse with 409 head_moved
+  // instead of forking over it. The check runs INSIDE the queue, so a version queued ahead of
+  // this fork is seen.
   app.post("/api/fork", (req, res) => {
     const from = Number(req.body?.from);
     if (!Number.isInteger(from)) return res.status(400).json({ error: "from (version number) required" });
+    const hasExpect = req.body?.expect_head !== undefined && req.body?.expect_head !== null;
+    const expectHead = hasExpect ? req.body.expect_head : null;
+    if (hasExpect && !Number.isInteger(expectHead)) {
+      return res.status(400).json({ error: "expect_head must be a version number" });
+    }
     enqueue(async () => {
+      if (hasExpect) {
+        const { head } = loadManifest(dir);
+        if (head !== expectHead) return { headMoved: true, head };
+      }
       const { version, parent } = forkVersion(dir, from);
       emit("wicked.interactive.version.created", { version, parent, kind: "fork", html_file: `_v${version}.html` });
       return { version, parent };
-    }).then((r) => res.json(r)).catch((e) => res.status(400).json({ error: e.message }));
+    }).then((r) => (r.headMoved ? res.status(409).json({ error: "head_moved", head: r.head }) : res.json(r)))
+      .catch((e) => res.status(400).json({ error: e.message }));
   });
 
   // Export to self-contained HTML or PDF (ADR-0009), triggered from the browser. POST creates

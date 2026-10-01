@@ -4,7 +4,12 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **`POST /api/fork` takes an optional `expect_head`** (studio rebuild C5). When it is set and the
+  manifest head is a different version, the fork answers `409 {error: "head_moved", head}` and
+  creates no version. The check runs inside the per-doc queue, so a version queued ahead of the
+  fork is seen. Without `expect_head` the fork behaves as before; a non-integer value is a 400.
+  This lets an Undo of a touch edit refuse instead of burying a version an agent landed in between.
 
 ## [0.9.4] — 2026-09-28
 
