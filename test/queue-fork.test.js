@@ -77,13 +77,16 @@ test("FIFO queue: two rapid feedback commands both process without racing the ma
 });
 
 // ── C5: optional expect_head guard on fork ────────────────────────────────
+const forkEvents = (events) => events.filter((e) => e.type === "wicked.interactive.version.created" && e.payload.kind === "fork");
+const capture = () => { const events = []; return { events, emit: (type, payload) => events.push({ type, payload }) }; };
 const postFork = (port, body) => fetch(`http://localhost:${port}/api/fork`, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 
 test("POST /api/fork with a matching expect_head forks as today", async () => {
   const dir = fresh();
-  const svc = createServer({ dir });
+  const cap = capture();
+  const svc = createServer({ dir, emit: cap.emit });
   const port = await svc.start(0);
   try {
     forkVersion(dir, 0); // head = 1
@@ -91,12 +94,14 @@ test("POST /api/fork with a matching expect_head forks as today", async () => {
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { version: 2, parent: 0 });
     assert.equal(loadManifest(dir).head, 2);
+    assert.equal(forkEvents(cap.events).length, 1, "a guarded fork that passes still announces its version");
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("POST /api/fork with a stale expect_head answers 409 head_moved and creates no version", async () => {
   const dir = fresh();
-  const svc = createServer({ dir });
+  const cap = capture();
+  const svc = createServer({ dir, emit: cap.emit });
   const port = await svc.start(0);
   try {
     forkVersion(dir, 0); // head = 1 (an agent landed a version)
@@ -108,12 +113,14 @@ test("POST /api/fork with a stale expect_head answers 409 head_moved and creates
     assert.equal(after.head, 1);
     assert.equal(after.versions.length, before.versions.length, "no version created");
     assert.ok(!existsSync(join(dir, "_v2.html")));
+    assert.equal(forkEvents(cap.events).length, 0, "a refused fork announces no version");
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("POST /api/fork rejects a non-integer expect_head with 400", async () => {
   const dir = fresh();
-  const svc = createServer({ dir });
+  const cap = capture();
+  const svc = createServer({ dir, emit: cap.emit });
   const port = await svc.start(0);
   try {
     const res = await postFork(port, { from: 0, expect_head: "latest" });
@@ -124,7 +131,8 @@ test("POST /api/fork rejects a non-integer expect_head with 400", async () => {
 
 test("expect_head is checked inside enqueue: a version queued ahead of the fork makes it 409", async () => {
   const dir = fresh();
-  const svc = createServer({ dir });
+  const cap = capture();
+  const svc = createServer({ dir, emit: cap.emit });
   const port = await svc.start(0);
   try {
     // The head is 0 when both requests are sent; the feedback command is queued first and lands v1,
@@ -138,5 +146,6 @@ test("expect_head is checked inside enqueue: a version queued ahead of the fork 
     assert.equal(res.status, 409);
     assert.deepEqual(await res.json(), { error: "head_moved", head: 1 });
     assert.equal(loadManifest(dir).head, 1, "the agent's version stays head; nothing buried");
+    assert.equal(forkEvents(cap.events).length, 0, "a refused fork announces no version");
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
