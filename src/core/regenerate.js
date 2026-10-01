@@ -9,9 +9,14 @@
 //   INV-3  only elements named in the feedback change; untargeted elements are untouched
 //          by construction (we mutate only the matched element).
 //   AC-10  stale-target detection: if `before` no longer matches, skip + flag.
+//   #247   a content-edit's value is TEXT (escaped on serialization, never parsed as markup);
+//          a style-edit must fit the declared property/value grammar (style-grammar.js) or the
+//          whole item is rejected with a reason. A rich-text edit, if ever wanted, is a separate
+//          explicit op with an allowlist sanitiser — never this default.
 
 import * as cheerio from "cheerio";
 import { collectWids } from "./instrument.js";
+import { checkStyleMap } from "./style-grammar.js";
 
 export class Inv2Error extends Error {
   constructor(missing) {
@@ -20,6 +25,12 @@ export class Inv2Error extends Error {
     this.missing = missing;
   }
 }
+
+// Elements whose text children serialize unescaped (HTML raw-text / foreign-content rules), so a
+// text value like `</script><img onerror=…>` would come back as markup on the next parse (#247).
+const RAW_TEXT_ELEMENTS = new Set([
+  "script", "style", "xmp", "iframe", "noembed", "noframes", "noscript", "plaintext", "template",
+]);
 
 const norm = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
 
@@ -75,9 +86,14 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
     }
 
     if (item.type === "content-edit") {
+      const tag = String(el.tagName || el.name || "").toLowerCase();
+      if (RAW_TEXT_ELEMENTS.has(tag)) {
+        rejected.push({ selector: item.selector, reason: `content-edit-raw-text-element:${tag}` });
+        continue;
+      }
       const prevInner = $el.html();
       const before = widsUnder($, el);
-      $el.html(item.value);
+      $el.text(String(item.value ?? "")); // #247: text, not markup
       const after = widsUnder($, el);
       const dropped = before.filter((w) => !after.includes(w));
       if (dropped.length) {
@@ -87,7 +103,14 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
       }
       applied.push(item.selector);
     } else if (item.type === "style-edit") {
-      if (item.style) applyStyle($el, item.style);
+      if (item.style != null) {
+        const check = checkStyleMap(item.style);
+        if (!check.ok) {
+          rejected.push({ selector: item.selector, reason: check.reason });
+          continue;
+        }
+        applyStyle($el, item.style);
+      }
       if (item.class_remove) item.class_remove.forEach((c) => $el.removeClass(c));
       if (item.class_add) item.class_add.forEach((c) => $el.addClass(c));
       applied.push(item.selector);
