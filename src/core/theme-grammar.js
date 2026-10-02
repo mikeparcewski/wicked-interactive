@@ -96,12 +96,14 @@ export function checkThemeTokens(tokens) {
       if (typeof val !== "string" || !PROSE.test(val) || BANNED.test(val)) return reject(`value-outside-grammar:${key}`);
       continue;
     }
-    const group = GROUPS[key];
+    const group = Object.hasOwn(GROUPS, key) ? GROUPS[key] : null;
     if (!group) return reject(`unknown-key:${String(key).slice(0, 40)}`);
     if (!isPlainObject(val)) return reject(`not-an-object:${key}`);
     for (const [sub, v] of Object.entries(val)) {
       const field = `${key}.${String(sub).slice(0, 40)}`;
-      const check = group.keys ? group.keys[sub] : (KEY.test(sub) ? group.value : null);
+      const check = group.keys
+        ? (Object.hasOwn(group.keys, sub) ? group.keys[sub] : null)
+        : (KEY.test(sub) ? group.value : null);
       if (!check) return reject(`unknown-key:${field}`);
       if (typeof v === "string" && BANNED.test(v)) return reject(`value-outside-grammar:${field}`);
       if (!check(v)) return reject(`value-outside-grammar:${field}`);

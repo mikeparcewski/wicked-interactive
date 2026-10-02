@@ -90,3 +90,10 @@ test("layout (numbers only) is accepted as the shipped themes carry it", () => {
   ok({ layout: { viewport_width: 1280, content_start_x: 48 } });
   bad({ layout: { viewport_width: "1280px" } }, /layout\.viewport_width/);
 });
+
+test("prototype keys are unknown keys, not lookups into Object.prototype", () => {
+  bad(JSON.parse('{"card":{"constructor":"x"}}'), /unknown-key:card\.constructor/);
+  bad(JSON.parse('{"constructor":{"a":"#fff"}}'), /unknown-key:constructor/);
+  bad(JSON.parse('{"__proto__":{"a":"#fff"}}'), /unknown-key:__proto__/);
+  bad(JSON.parse('{"card":{"toString":"x"}}'), /unknown-key:card\.toString/);
+});
