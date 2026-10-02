@@ -991,13 +991,13 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       }
     }
     // The version under review (EP-I1): a review is about one version, so review.requested always
-    // carries it. Absent → the doc's head at request time (what the operator is looking at); given
-    // → it must be an integer version in this doc's lineage, else 400 and nothing is emitted.
+    // carries it. Omitted → the doc's head at request time (what the operator is looking at); given
+    // (null included) → it must be an integer version in this doc's lineage, else 400, nothing emitted.
     let reviewVersion;
     if (type === "wicked.interactive.review.requested") {
       let manifest;
       try { manifest = loadManifest(docDir(name)); } catch (e) { return res.status(404).json({ error: e.message }); }
-      if (payload.version === undefined || payload.version === null) {
+      if (!Object.prototype.hasOwnProperty.call(payload, "version")) {
         reviewVersion = manifest.head;
       } else if (Number.isInteger(payload.version) && manifest.versions.some((v) => v.version === payload.version)) {
         reviewVersion = payload.version;

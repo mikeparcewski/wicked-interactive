@@ -224,7 +224,7 @@ test("review.requested carries the version under review: stamped with head when 
   assert.equal(r.status, 200);
   assert.equal(payloadOf((await r.json()).event_id).version, 0);
   // Given but not a version of this doc, or not an integer → refused, nothing emitted.
-  for (const version of [7, -1, "0", 1.5]) {
+  for (const version of [7, -1, "0", 1.5, null]) {
     r = await jpost("/api/events", { event_type: "wicked.interactive.review.requested", payload: { document_id: "iota", version, reviewers: ["qe"] } });
     assert.equal(r.status, 400, `version ${JSON.stringify(version)} refused`);
     assert.match((await r.json()).error, /version/);

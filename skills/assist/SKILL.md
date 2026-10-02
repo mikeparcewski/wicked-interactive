@@ -675,7 +675,7 @@ wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<
 
 | reviewer (UI name) | what to check | how |
 |----------|---------------|-----|
-| `match` (**Intent**) | does the version still match the **original ask/intent**? | read the SAVED intent — the **first user entry in the doc's `conversation.jsonl`** (the service seeds the creation brief / first ask there) — and compare it to the head HTML; flag drift, dropped asks, scope creep. This is why intent is persisted: judge against what was actually asked, not vibes. |
+| `match` (**Intent**) | does the version still match the **original ask/intent**? | read the SAVED intent — the **first user entry in the doc's `conversation.jsonl`** (the service seeds the creation brief / first ask there) — and compare it to the requested version's HTML (`GET <BASE>/d/<doc>/doc/<version>`); flag drift, dropped asks, scope creep. This is why intent is persisted: judge against what was actually asked, not vibes. |
 | `a11y`   | accessibility + contrast | run text/background pairs through WCAG-AA (`skills/assist/references/quality-checklist.md`); flag < 4.5:1, missing alt/landmarks, focus order |
 | `copy`   | copy & clarity | tighten wording, reading level, consistency; flag jargon, hedging, inconsistent terms |
 | `qe` (**Quality**) | full quality crew | for a heavier multi-perspective pass, assemble a wicked-garden crew (Step 7) — semantic + a11y + content reviewers — and synthesize their findings |
