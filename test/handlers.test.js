@@ -169,6 +169,19 @@ test("a learned theme that breaks the token grammar is ignored at the reader, wi
   } finally { cleanup(dir); }
 });
 
+test("a learned file holding a JSON primitive is ignored with the same status.posted error (EP-I2)", async () => {
+  const dir = ws("<section><h1>Building…</h1></section>");
+  const ctx = spyCtx();
+  try {
+    mkdirSync(join(dir, "theme"), { recursive: true });
+    writeFileSync(join(dir, "theme", "learned.theme.json"), JSON.stringify("red"));
+    await materializeDraft(dir, { html: "<section><h1>Investor Update</h1></section>" }, ctx);
+    const err = ctx.events.find((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error");
+    assert.ok(err, "a primitive file is reported, not silently skipped");
+    assert.match(err.payload.message, /not-an-object/);
+  } finally { cleanup(dir); }
+});
+
 test("the version.created schema's kind enum includes theme (EP-I2)", () => {
   const schema = JSON.parse(readFileSync(new URL("../src/service/event-schemas/wicked.interactive.version.created.json", import.meta.url), "utf-8"));
   assert.deepEqual(schema.properties.kind.enum, ["deterministic", "structural", "generated", "fork", "demo", "theme"]);

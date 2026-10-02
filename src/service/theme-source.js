@@ -57,7 +57,8 @@ export function resolveLearnedTheme(docDir, opts = {}) {
     if (!existsSync(file)) return null;
     tokens = JSON.parse(readFileSync(file, "utf-8"));
   } catch { return null; /* unreadable — degrade to the named/default theme */ }
-  if (!tokens || typeof tokens !== "object") return null;
+  // Every parsed value goes through the grammar (a primitive or an array is `not-an-object`), so
+  // a hand-written `"red"` is reported like any other refusal rather than skipped silently.
   const check = checkThemeTokens(tokens);
   if (!check.ok) {
     try { opts.onInvalid?.(check.reason); } catch { /* reporting is best-effort */ }

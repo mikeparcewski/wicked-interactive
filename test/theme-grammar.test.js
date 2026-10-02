@@ -97,3 +97,16 @@ test("prototype keys are unknown keys, not lookups into Object.prototype", () =>
   bad(JSON.parse('{"__proto__":{"a":"#fff"}}'), /unknown-key:__proto__/);
   bad(JSON.parse('{"card":{"toString":"x"}}'), /unknown-key:card\.toString/);
 });
+
+test("a negative blur is refused (CSS drops the whole shadow); negative offsets stay fine", () => {
+  ok({ card: { shadow: "-1px -2px 3px #000" } });
+  bad({ card: { shadow: "0 1px -3px #000" } }, /card\.shadow/);
+});
+
+test("every group is a closed set of the shipped keys, so a typo is refused instead of silently ignored", () => {
+  bad({ colors: { primray: "#fff" } }, /unknown-key:colors\.primray/);
+  bad({ fonts: { headline: "Inter" } }, /unknown-key:fonts\.headline/);
+  bad({ sizes: { huge: "99px" } }, /unknown-key:sizes\.huge/);
+  bad({ spacing: { gutter: "8px" } }, /unknown-key:spacing\.gutter/);
+  bad({ layout: { zoom: 2 } }, /unknown-key:layout\.zoom/);
+});
