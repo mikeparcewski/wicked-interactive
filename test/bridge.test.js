@@ -211,6 +211,29 @@ test("POST /api/events enforces the UI whitelist + known doc", async () => {
   assert.equal((await jpost("/api/events", { event_type: "wicked.interactive.chat.posted", payload: { document_id: "nonesuch", role: "user", text: "hi" } })).status, 404);
 });
 
+test("review.requested carries the version under review: stamped with head when absent, checked when given (EP-I1)", async () => {
+  await createDoc("iota");
+  const { busDb } = await import("../src/service/bus-client.js");
+  const payloadOf = (event_id) => JSON.parse(busDb().prepare("SELECT payload FROM events WHERE event_id=?").get(event_id).payload);
+  // Absent → the service stamps the doc's current head (v0 for a fresh doc).
+  let r = await jpost("/api/events", { event_type: "wicked.interactive.review.requested", payload: { document_id: "iota", reviewers: ["a11y"] } });
+  assert.equal(r.status, 200);
+  assert.equal(payloadOf((await r.json()).event_id).version, 0);
+  // Given and in the lineage → kept as-is.
+  r = await jpost("/api/events", { event_type: "wicked.interactive.review.requested", payload: { document_id: "iota", version: 0, reviewers: ["copy"] } });
+  assert.equal(r.status, 200);
+  assert.equal(payloadOf((await r.json()).event_id).version, 0);
+  // Given but not a version of this doc, or not an integer → refused, nothing emitted.
+  for (const version of [7, -1, "0", 1.5, null]) {
+    r = await jpost("/api/events", { event_type: "wicked.interactive.review.requested", payload: { document_id: "iota", version, reviewers: ["qe"] } });
+    assert.equal(r.status, 400, `version ${JSON.stringify(version)} refused`);
+    assert.match((await r.json()).error, /version/);
+  }
+  // The browser still may not post a verdict.
+  r = await jpost("/api/events", { event_type: "wicked.interactive.review.completed", payload: { document_id: "iota", version: 0, reviewer: "a11y", passed: true } });
+  assert.equal(r.status, 403);
+});
+
 test("idempotency: a re-emitted feedback command does not create a second version", async () => {
   await createDoc("theta");
   const bridge = await openBridge();

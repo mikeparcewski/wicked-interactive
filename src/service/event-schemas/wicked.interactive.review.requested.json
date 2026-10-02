@@ -4,7 +4,8 @@
   "type": "object",
   "required": [
     "document_id",
-    "ts"
+    "ts",
+    "version"
   ],
   "properties": {
     "document_id": {
@@ -13,11 +14,21 @@
     "ts": {
       "type": "string"
     },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The version under review. The service stamps the doc's head when the browser omits it, and refuses a version that is not in the doc's lineage."
+    },
     "reviewers": {
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["match", "a11y", "copy", "qe"]
+        "enum": [
+          "match",
+          "a11y",
+          "copy",
+          "qe"
+        ]
       }
     }
   },

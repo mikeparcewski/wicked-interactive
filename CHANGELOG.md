@@ -10,6 +10,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   creates no version. The check runs inside the per-doc queue, so a version queued ahead of the
   fork is seen. Without `expect_head` the fork behaves as before; a non-integer value is a 400.
   This lets an Undo of a touch edit refuse instead of burying a version an agent landed in between.
+- **wicked-crew may answer reviews** (EP-I1). `wicked.interactive.review.completed` now has two
+  allowed producers, the agent and crew (`wi-crew`). It is still not UI-emittable. Its schema gains
+  optional `version` and `findings: [{wid, severity, sentence}]`. `review.requested` now requires
+  `version`: `POST /api/events` stamps the doc's head when the browser leaves it out, and answers 400
+  (nothing emitted) for a value that is not an integer version of the doc, `null` included.
 
 ### Security
 
