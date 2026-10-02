@@ -645,7 +645,8 @@ it in place.
 ## Step 8.6 — Run a review pass (ADR-0023)
 
 A `wicked.interactive.review.requested` event carries `reviewers: string[]` (any of `match`, `a11y`, `copy`,
-`qe`) and `document_id`. The user wants the **current head version** reviewed — you run the passes
+`qe`), `document_id` and `version` (the version under review; the service stamps the head when the
+browser omits it). The user wants **that version** reviewed — you run the passes
 and post each verdict back so it lands in the conversation thread. **Review only; do not edit** —
 the user decides what to act on (offer to apply fixes, don't apply unasked).
 
@@ -658,9 +659,11 @@ when that reviewer's verdict lands. To keep this working, two rules:
   `wibus wicked.interactive.status.posted status '{"document_id":"<doc>","state":"working","review":true,"message":"Running the a11y pass…"}'`.
 - **Close each reviewer out** with `wicked.interactive.review.completed` carrying its `reviewer` key — this is
   what clears that reviewer's rail spinner:
-  `wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<iso>","reviewer":"a11y","passed":true,"verdict":"✓ Contrast passes AA throughout."}'`.
+  `wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<iso>","version":<n>,"reviewer":"a11y","passed":true,"verdict":"✓ Contrast passes AA throughout."}'`.
+  Echo the request's `version` so a verdict is never shown against a newer version. A wicked-crew
+  daemon may also answer review requests (producer `wi-crew`, adding `findings: [{wid, severity, sentence}]`).
 
-For each selected reviewer, evaluate the head version's HTML and post a concise verdict. Post it as
+For each selected reviewer, evaluate that version's HTML and post a concise verdict. Post it as
 a chat message with `role: "review"` (the UI renders these as review lines) AND/OR as
 `wicked.interactive.review.completed` (which also clears the rail spinner). Including the `reviewer` key on
 either lets the UI match the verdict to the right rail button:

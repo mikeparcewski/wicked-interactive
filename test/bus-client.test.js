@@ -79,3 +79,16 @@ test("emitEvent threads correlation_id when supplied", async () => {
   const row = busDb().prepare("SELECT correlation_id FROM events WHERE event_id=?").get(event_id);
   assert.equal(row.correlation_id, "corr-xyz");
 });
+
+test("crew may emit review.completed with version + findings; the UI producer may not (EP-I1)", async () => {
+  const payload = { document_id: "t1", version: 2, reviewer: "a11y", verdict: "changes", passed: false,
+    findings: [{ wid: "slide-0-heading-1", severity: "major", sentence: "Heading contrast is 3.1:1." }] };
+  const { event_id } = await emitEvent("wicked.interactive.review.completed", payload, { producer: "wi-crew" });
+  const row = busDb().prepare("SELECT producer_id, payload FROM events WHERE event_id=?").get(event_id);
+  assert.equal(row.producer_id, "wi-crew");
+  assert.deepEqual(JSON.parse(row.payload).findings, payload.findings);
+  await assert.rejects(
+    () => emitEvent("wicked.interactive.review.completed", payload, { producer: "wi-ui" }),
+    /wi-ui may not emit wicked\.interactive\.review\.completed/,
+  );
+});

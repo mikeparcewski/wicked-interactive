@@ -18,7 +18,8 @@ export const DOMAIN = "wicked-interactive";
 //
 // CREW (wi-crew) is the governed answerer: a wicked-crew daemon subscribing to doc.created /
 // feedback.processed and answering with draft.completed / edit.completed through governed
-// workflow runs, in place of an ad-hoc assist session (Phase 7c). These are ADDITIVE vocabulary
+// workflow runs, in place of an ad-hoc assist session (Phase 7c), and answering
+// review.requested with review.completed (EP-I1). These are ADDITIVE vocabulary
 // rows — same events, same payloads, one more allowed producer — so the service needs no other
 // change to accept crew-produced drafts and structural edits.
 export const PRODUCERS = Object.freeze({
@@ -55,7 +56,10 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.theme.requested":     { subdomain: "theme",      owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.interactive.theme.learned":       { subdomain: "theme",      owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.review.requested":    { subdomain: "review",     owners: [UI, AGENT],     uiEmittable: true  },
-  "wicked.interactive.review.completed":    { subdomain: "review",     owners: [AGENT],         uiEmittable: false },
+  // EP-I1: crew's interactive-review seam is the governed answerer for reviews — it runs the
+  // four reviewers, writes one ledger verdict each, reads them back and announces each here
+  // (same additive row widening as edit.completed). Never UI-emittable: a verdict is not intent.
+  "wicked.interactive.review.completed":    { subdomain: "review",     owners: [AGENT, CREW],   uiEmittable: false },
   "wicked.interactive.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   // Export gate (ADR-0009 follow-up): the service announces a freshly-rendered artifact with its

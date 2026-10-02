@@ -53,6 +53,9 @@ test("crew (wi-crew) is a governed answerer: drafts + structural edits + status 
     "wicked.interactive.draft.completed",
     "wicked.interactive.edit.completed",
     "wicked.interactive.status.posted",
+    // EP-I1: crew's interactive-review seam answers review.requested with one
+    // review.completed per reviewer (read back from the ledger), so crew owns it too.
+    "wicked.interactive.review.completed",
   ]);
   for (const [type, def] of Object.entries(EVENT_TYPES)) {
     assert.equal(def.owners.includes(PRODUCERS.CREW), crewOwned.has(type), `${type} crew ownership`);
@@ -63,6 +66,27 @@ test("crew (wi-crew) is a governed answerer: drafts + structural edits + status 
   assert.ok(canEmit("wicked.interactive.edit.completed", PRODUCERS.AGENT));
   assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.AGENT));
   assert.ok(canEmit("wicked.interactive.status.posted", PRODUCERS.SERVICE));
+  assert.ok(canEmit("wicked.interactive.review.completed", PRODUCERS.AGENT));
+  // ...and the browser still cannot originate a review verdict (EP-I1).
+  assert.ok(!canEmit("wicked.interactive.review.completed", PRODUCERS.UI));
+  assert.ok(!uiEmittable("wicked.interactive.review.completed"));
+});
+
+test("review schemas carry the version under review and crew's findings (EP-I1)", () => {
+  const read = (t) => JSON.parse(readFileSync(join(SCHEMA_DIR, `${t}.json`), "utf-8"));
+  const req = read("wicked.interactive.review.requested");
+  assert.ok(req.required.includes("version"), "review.requested requires version");
+  assert.equal(req.properties.version.type, "integer");
+  assert.equal(req.properties.version.minimum, 0);
+  assert.deepEqual(req.properties.reviewers.items.enum, ["match", "a11y", "copy", "qe"]);
+  const done = read("wicked.interactive.review.completed");
+  assert.equal(done.properties.version.type, "integer");
+  assert.equal(done.properties.findings.type, "array");
+  const item = done.properties.findings.items;
+  assert.deepEqual(Object.keys(item.properties).sort(), ["sentence", "severity", "wid"]);
+  assert.ok(item.required.includes("sentence"));
+  // An agent's legacy verdict is free text, so `version`/`findings` stay optional here.
+  assert.deepEqual(done.required, ["document_id", "ts"]);
 });
 
 test("UI may only originate the conversational/intent events", () => {

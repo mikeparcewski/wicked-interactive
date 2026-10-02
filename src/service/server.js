@@ -990,6 +990,21 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
         return res.status(503).json({ ...recorderErrorPayload(missingBrowserError(browser)), document_id: name, auto_install: false });
       }
     }
+    // The version under review (EP-I1): a review is about one version, so review.requested always
+    // carries it. Absent → the doc's head at request time (what the operator is looking at); given
+    // → it must be an integer version in this doc's lineage, else 400 and nothing is emitted.
+    let reviewVersion;
+    if (type === "wicked.interactive.review.requested") {
+      let manifest;
+      try { manifest = loadManifest(docDir(name)); } catch (e) { return res.status(404).json({ error: e.message }); }
+      if (payload.version === undefined || payload.version === null) {
+        reviewVersion = manifest.head;
+      } else if (Number.isInteger(payload.version) && manifest.versions.some((v) => v.version === payload.version)) {
+        reviewVersion = payload.version;
+      } else {
+        return res.status(400).json({ error: `version ${JSON.stringify(payload.version)} is not a version of ${name}` });
+      }
+    }
     try {
       const correlationId = randomUUID();
       // Same additive enrichment as serviceEmit: UI-originated events (feedback.submitted, …)
@@ -1000,6 +1015,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
       const enriched = { ...payload };
       delete enriched.project_id;
       if (projectId) enriched.project_id = projectId;
+      if (reviewVersion !== undefined) enriched.version = reviewVersion;
       const { event_id } = await emitEvent(type, enriched, { producer: PRODUCERS.UI, correlationId, sessionId: SESSION_ID });
       res.json({ ok: true, event_id, correlation_id: correlationId });
     } catch (e) {

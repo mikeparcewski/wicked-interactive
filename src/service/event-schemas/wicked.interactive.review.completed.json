@@ -13,15 +13,48 @@
     "ts": {
       "type": "string"
     },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The version that was reviewed (crew always sets it; legacy agent verdicts may omit it)."
+    },
     "reviewer": {
       "type": "string",
-      "enum": ["match", "a11y", "copy", "qe"]
+      "enum": [
+        "match",
+        "a11y",
+        "copy",
+        "qe"
+      ]
     },
     "verdict": {
-      "type": "string"
+      "type": "string",
+      "description": "Crew: pass | changes | error. A legacy agent verdict is a free-text sentence."
     },
     "passed": {
       "type": "boolean"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sentence"
+        ],
+        "properties": {
+          "wid": {
+            "type": "string",
+            "description": "The data-wid the finding is about; absent or unknown = unanchored."
+          },
+          "severity": {
+            "type": "string"
+          },
+          "sentence": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": true
