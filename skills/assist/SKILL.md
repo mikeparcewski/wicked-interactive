@@ -660,7 +660,7 @@ when that reviewer's verdict lands. To keep this working, two rules:
 - **Close each reviewer out** with `wicked.interactive.review.completed` carrying its `reviewer` key — this is
   what clears that reviewer's rail spinner:
   `wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<iso>","version":<n>,"reviewer":"a11y","passed":true,"verdict":"✓ Contrast passes AA throughout."}'`.
-  Echo the request's `version` so a verdict is never shown against a newer version. A wicked-crew
+  Echo the request's `version` so a reader can tell which version a verdict is about. A wicked-crew
   daemon may also answer review requests (producer `wi-crew`, adding `findings: [{wid, severity, sentence}]`).
 
 For each selected reviewer, evaluate that version's HTML and post a concise verdict. Post it as
@@ -670,7 +670,7 @@ either lets the UI match the verdict to the right rail button:
 
 ```bash
 wibus wicked.interactive.chat.posted chat '{"document_id":"<doc>","role":"review","reviewer":"match","text":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
-wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<iso>","reviewer":"match","passed":true,"verdict":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
+wibus wicked.interactive.review.completed review '{"document_id":"<doc>","ts":"<iso>","version":<n>,"reviewer":"match","passed":true,"verdict":"✓ Matches the ask — the brief asked for X, the page delivers X."}'
 ```
 
 | reviewer (UI name) | what to check | how |
