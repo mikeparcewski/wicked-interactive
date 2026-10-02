@@ -15,6 +15,12 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   optional `version` and `findings: [{wid, severity, sentence}]`. `review.requested` now requires
   `version`: `POST /api/events` stamps the doc's head when the browser leaves it out, and answers 400
   (nothing emitted) for a value that is not an integer version of the doc, `null` included.
+- **Learned theme write route** (EP-I2). `PUT /d/:doc/api/theme/learned {tokens, apply}` checks the
+  tokens against the theme grammar, writes `theme/learned.theme.json` and, with `apply: true`, lands
+  one re-themed version of the head inside the per-doc queue, announced as
+  `version.created {kind: "theme"}`. The schema's `kind` enum gains `theme`. Re-sending the same
+  tokens lands nothing (`{version: null, unchanged: true}`). `DELETE` on the same path removes the
+  file, so later versions stop wearing it; Undo is a fork from the parent plus that DELETE.
 
 ### Security
 
@@ -30,6 +36,15 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   (so `url(`, `expression(`, `image-set(`), declaration breakouts (`;`, `{`, `}`), CSS escapes and
   `!important` reject the whole item with a `style-edit-rejected:<detail>` reason; nothing is
   partially applied.
+- **Learned-theme tokens must fit a per-field grammar** (EP-I2, `src/core/theme-grammar.js`).
+  `themeCss` puts token values straight into CSS custom properties, and a learned theme is applied
+  at every version-creation, so a value such as `red;}body{background:url(…)}` used to ride into
+  every later version. Colours must be hex, numeric `rgb/rgba/hsl/hsla` or `var(--wi-…)`; fonts must
+  be lists of plain family names; sizes and spacing must be `px|rem|em|pt` lengths; a shadow must be
+  `none` or at most two simple shadows; `name` must be an identifier. `;`, `{`, `}`, `<`, `url(`, `\`
+  and newlines are refused anywhere. The check runs at the PUT route (400, nothing written) and in
+  `resolveLearnedTheme`. A file written any other way that fails the check is ignored, the doc falls
+  back to its named theme, and a `status.posted` error says why. The readback then answers 404.
 
 ## [0.9.4] — 2026-09-28
 

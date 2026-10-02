@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_THEME, applyTheme } from "../core/theme.js";
+import { checkThemeTokens } from "../core/theme-grammar.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -39,20 +40,30 @@ export function learnedThemePath(docDir) {
 
 /**
  * A LEARNED theme (from "learn a theme from a URL") lives in the doc workspace at
- * `learnedThemePath(docDir)` — written by the agent after it reads the grabbed page's
- * design. When present it is applied at EVERY version-creation for that doc, so the learned brand
- * sticks without threading tokens through each event. Returns the token object, or null if absent
- * or unreadable (degrade to the named/default theme — never throw).
+ * `learnedThemePath(docDir)` — written through PUT /api/theme/learned (crew) or by the agent after
+ * it reads the grabbed page's design. When present it is applied at EVERY version-creation for
+ * that doc, so the learned brand sticks without threading tokens through each event. Returns the
+ * token object, or null if absent, unreadable, or outside the token grammar (degrade to the
+ * named/default theme — never throw).
+ *
+ * The grammar is enforced HERE too (EP-I2), not only at the write route: themeCss interpolates
+ * values raw into CSS, so a file written any other way (an agent, a hand edit) with a `;}` value
+ * must be ignored, never applied. `opts.onInvalid(reason)` is told why, so the caller can say so.
  */
-export function resolveLearnedTheme(docDir) {
+export function resolveLearnedTheme(docDir, opts = {}) {
+  let tokens;
   try {
     const file = learnedThemePath(docDir);
-    if (existsSync(file)) {
-      const tokens = JSON.parse(readFileSync(file, "utf-8"));
-      if (tokens && typeof tokens === "object") return tokens;
-    }
-  } catch { /* degrade to the named/default theme */ }
-  return null;
+    if (!existsSync(file)) return null;
+    tokens = JSON.parse(readFileSync(file, "utf-8"));
+  } catch { return null; /* unreadable — degrade to the named/default theme */ }
+  if (!tokens || typeof tokens !== "object") return null;
+  const check = checkThemeTokens(tokens);
+  if (!check.ok) {
+    try { opts.onInvalid?.(check.reason); } catch { /* reporting is best-effort */ }
+    return null;
+  }
+  return tokens;
 }
 
 /**

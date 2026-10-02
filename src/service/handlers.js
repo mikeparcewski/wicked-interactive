@@ -37,7 +37,12 @@ export function appendConversation(dir, entry) {
 function themeOpts(ctx, dir) {
   const base = ctx.themeOpts || {};
   if (base.tokens || base.theme === false) return base;
-  const learned = resolveLearnedTheme(dir);
+  const learned = resolveLearnedTheme(dir, {
+    // A learned file outside the token grammar is ignored, never applied (EP-I2) — and said so.
+    onInvalid: (reason) => ctx.emit?.("wicked.interactive.status.posted", {
+      state: "error", message: `The learned theme was not applied: a value is outside the theme grammar (${reason}).`,
+    }),
+  });
   return learned ? { ...base, tokens: learned } : base;
 }
 

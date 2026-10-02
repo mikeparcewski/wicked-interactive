@@ -615,16 +615,24 @@ workspace). **The judgment — reading the design — is yours.** Do **not** re-
 3. **Quality-gate it.** Run text/background pairs through **WCAG-AA contrast**
    (`skills/assist/references/quality-checklist.md`) and nudge any failing color until it passes —
    a learned palette that's pretty but unreadable is a regression.
-4. **Write it into the doc workspace** so the apply seam can re-theme with it:
-   `<DOCS>/<doc>/theme/learned.theme.json`. Narrate progress with `wicked.interactive.status.posted`
-   (`state:"working"` — a non-lock state) at each beat: reading → synthesizing → applying.
-5. **Apply it by re-landing head.** Once `<doc>/theme/learned.theme.json` exists, the service
-   applies it **automatically at every version-creation for this doc** — the theming seam reads
-   that file and re-themes with its tokens (so the learned brand sticks for all later edits too;
-   you never thread tokens through the event). Just trigger a re-land: read the head version's
-   HTML and emit `wicked.interactive.draft.completed` with it (or `wicked.interactive.edit.completed` for a targeted
-   re-theme). The service lands a new version themed with the learned tokens and the browser
-   hot-reloads. Close with a `complete` status.
+4. **Keep every value inside the token grammar** — the service refuses anything else, at the
+   write route AND when it reads the file, because values land raw in CSS:
+   - `colors.*` and `card.background`: `#rgb`, `#rrggbb` or `#rrggbbaa`; `rgb()/rgba()/hsl()/hsla()`
+     with numbers only; or `var(--wi-<name>)`. No colour names.
+   - `fonts.*`: a comma list of family names, each `[A-Za-z0-9 -]{1,64}`, optionally quoted.
+   - `sizes.*`, `spacing.*`, `card.border_radius`, `card.padding`: `44px`, `1.5rem`, `0.75em`, `12pt`.
+   - `card.shadow`: `none`, or up to two `<x> <y> <blur>? <colour>` shadows.
+   - `name`: `[A-Za-z0-9 _-]{1,64}`. Never `;`, `{`, `}`, `<`, `url(`, `\` or a newline anywhere.
+5. **Write it and apply it in one call:**
+   `curl -X PUT <BASE>/d/<doc>/api/theme/learned -H 'Content-Type: application/json' -d '{"tokens":{…},"apply":true}'`.
+   The service checks the grammar (400 with the failing field, nothing written), writes
+   `<doc>/theme/learned.theme.json`, and lands one re-themed version of the head
+   (`wicked.interactive.version.created {kind:"theme"}`); the browser hot-reloads. From then on it
+   applies the learned theme **automatically at every version-creation for this doc**. Narrate
+   progress with `wicked.interactive.status.posted` (`state:"working"` — a non-lock state) at each
+   beat: reading → synthesizing → applying, and close with a `complete` status. To stop wearing it:
+   `curl -X DELETE <BASE>/d/<doc>/api/theme/learned` (fork from the pre-theme version to undo the look).
+   A file written by hand that breaks the grammar is ignored with a `status.posted` error.
 
 Once written, the learned theme is also **readable over HTTP**:
 `GET <BASE>/d/<doc>/api/theme/learned` → `{document_id, learned_at, tokens}` (404 until a learn

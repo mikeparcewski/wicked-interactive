@@ -10,7 +10,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createMultiServer } from "../src/service/server.js";
@@ -113,5 +113,110 @@ test("unknown doc behaves exactly like the sibling per-doc routes", async () => 
     const learned = await fetch(`${base}/d/nope/api/theme/learned`);
     assert.equal(sibling.status, 404, "sibling baseline: unknown doc is a 404");
     assert.equal(learned.status, sibling.status, "same unknown-doc handling as siblings");
+  } finally { await cleanup(); }
+});
+
+// ── EP-I2: the write side — PUT/DELETE /d/:doc/api/theme/learned, and the reader's grammar ──
+
+const jsend = (method, url, body) => fetch(url, {
+  method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body),
+});
+const versionCreated = async (doc) => {
+  const { busDb } = await import("../src/service/bus-client.js");
+  return busDb().prepare("SELECT payload FROM events WHERE event_type='wicked.interactive.version.created' ORDER BY event_id")
+    .all().map((r) => JSON.parse(r.payload)).filter((p) => p.document_id === doc);
+};
+const VALID = {
+  name: "acme-learned",
+  colors: { background: "#0B1020", primary: "#8FB4FF", text_primary: "#E6E9F5" },
+  fonts: { heading: "Inter", body: "Inter, sans-serif" },
+  card: { border_radius: "12px", shadow: "0 1px 3px rgba(0,0,0,0.2)" },
+};
+
+test("PUT {tokens, apply:true} writes the file and lands one re-themed version of head, kind theme (EP-I2)", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    await createDoc(base, "put-doc");
+    const res = await jsend("PUT", `${base}/d/put-doc/api/theme/learned`, { tokens: VALID, apply: true });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual({ version: body.version, parent: body.parent, kind: body.kind }, { version: 1, parent: 0, kind: "theme" });
+    // The file is the one the apply seam and the readback read.
+    const file = join(root, "put-doc", "theme", "learned.theme.json");
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf-8")), VALID);
+    assert.deepEqual((await (await fetch(`${base}/d/put-doc/api/theme/learned`)).json()).tokens, VALID);
+    // The new head wears the learned tokens; v0 is untouched (write-once).
+    const head = await (await fetch(`${base}/d/put-doc/doc`)).text();
+    assert.match(head, /data-wi-theme="acme-learned"/);
+    assert.match(head, /--wi-primary:#8FB4FF/);
+    assert.doesNotMatch(await (await fetch(`${base}/d/put-doc/doc/0`)).text(), /acme-learned/);
+    const vc = await versionCreated("put-doc");
+    assert.equal(vc.length, 1, "exactly one version.created");
+    assert.deepEqual({ version: vc[0].version, parent: vc[0].parent, kind: vc[0].kind }, { version: 1, parent: 0, kind: "theme" });
+    // Re-PUT of the same tokens changes nothing → no version, said so.
+    const again = await (await jsend("PUT", `${base}/d/put-doc/api/theme/learned`, { tokens: VALID, apply: true })).json();
+    assert.equal(again.version, null);
+    assert.equal(again.unchanged, true);
+    assert.equal((await versionCreated("put-doc")).length, 1);
+  } finally { await cleanup(); }
+});
+
+test("PUT without apply writes the file and lands no version", async () => {
+  const { base, cleanup } = await boot();
+  try {
+    await createDoc(base, "noapply-doc");
+    const res = await jsend("PUT", `${base}/d/noapply-doc/api/theme/learned`, { tokens: VALID });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).version, null);
+    assert.equal((await (await fetch(`${base}/d/noapply-doc/api/versions`)).json()).head, 0);
+    assert.equal((await fetch(`${base}/d/noapply-doc/api/theme/learned`)).status, 200);
+  } finally { await cleanup(); }
+});
+
+test("PUT refuses a bad shape or a bad-grammar value: 400 with the field, nothing written", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    await createDoc(base, "badput-doc");
+    for (const tokens of [
+      undefined, "red", [],
+      { ...VALID, colors: { primary: "red;}body{background:url(https://x/?a)" } },
+      { ...VALID, fonts: { body: "Inter;}" } },
+    ]) {
+      const res = await jsend("PUT", `${base}/d/badput-doc/api/theme/learned`, { tokens, apply: true });
+      assert.equal(res.status, 400, JSON.stringify(tokens));
+      assert.match((await res.json()).error, /theme/);
+    }
+    assert.ok(!existsSync(join(root, "badput-doc", "theme", "learned.theme.json")), "nothing written");
+    assert.equal((await (await fetch(`${base}/d/badput-doc/api/versions`)).json()).head, 0, "no version landed");
+  } finally { await cleanup(); }
+});
+
+test("DELETE removes the learned theme so later versions stop wearing it; a second DELETE is 404", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    await createDoc(base, "del-doc");
+    assert.equal((await jsend("PUT", `${base}/d/del-doc/api/theme/learned`, { tokens: VALID, apply: true })).status, 200);
+    const res = await jsend("DELETE", `${base}/d/del-doc/api/theme/learned`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { document_id: "del-doc", deleted: true });
+    assert.ok(!existsSync(join(root, "del-doc", "theme", "learned.theme.json")));
+    assert.equal((await fetch(`${base}/d/del-doc/api/theme/learned`)).status, 404);
+    // Undo = fork from the parent; the fork carries v0's look, and nothing re-applies the theme.
+    const fork = await (await jsend("POST", `${base}/d/del-doc/api/fork`, { from: 0 })).json();
+    assert.doesNotMatch(await (await fetch(`${base}/d/del-doc/doc/${fork.version}`)).text(), /acme-learned/);
+    assert.equal((await jsend("DELETE", `${base}/d/del-doc/api/theme/learned`)).status, 404);
+  } finally { await cleanup(); }
+});
+
+test("the reader ignores a learned file whose value breaks the grammar: readback 404, never applied", async () => {
+  const { base, root, cleanup } = await boot();
+  try {
+    await createDoc(base, "inject-doc");
+    const themeDir = join(root, "inject-doc", "theme");
+    mkdirSync(themeDir, { recursive: true });
+    writeFileSync(join(themeDir, "learned.theme.json"), JSON.stringify({ ...VALID, colors: { primary: "red;}body{background:url(https://x/?a)" } }));
+    const res = await fetch(`${base}/d/inject-doc/api/theme/learned`);
+    assert.equal(res.status, 404);
+    assert.deepEqual(await res.json(), { error: "no learned theme" });
   } finally { await cleanup(); }
 });

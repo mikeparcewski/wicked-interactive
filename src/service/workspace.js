@@ -152,3 +152,23 @@ export function forkVersion(dir, from) {
   return { version, parent: from };
 }
 
+
+/**
+ * Re-theme the head with a learned token object (EP-I2): a new write-once version whose parent is
+ * the head, carrying the same content with the learned theme block. Content-only otherwise — no
+ * re-instrument, so every data-wid stays byte-for-byte. A head that already wears exactly these
+ * tokens lands nothing (F-RECON-005): `{version:null, unchanged:true}`.
+ * @returns {{version:number|null, parent:number, unchanged:boolean}}
+ */
+export function rethemeHead(dir, tokens) {
+  let manifest = loadManifest(dir);
+  const parent = manifest.head;
+  const prevHtml = readVersionHtml(dir, parent);
+  const html = themed(prevHtml, { tokens });
+  if (contentHash(html) === contentHash(prevHtml)) return { version: null, parent, unchanged: true };
+  const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
+  atomicWrite(join(dir, `_v${version}.html`), html);
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: null }));
+  saveManifest(dir, manifest);
+  return { version, parent, unchanged: false };
+}
