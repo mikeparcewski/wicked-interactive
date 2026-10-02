@@ -15,7 +15,7 @@ The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-
 - 📦 **Documents & lineage** — every change is a write-once saved version; rewind to any of them, or fork a version and chase two ideas at once without losing either.
 - 📤 **Exports** — self-contained HTML, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`), and video. Nothing for the recipient to install.
 - 🎬 **Demo recording** — narrated walkthroughs of a live app with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
-- 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls.
+- 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls, and its write side (`PUT`/`DELETE` on the same path): every token is checked against a per-field grammar before it can reach the CSS.
 - 🔌 **One HTTP API + one bus vocabulary** — the `/api/*` surface and the `wicked.interactive.*` event types (ADR-0019) that the studio UI and supervising agents both speak.
 
 <p align="center">

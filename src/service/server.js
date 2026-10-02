@@ -17,7 +17,7 @@ import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
-import { initWorkspace, forkVersion, loadManifest, readVersionHtml } from "./workspace.js";
+import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead } from "./workspace.js";
 import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
@@ -34,6 +34,7 @@ import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
 import { bindDocToProject, projectIdFor, resolveCrewApi, NO_CREW_API } from "./project.js";
 import { resolveLearnedTheme, learnedThemePath } from "./theme-source.js";
+import { checkThemeTokens } from "../core/theme-grammar.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -349,6 +350,39 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     try { learned_at = statSync(learnedThemePath(dir)).mtime.toISOString(); }
     catch { /* mtime is advisory — the tokens are the contract */ }
     res.json({ document_id: documentId, learned_at, tokens });
+  });
+
+  // Learned-theme write (EP-I2): crew's theme seam writes the validated tokens THROUGH here, so
+  // interactive stays the only writer of its files. The token grammar is checked first (400, nothing
+  // written); the write and the optional re-theme run inside the FIFO so they can't race a version.
+  // `apply: true` lands one re-themed version of the head, announced as version.created {kind:'theme'}.
+  // Undo = fork from that version's parent + DELETE below, so later versions stop wearing it.
+  app.put("/api/theme/learned", (req, res) => {
+    const tokens = req.body?.tokens;
+    const check = checkThemeTokens(tokens);
+    if (!check.ok) return res.status(400).json({ error: `theme tokens refused: ${check.reason}` });
+    const apply = req.body?.apply === true;
+    enqueue(async () => {
+      const file = learnedThemePath(dir);
+      mkdirSync(dirname(file), { recursive: true });
+      atomicWrite(file, JSON.stringify(tokens, null, 2));
+      if (!apply) return { version: null, parent: null, kind: null };
+      const out = rethemeHead(dir, tokens);
+      if (out.unchanged) return { version: null, parent: out.parent, kind: null, unchanged: true };
+      emit("wicked.interactive.version.created", { version: out.version, parent: out.parent, kind: "theme", html_file: `_v${out.version}.html` });
+      return { version: out.version, parent: out.parent, kind: "theme" };
+    }).then((r) => res.json({ document_id: documentId, written: true, ...r }))
+      .catch((e) => res.status(500).json({ error: e.message }));
+  });
+
+  app.delete("/api/theme/learned", (_req, res) => {
+    enqueue(async () => {
+      const file = learnedThemePath(dir);
+      if (!existsSync(file)) return { deleted: false };
+      rmSync(file, { force: true });
+      return { deleted: true };
+    }).then((r) => (r.deleted ? res.json({ document_id: documentId, deleted: true }) : res.status(404).json({ error: "no learned theme" })))
+      .catch((e) => res.status(500).json({ error: e.message }));
   });
 
   // Local filesystem browser for the path picker (localhost-only; dotfiles hidden).
