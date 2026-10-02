@@ -4,6 +4,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-10-01
+
 ### Added
 - **`POST /api/fork` takes an optional `expect_head`** (studio rebuild C5). When it is set and the
   manifest head is a different version, the fork answers `409 {error: "head_moved", head}` and
@@ -285,6 +287,7 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...v0.10.0
 [0.9.4]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.2...v0.9.3
