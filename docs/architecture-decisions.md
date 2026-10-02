@@ -136,7 +136,11 @@ existing capabilities surfaced where people expect them.
   not a command type) — it rides the bus to the supervising agent, which runs the named passes
   (`match`/`a11y`/`copy`/`qe`) against the head version and posts verdicts as
   `wicked.interactive.chat.posted {role:"review"}`. Default trigger is the explicit **Review** action; review
-  is read-only (creates no version) until the user asks to apply a fix. This keeps the model/
+  is read-only (creates no version) until the user asks to apply a fix. *Amended (EP-I1):* the
+  emitted request also carries `version`, the version under review; the browser bridge stamps the
+  head when it is omitted and refuses a version outside the doc's lineage, so reviewers evaluate the
+  requested version, not whatever the head is by then. wicked-crew (`wi-crew`) may answer as well,
+  with `wicked.interactive.review.completed {version, reviewer, verdict, passed, findings}`. This keeps the model/
   deterministic split intact — judgment in the agent, transport on the bus, nothing hard-coded in
   the service.
 
