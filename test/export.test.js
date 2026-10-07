@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import {
   inlineHtml, exportHtml, exportPdf, decorateForExport, finalizeHtml, isDeck, classifyLayout,
   collectGradientClipSelectors, inspectPdf, describePageSize, findChrome, chromeRenderer, DECK_PAGE_SIZE,
-  printScopedCss, mediaAppliesToPrint, LAYOUT_SOURCES,
+  printScopedCss, mediaAppliesToPrint, LAYOUT_SOURCES, listExports,
 } from "../src/service/export.js";
 import * as cheerio from "cheerio";
 import { initWorkspace } from "../src/service/workspace.js";
@@ -106,6 +106,31 @@ const DECK = `<html><head></head><body>` +
   `<section class="wi-slide"><h1>Slide 1</h1></section>` +
   `<section class="wi-slide"><h2>Slide 2</h2></section>` +
   `<section class="wi-slide"><h2>Slide 3</h2></section></body></html>`;
+
+test("listExports (#236): finished exports only — html + pdf listed, the PDF-prep copy and strangers are not", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-list-"));
+  try {
+    initWorkspace(dir, "<h1>Hello</h1>");
+    assert.deepEqual(listExports(dir), [], "no exports dir yet → []");
+    assert.ok(!existsSync(join(dir, "exports")), "listing never creates the exports dir");
+
+    const html = exportHtml(dir, 0);
+    const pdf = await exportPdf(dir, 0, undefined, { renderer: (_h, out) => writeFileSync(out, "%PDF-1.4 fake") });
+    assert.ok(existsSync(join(dir, "exports", "export_v0.pdf.html")), "exportPdf left its prep copy behind");
+    writeFileSync(join(dir, "exports", "notes.txt"), "not an export");
+    mkdirSync(join(dir, "exports", `${basename(dir)}_v9.html`));   // a DIRECTORY with an export's name
+
+    const rows = listExports(dir);
+    assert.deepEqual(rows.map((r) => [r.version, r.format, r.name]).sort(), [
+      [0, "html", basename(html.path)],
+      [0, "pdf", basename(pdf.path)],
+    ]);
+    for (const r of rows) {
+      assert.equal(r.bytes, readFileSync(join(dir, "exports", r.name)).length);
+      assert.ok(!Number.isNaN(Date.parse(r.generated_at)));
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test("exported HTML carries a proper document head (doctype, charset, viewport)", () => {
   const dir = assetDir();

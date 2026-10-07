@@ -23,7 +23,7 @@ import { isRetired as manifestRetired, retireManifest } from "../core/versions.j
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
-import { exportHtml, exportPdf } from "./export.js";
+import { exportHtml, exportPdf, listExports } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
 import {
@@ -220,6 +220,13 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
+  });
+
+  // List the document's finished exports (#236): `[{ version, format, name, bytes, generated_at }]`,
+  // each `name` resolvable at GET /api/export/file/:name. A reloaded client hydrates its export
+  // row from this instead of probing download names (wicked-studio#234's stopgap).
+  app.get("/api/export", (_req, res) => {
+    try { res.json(listExports(dir)); } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   // Download the actual exported file. Filenames are restricted to the slug charset, so this

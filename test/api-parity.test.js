@@ -94,6 +94,13 @@ test("API parity smoke: every capability the merged app drives is reachable on a
     assert.match(bytes.headers.get("content-disposition") || "", /attachment/);
     assert.ok((await bytes.text()).length > 0);
     assert.equal((await postJson(`${doc}/api/export`, { version: 1, format: "wat" })).status, 400, "unknown format still refused");
+    // Listing (#236): the export just made is rediscoverable through the doc-scoped mount, and its
+    // name resolves at the download route — what a reloaded client hydrates from.
+    const listed = await fetch(`${doc}/api/export`);
+    assert.equal(listed.status, 200, "GET /api/export is reachable on the API-only bridge");
+    const rows = await listed.json();
+    assert.deepEqual(rows.map((r) => [r.version, r.format, r.name]), [[1, "html", file]], `unexpected listing: ${JSON.stringify(rows)}`);
+    assert.equal((await fetch(`${doc}/api/export/file/${encodeURIComponent(rows[0].name)}`)).status, 200, "listed name downloads");
 
     // ── conversation + sources (§4.6, §4.9) ───────────────────────────────
     assert.ok(Array.isArray(await (await fetch(`${doc}/api/conversation`)).json()));
