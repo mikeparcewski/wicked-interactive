@@ -229,6 +229,7 @@ export async function recordDemo(dir, opts = {}) {
   const startedAt = Date.now();
   let context;
   let page = null;
+  let produced = null;   // the clip Playwright wrote (page@<hash>.webm) until it is renamed to ours
   try {
     context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
@@ -358,19 +359,20 @@ export async function recordDemo(dir, opts = {}) {
 
     // Playwright names the video with a random id; resolve the real path, then rename to
     // our deterministic per-version filename so the storyboard + endpoint are predictable.
-    let produced = null;
     try { produced = pageVideo ? await pageVideo.path() : null; } catch { produced = null; }
     if (!produced) produced = newestWebm(recDir, startedAt);
     if (produced && existsSync(produced) && produced !== join(recDir, videoFile)) {
       renameSync(produced, join(recDir, videoFile));
     }
+    produced = null;   // renamed: nothing left to keep
   } catch (e) {
     // A failed recording keeps its partial clip AS the failure evidence — `_attempt-<n>.failed.webm`
     // (with that attempt's step thumbnails beside it) instead of an orphan `page@<hash>.webm` the
     // manifest never references and nothing can link (wicked-interactive#210). The file name
-    // rides on the error (`attempt_video`) so the typed failure can point the user at it.
-    if (!dryRun && context) {
-      const kept = await keepFailedAttempt({ context, page, recDir, startedAt, version });
+    // rides on the error (`attempt_video`) so the typed failure can point the user at it. Also
+    // covers a rename that failed AFTER the context closed (codex r2): `produced` still names the clip.
+    if (!dryRun && (context || produced)) {
+      const kept = await keepFailedAttempt({ context, page, recDir, startedAt, version, produced });
       context = null;
       if (kept && e && typeof e === "object") e.attempt_video = kept;
     }
@@ -503,12 +505,11 @@ function nextAttemptNumber(recDir) {
  * — instead of leaving `page@<hash>.webm` orphans the manifest never references (#210).
  * Returns the kept file name, or null when the run produced no clip. Never throws.
  */
-async function keepFailedAttempt({ context, page, recDir, startedAt, version }) {
+async function keepFailedAttempt({ context, page, recDir, startedAt, version, produced = null }) {
   let pageVideo = null;
   try { pageVideo = page?.video?.() ?? null; } catch { pageVideo = null; }
-  try { await context.close(); } catch { /* already closing */ }
-  let produced = null;
-  try { produced = pageVideo ? await pageVideo.path() : null; } catch { produced = null; }
+  if (context) { try { await context.close(); } catch { /* already closing */ } }
+  try { if (!produced && pageVideo) produced = await pageVideo.path(); } catch { produced = null; }
   try { if (!produced) produced = newestWebm(recDir, startedAt); } catch { produced = null; }
   if (!produced || !existsSync(produced) || !/\.webm$/.test(produced)) return null;
   try {

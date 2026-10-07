@@ -21,12 +21,13 @@ if (!status.ok) {
   process.exit(2);
 }
 
-// The page carries a live clock so the clip has motion wherever the recorder is NOT holding a
-// frame — then `freezedetect` below measures the recorder's own dead air (caption holds, settle
-// waits), not the page's stillness (wicked-interactive#211: static share, caption coverage).
-const page = `<!doctype html><html><body><h1 id="title">Smoke</h1><button id="go" onclick="document.getElementById('title').textContent='Clicked'">Go</button>` +
-  `<div id="clock" style="font:16px monospace;margin-top:12px"></div>` +
-  `<script>setInterval(function(){document.getElementById('clock').textContent=String(performance.now().toFixed(0));},50);</script></body></html>`;
+// The page carries a LARGE animation (a block sweeping the viewport every 2 s) so the clip has
+// unmistakable motion wherever the recorder is NOT holding a frame — `freezedetect` below then
+// measures the recorder's own dead air, not the page's stillness, and a small ticker would sit
+// under its noise floor (wicked-interactive#211: static share, caption coverage).
+const page = `<!doctype html><html><head><style>@keyframes sweep{from{transform:translateX(0)}to{transform:translateX(1000px)}}` +
+  `#mover{position:fixed;top:120px;left:0;width:240px;height:240px;background:#2563eb;animation:sweep 2s linear infinite alternate}</style></head>` +
+  `<body><h1 id="title">Smoke</h1><button id="go" onclick="document.getElementById('title').textContent='Clicked'">Go</button><div id="mover"></div></body></html>`;
 const srv = createServer((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(page); });
 await new Promise((r) => srv.listen(0, "127.0.0.1", r));
 const url = `http://127.0.0.1:${srv.address().port}/`;
@@ -34,7 +35,7 @@ const url = `http://127.0.0.1:${srv.address().port}/`;
 const dir = mkdtempSync(join(tmpdir(), "wi-rec-smoke-"));
 initWorkspace(dir, "<section><h1>Learning…</h1></section>", { kind: "demo" });
 writeFileSync(join(dir, DEMO_SPEC), `
-export const meta = { url: ${JSON.stringify(url)}, title: "Smoke demo", captionHoldMs: 200 };
+export const meta = { url: ${JSON.stringify(url)}, title: "Smoke demo", captionHoldMs: 1000 };
 export async function run({ page, step, meta }) {
   await page.goto(meta.url);
   await step("Land on the page", async () => { await page.waitForSelector("#title"); }, { say: "We land on the page." });
@@ -54,7 +55,8 @@ try {
   const mp4 = join(dir, "recordings", "_v1.mp4");
   const poster = join(dir, "recordings", "_v1-poster.jpg");
   // Static share of the landed clip: frozen seconds (freezedetect, ≥ 1 s at noise 0.001) over its
-  // duration. The page animates, so a frozen second is the recorder holding — the #211 measure.
+  // duration. The page animates continuously, so a frozen second is recorder dead air — the #211
+  // measure (the RC1 clip scored 0.887, RC2 0.433).
   let staticShare = null;
   if (ffmpeg && existsSync(webm)) {
     const fd = spawnSync(ffmpeg, ["-i", webm, "-vf", "freezedetect=n=0.001:d=1", "-f", "null", "-"], { encoding: "utf-8", timeout: 120_000 });
