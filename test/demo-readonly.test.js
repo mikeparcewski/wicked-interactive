@@ -5,19 +5,25 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { recordDemo } from "../src/service/demo.js";
 import { classifyRecorderError, recorderErrorPayload, RecorderError } from "../src/service/recorder-preflight.js";
 import { materializeDemo } from "../src/service/handlers.js";
-import { initWorkspace } from "../src/service/workspace.js";
+import { initWorkspace, loadManifest } from "../src/service/workspace.js";
 
 const TARGET = "http://app.test";
 
-/** A fake `playwright` module. `actions` maps a selector to the requests its click sends. */
-function fakePlaywright({ actions = {}, failWaitForUrl = false } = {}) {
-  const seen = { contextOpts: null, continued: [], aborted: [], tracing: 0, wsDropped: [], wsForwarded: [], late: [] };
+/**
+ * A fake `playwright` module. `actions` maps a selector to the requests its click sends.
+ * `recordVideo: true` makes the fake behave like the real one for the clip: `newContext` with a
+ * `recordVideo.dir` writes a `page@<hash>.webm` into that dir when the context closes (Playwright
+ * names the file after the page, not the version) — so the recorder's rename / keep-on-failure
+ * paths are exercised against a real file on disk.
+ */
+function fakePlaywright({ actions = {}, failWaitForUrl = false, recordVideo = false, failStep = null } = {}) {
+  const seen = { contextOpts: null, continued: [], aborted: [], tracing: 0, wsDropped: [], wsForwarded: [], late: [], videos: [] };
   let handler = null;
   const send = async (method, url) => {
     let outcome = "unrouted";
@@ -37,6 +43,7 @@ function fakePlaywright({ actions = {}, failWaitForUrl = false } = {}) {
   const page = {
     goto: async (url) => { await send("GET", url); },
     click: async (sel) => {
+      if (failStep && sel === failStep) throw new Error(`page.click: Timeout 10000ms exceeded.\nCall log:\n\x1b[2m  - waiting for locator('${sel}') to be visible\x1b[22m`);
       for (const [m, u] of actions[sel] ?? []) {
         if (m === "WS") wsSend(u);
         else if (m === "LATE") seen.late.push(u);
@@ -57,7 +64,15 @@ function fakePlaywright({ actions = {}, failWaitForUrl = false } = {}) {
     routeWebSocket: async (_pattern, fn) => { wsHandler = fn; },
     tracing: { start: async () => { seen.tracing += 1; }, stop: async () => {} },
     newPage: async () => page,
-    close: async () => {},
+    close: async () => {
+      // Flush "the clip" the way Playwright does: a page@<hash>.webm lands in recordVideo.dir on close.
+      const dir = seen.contextOpts?.recordVideo?.dir;
+      if (recordVideo && dir) {
+        const f = join(dir, `page@${Math.random().toString(16).slice(2, 10)}.webm`);
+        writeFileSync(f, Buffer.alloc(4096, 1));
+        seen.videos.push(f);
+      }
+    },
   };
   const chromium = { launch: async () => ({ newContext: async (opts) => { seen.contextOpts = opts; return context; }, close: async () => {} }) };
   return { importPlaywright: async () => ({ chromium }), seen };
@@ -209,4 +224,65 @@ test("a write the last step's click sends a tick late still fails the dry run", 
   const err = await recordDemo(dir, { dryRun: true, importPlaywright: pw.importPlaywright }).then(() => null, (e) => e);
   assert.equal(err?.code, "side_effect_blocked");
   assert.deepEqual(pw.seen.aborted, [`POST ${TARGET}/api/v1/runs`]);
+});
+
+
+// ── a failed attempt keeps its clip as evidence, never an orphan page@<hash>.webm (#210) ──
+
+/** A demo workspace (versions.json + spec) whose step 2 clicks a selector the fake makes time out. */
+function failingDemoWorkspace() {
+  const dir = mkdtempSync(join(tmpdir(), "wi-demo-fail-"));
+  initWorkspace(dir, "<h1>Learning…</h1>", { kind: "demo" });
+  writeFileSync(join(dir, "demo.spec.mjs"),
+    `export const meta = { url: "${TARGET}/", title: "Tour", captionHoldMs: 0 };\n` +
+    `export async function run({ page, step, meta }) {\n` +
+    `  await page.goto(meta.url);\n` +
+    `  await step("Open the dashboard", async () => { await page.click("#nav"); }, { say: "The dashboard." });\n` +
+    `  await step("Open the scope", async () => { await page.click("#scope"); }, { say: "The scope." });\n` +
+    `}\n`);
+  return dir;
+}
+
+test("a failing step in a real recording leaves recordings/_attempt-1.failed.webm (+ its thumbnails), no page@*.webm, no _v1.webm, head 0", async () => {
+  const dir = failingDemoWorkspace();
+  const pw = fakePlaywright({ actions: ACTIONS, recordVideo: true, failStep: "#scope" });
+  const err = await recordDemo(dir, { documentId: "tour", importPlaywright: pw.importPlaywright }).then(() => null, (e) => e);
+  assert.ok(err, "the recording fails");
+  assert.deepEqual(err.recorderStep, { index: 2, label: "Open the scope" });
+  assert.equal(pw.seen.videos.length, 1, "the fake flushed one clip on context close");
+  const files = readdirSync(join(dir, "recordings")).sort();
+  assert.ok(files.includes("_attempt-1.failed.webm"), JSON.stringify(files));
+  assert.ok(!files.some((f) => f.startsWith("page@")), `no orphan page@<hash>.webm: ${JSON.stringify(files)}`);
+  assert.ok(!files.includes("_v1.webm"), "a failed attempt never lands as the version's clip");
+  assert.ok(!files.some((f) => /^_v1\.step\d+\.png$/.test(f)), "no thumbnails for a version that never landed");
+  assert.equal(err.attempt_video, "_attempt-1.failed.webm", "the kept clip rides on the error");
+  assert.equal(loadManifest(dir).head, 0, "no version landed");
+  // The typed failure carries it on the wire, and the human line names it, ANSI-free.
+  const typed = classifyRecorderError(err);
+  assert.equal(typed.code, "recording_step_failed");
+  assert.equal(recorderErrorPayload(typed).attempt_video, "_attempt-1.failed.webm");
+  assert.doesNotMatch(typed.message, /\x1b/);
+  assert.doesNotMatch(typed.cause, /\x1b|\[2m|\[22m/);
+  // A second attempt keeps its own clip beside the first — nothing is overwritten or orphaned.
+  const pw2 = fakePlaywright({ actions: ACTIONS, recordVideo: true, failStep: "#scope" });
+  await recordDemo(dir, { documentId: "tour", importPlaywright: pw2.importPlaywright }).then(() => null, (e) => e);
+  const files2 = readdirSync(join(dir, "recordings")).sort();
+  assert.ok(files2.includes("_attempt-1.failed.webm") && files2.includes("_attempt-2.failed.webm"), JSON.stringify(files2));
+  assert.ok(!files2.some((f) => f.startsWith("page@")), JSON.stringify(files2));
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test("a recording that lands still renames the clip to _vN.webm (the keep-on-failure path never runs)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-demo-land-"));
+  initWorkspace(dir, "<h1>Learning…</h1>", { kind: "demo" });
+  writeFileSync(join(dir, "demo.spec.mjs"),
+    `export const meta = { url: "${TARGET}/", title: "Tour", captionHoldMs: 0 };\n` +
+    `export async function run({ page, step, meta }) { await page.goto(meta.url); await step("Open the dashboard", async () => { await page.click("#nav"); }); }\n`);
+  const pw = fakePlaywright({ actions: ACTIONS, recordVideo: true });
+  const out = await recordDemo(dir, { documentId: "tour", importPlaywright: pw.importPlaywright });
+  assert.equal(out.version, 1);
+  const files = readdirSync(join(dir, "recordings")).sort();
+  assert.ok(files.includes("_v1.webm"), JSON.stringify(files));
+  assert.ok(!files.some((f) => f.startsWith("page@") || f.startsWith("_attempt-")), JSON.stringify(files));
+  rmSync(dir, { recursive: true, force: true });
 });

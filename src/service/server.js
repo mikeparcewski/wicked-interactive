@@ -1131,6 +1131,9 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
         const bound = bindProject ? await bindProject(dir, name) : null;
         initWorkspace(dir, demoPlaceholder(name, demoUrl, brief), { kind: "demo" });
         await mountDoc(name);
+        // Seed the user's brief as the first conversation entry, exactly as the "from my content"
+        // path below does — a demo thread used to restore with no trace of what was asked (#210).
+        if (brief) appendConversation(dir, { role: "user", text: brief });
         await emitEvent("wicked.interactive.doc.created", { document_id: name, kind: "demo", url: demoUrl, brief, ...(bound ?? {}) }, { producer: PRODUCERS.SERVICE });
         return res.json({ name, head: 0, kind: "demo", learning: true, ...(bound ?? {}) });
       } catch (e) {

@@ -6,12 +6,13 @@
 //
 //   PLAYWRIGHT_BROWSERS_PATH=<cache> node test/recorder-smoke.mjs
 
-import { mkdtempSync, writeFileSync, existsSync, statSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
+import { spawnSync } from "node:child_process";
 import { initWorkspace, loadManifest } from "../src/service/workspace.js";
-import { recordDemo, DEMO_SPEC } from "../src/service/demo.js";
+import { recordDemo, DEMO_SPEC, findFfmpeg } from "../src/service/demo.js";
 import { recorderBrowserStatus } from "../src/service/recorder-preflight.js";
 
 const status = await recorderBrowserStatus({ headless: true, ttlMs: 0 });
@@ -20,7 +21,12 @@ if (!status.ok) {
   process.exit(2);
 }
 
-const page = `<!doctype html><html><body><h1 id="title">Smoke</h1><button id="go" onclick="document.getElementById('title').textContent='Clicked'">Go</button></body></html>`;
+// The page carries a live clock so the clip has motion wherever the recorder is NOT holding a
+// frame — then `freezedetect` below measures the recorder's own dead air (caption holds, settle
+// waits), not the page's stillness (wicked-interactive#211: static share, caption coverage).
+const page = `<!doctype html><html><body><h1 id="title">Smoke</h1><button id="go" onclick="document.getElementById('title').textContent='Clicked'">Go</button>` +
+  `<div id="clock" style="font:16px monospace;margin-top:12px"></div>` +
+  `<script>setInterval(function(){document.getElementById('clock').textContent=String(performance.now().toFixed(0));},50);</script></body></html>`;
 const srv = createServer((_req, res) => { res.writeHead(200, { "content-type": "text/html" }); res.end(page); });
 await new Promise((r) => srv.listen(0, "127.0.0.1", r));
 const url = `http://127.0.0.1:${srv.address().port}/`;
@@ -42,15 +48,39 @@ try {
   const out = await recordDemo(dir, { documentId: "smoke", headless: true, onStep: (s) => steps.push(s.label) });
   const webm = join(dir, "recordings", out.video);
   const manifest = loadManifest(dir);
+  const recFiles = readdirSync(join(dir, "recordings")).sort();
+  const html = existsSync(join(dir, "_v1.html")) ? readFileSync(join(dir, "_v1.html"), "utf-8") : "";
+  const ffmpeg = findFfmpeg();
+  const mp4 = join(dir, "recordings", "_v1.mp4");
+  const poster = join(dir, "recordings", "_v1-poster.jpg");
+  // Static share of the landed clip: frozen seconds (freezedetect, ≥ 1 s at noise 0.001) over its
+  // duration. The page animates, so a frozen second is the recorder holding — the #211 measure.
+  let staticShare = null;
+  if (ffmpeg && existsSync(webm)) {
+    const fd = spawnSync(ffmpeg, ["-i", webm, "-vf", "freezedetect=n=0.001:d=1", "-f", "null", "-"], { encoding: "utf-8", timeout: 120_000 });
+    const log = String(fd.stderr || "");
+    const dur = /Duration:\s*(\d+):(\d+):([\d.]+)/.exec(log);
+    const seconds = dur ? Number(dur[1]) * 3600 + Number(dur[2]) * 60 + Number(dur[3]) : 0;
+    const frozen = [...log.matchAll(/freeze_duration:\s*([\d.]+)/g)].reduce((a, m) => a + Number(m[1]), 0);
+    staticShare = seconds > 0 ? frozen / seconds : null;
+  }
   const checks = [
     ["version landed", out.version === 1 && manifest.head === 1],
     ["two steps ran", steps.length === 2],
     ["webm exists", existsSync(webm)],
     ["webm non-empty", existsSync(webm) && statSync(webm).size > 1000],
     ["storyboard html", existsSync(join(dir, "_v1.html"))],
+    ["no orphan page@*.webm and no failed attempt after a landing", !recFiles.some((f) => f.startsWith("page@") || f.startsWith("_attempt-"))],
+    // With ffmpeg present (the preflight requires it) the storyboard serves what was produced (#211).
+    ...(ffmpeg ? [
+      ["mp4 produced", existsSync(mp4)],
+      ["poster produced", existsSync(poster)],
+      ["storyboard lists the mp4 first and carries the poster", /poster="[^"]*_v1-poster\.jpg"/.test(html) && html.indexOf('type="video/mp4"') > 0 && html.indexOf('type="video/mp4"') < html.indexOf('type="video/webm"')],
+      ["static share < 0.3", staticShare != null && staticShare < 0.3],
+    ] : []),
   ];
   for (const [name, ok] of checks) { console.log(`${ok ? "ok" : "FAIL"} - ${name}`); if (!ok) code = 1; }
-  console.log(JSON.stringify({ version: out.version, video: out.video, bytes: existsSync(webm) ? statSync(webm).size : 0, steps }, null, 2));
+  console.log(JSON.stringify({ version: out.version, video: out.video, bytes: existsSync(webm) ? statSync(webm).size : 0, steps, recordings: recFiles, ffmpeg: Boolean(ffmpeg), static_share: staticShare }, null, 2));
 } catch (e) {
   console.error("recording failed:", e.message);
   code = 1;

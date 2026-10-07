@@ -18,7 +18,7 @@ import { writeFeedback, applyFeedbackItems } from "./workspace.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
 import { recordDemo } from "./demo.js";
-import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload } from "./recorder-preflight.js";
+import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload, stripAnsi } from "./recorder-preflight.js";
 import { grabUrlToPdf } from "./theme-grab.js";
 import { resolveLearnedTheme } from "./theme-source.js";
 
@@ -123,7 +123,9 @@ export async function materializeDemo(dir, payload, ctx, { record = recordDemo, 
   const headless = payload.headless !== false;
   const recorder = ctx.recorder || {};
   const onState = typeof recorder.onState === "function" ? recorder.onState : () => {};
-  const emitWorking = (message, extra = {}) => ctx.emit("wicked.interactive.status.posted", { state: "working", message, ...extra });
+  // Every narrated line is ANSI-free: the install CLI's dim codes used to land on the thread as
+  // literal "[2m" / "[22m" (wicked-interactive#210).
+  const emitWorking = (message, extra = {}) => ctx.emit("wicked.interactive.status.posted", { state: "working", message: stripAnsi(message), ...extra });
   let lastProgressAt = 0;
   try {
     onState({ state: "preflight", headless });
@@ -160,9 +162,12 @@ export async function materializeDemo(dir, payload, ctx, { record = recordDemo, 
   } catch (e) {
     const err = classifyRecorderError(e, { headless });
     const wire = recorderErrorPayload(err);
+    // The human line names the kept partial clip when there is one (`attempt_video`, #210) —
+    // the best debugging artifact the user can get for a step that never showed what it waited for.
+    const keptClip = wire.attempt_video ? ` The attempt's clip is kept as recordings/${wire.attempt_video}.` : "";
     ctx.emit("wicked.interactive.status.posted", {
       document_id: ctx.documentId, state: "error",
-      message: `Recording failed: ${err.message}`,
+      message: `Recording failed: ${stripAnsi(err.message)}${keptClip}`,
       ...wire,
     });
     ctx.emit("wicked.interactive.error.raised", { document_id: ctx.documentId, source: "recorder", error: err.code, context: wire });

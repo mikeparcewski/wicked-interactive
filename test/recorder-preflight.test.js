@@ -337,3 +337,31 @@ test("no shipped string contains `npx playwright install` — the remedy is alwa
   assert.match(PLAYWRIGHT_INSTALL, /^wicked-interactive doctor --install/);
   assert.doesNotMatch(recorderInstallCommand("chromium-headless-shell"), /npx playwright install/, "the exact command spawns the bundled cli.js");
 });
+
+
+import { stripAnsi as _stripAnsi, classifyRecorderError as _classify, recorderErrorPayload as _payload } from "../src/service/recorder-preflight.js";
+
+test("stripAnsi removes CSI style codes, OSC sequences and bare ESC controls; plain text is untouched (#210)", () => {
+  assert.equal(_stripAnsi("\x1b[2m - waiting for locator\x1b[22m"), " - waiting for locator");
+  assert.equal(_stripAnsi("\x1b[1;31mred\x1b[0m plain"), "red plain");
+  assert.equal(_stripAnsi("\x1b]0;title\x07after"), "after");
+  assert.equal(_stripAnsi("no codes here [2m literal brackets stay"), "no codes here [2m literal brackets stay");
+  assert.equal(_stripAnsi(null), "");
+  assert.equal(_stripAnsi(42), "42");
+});
+
+test("classify + payload carry the kept attempt clip (attempt_video) and strip ANSI from the cause (#210)", () => {
+  const raw = new Error("page.click: Timeout 10000ms exceeded.\nCall log:\n\x1b[2m  - waiting for locator('#go')\x1b[22m");
+  raw.recorderStep = { index: 1, label: "Go" };
+  raw.attempt_video = "_attempt-2.failed.webm";
+  const typed = _classify(raw);
+  assert.equal(typed.code, "recording_step_failed");
+  assert.equal(typed.attempt_video, "_attempt-2.failed.webm");
+  assert.doesNotMatch(typed.cause, /\x1b/);
+  const wire = _payload(typed);
+  assert.equal(wire.attempt_video, "_attempt-2.failed.webm");
+  assert.doesNotMatch(JSON.stringify(wire), /\\u001b/);
+  // No clip → no field (additive: consumers that never read it see the old shape).
+  const bare = _payload(_classify(new Error("browserType.launch: Failed to launch")));
+  assert.equal("attempt_video" in bare, false);
+});

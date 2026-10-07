@@ -432,3 +432,49 @@ test("materializeDemo: an install failure is typed recorder_browser_install_fail
     assert.deepEqual(ctx.states, ["preflight", "installing", "failed"]);
   } finally { cleanup(dir); }
 });
+
+
+test("materializeDemo: every narrated line is ANSI-free — install progress with ESC[2m…ESC[22m and a failure message alike (#210)", async () => {
+  const dir = demoWs();
+  let present = false;
+  const ctx = demoCtx({
+    status: async () => (present ? okStatus : missingStatus),
+    install: async ({ onProgress }) => {
+      onProgress({ phase: "downloading", line: "\x1b[2mDownloading Chrome Headless Shell 153.0.8010.12 (playwright build v1243)\x1b[22m" });
+      onProgress({ phase: "installed", message: "\x1b[1mChromium Headless Shell 153.0.8010.12 downloaded\x1b[22m to /x/chromium_headless_shell-1243" });
+      present = true;
+    },
+    autoInstall: true,
+  });
+  try {
+    const stepErr = new Error("page.waitForSelector: Timeout 10000ms exceeded.\nCall log:\n\x1b[2m  - waiting for locator('#launch') to be visible\x1b[22m");
+    stepErr.recorderStep = { index: 3, label: "Launch a run" };
+    stepErr.attempt_video = "_attempt-1.failed.webm";
+    const out = await materializeDemo(dir, {}, ctx, { record: async () => { throw stepErr; } });
+    const statuses = ctx.events.filter((e) => e.type === "wicked.interactive.status.posted").map((e) => e.payload);
+    assert.ok(statuses.length >= 3, JSON.stringify(statuses));
+    for (const s of statuses) {
+      assert.doesNotMatch(s.message, /\x1b/, `ESC in: ${JSON.stringify(s.message)}`);
+      assert.doesNotMatch(s.message, /\[2m|\[22m|\[1m/, `bare code residue in: ${JSON.stringify(s.message)}`);
+    }
+    assert.ok(statuses.some((s) => s.state === "working" && /^Installing the recorder's browser… Downloading Chrome Headless Shell/.test(s.message)), JSON.stringify(statuses));
+    const err = statuses.find((s) => s.state === "error");
+    assert.equal(err.code, "recording_step_failed");
+    assert.deepEqual(err.step, { index: 3, label: "Launch a run" });
+    assert.equal(err.attempt_video, "_attempt-1.failed.webm", "the kept clip is on the wire");
+    assert.match(err.message, /step 3 \(Launch a run\)/);
+    assert.match(err.message, /The attempt's clip is kept as recordings\/_attempt-1\.failed\.webm\.$/);
+    assert.equal(out.error.attempt_video, "_attempt-1.failed.webm");
+  } finally { cleanup(dir); }
+});
+
+test("materializeDemo: a failure with no clip kept names no clip (the sentence is conditional)", async () => {
+  const dir = demoWs();
+  const ctx = demoCtx({ status: async () => okStatus });
+  try {
+    await materializeDemo(dir, {}, ctx, { record: async () => { throw new Error("browserType.launch: Failed to launch: spawn EACCES"); } });
+    const err = ctx.events.find((e) => e.payload.state === "error").payload;
+    assert.equal(err.attempt_video, undefined);
+    assert.doesNotMatch(err.message, /attempt's clip/);
+  } finally { cleanup(dir); }
+});

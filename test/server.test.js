@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { request } from "node:http";
-import { createServer } from "../src/service/server.js";
+import { createServer, createMultiServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
 import { pptxReady } from "../src/service/pptx.js";
 
@@ -285,4 +285,38 @@ test("GET /api/demo/status starts idle and carries the recorder browser snapshot
     assert.equal(pf.recorder.ok, false);
     assert.ok("ok" in pf && "missing" in pf, "plugin gate fields unchanged");
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+
+test("POST /api/docs (kind demo) seeds the user's brief as the first conversation entry — GET /d/:doc/api/conversation restores it (#210)", async () => {
+  // The multi-server opens a bus at start (ADR-0021): give this test its own, released on stop().
+  const prevBus = process.env.WICKED_BUS_DATA_DIR;
+  process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-srv-"));
+  const root = mkdtempSync(join(tmpdir(), "wi-srv-multi-"));
+  const svc = createMultiServer({ root, recorder: { status: async () => ({ ok: true, browser: "chromium-headless-shell", missing: [], components: [] }) } });
+  const port = await svc.start(0);
+  const base = `http://localhost:${port}`;
+  try {
+    const r = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "demo-brief", kind: "demo", url: "http://127.0.0.1:1/", brief: "Record a 60-second read-only tour of the dashboard" }),
+    });
+    assert.equal(r.status, 200, await r.text());
+    const convo = await (await fetch(`${base}/d/demo-brief/api/conversation`)).json();
+    assert.equal(convo.length, 1, JSON.stringify(convo));
+    assert.equal(convo[0].role, "user");
+    assert.equal(convo[0].text, "Record a 60-second read-only tour of the dashboard");
+    assert.ok(convo[0].ts, "stamped");
+    // A demo created without a brief seeds nothing (no empty user line).
+    const r2 = await fetch(`${base}/api/docs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "demo-nobrief", kind: "demo", url: "http://127.0.0.1:1/" }),
+    });
+    assert.equal(r2.status, 200, await r2.text());
+    assert.deepEqual(await (await fetch(`${base}/d/demo-nobrief/api/conversation`)).json(), []);
+  } finally {
+    await svc.stop();
+    rmSync(root, { recursive: true, force: true });
+    if (prevBus === undefined) delete process.env.WICKED_BUS_DATA_DIR; else process.env.WICKED_BUS_DATA_DIR = prevBus;
+  }
 });
