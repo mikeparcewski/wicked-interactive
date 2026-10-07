@@ -5,9 +5,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { join, sep } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join, sep } from "node:path";
 import { tmpdir } from "node:os";
+import { request } from "node:http";
 import { createServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
 import { pptxReady } from "../src/service/pptx.js";
@@ -94,6 +95,48 @@ test("POST /api/export returns a download URL + GET /api/export/file serves the 
   } finally { await cleanup(); }
 });
 
+// Export listing (#236): a reloaded client rediscovers the exports it made earlier from
+// GET /api/export instead of probing download names (wicked-studio#234's stopgap).
+test("GET /api/export lists the finished exports: [] first, then exactly the file POST made", async () => {
+  const { dir, base, cleanup } = await boot();
+  try {
+    const before = await fetch(`${base}/api/export`);
+    assert.equal(before.status, 200);
+    assert.deepEqual(await before.json(), [], "no exports before any POST");
+
+    // v1 via fork, then a PDF-prep copy on disk that must NEVER be listed (what exportPdf leaves behind).
+    assert.equal((await fetch(`${base}/api/fork`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from: 0 }),
+    })).status, 200);
+    mkdirSync(join(dir, "exports"), { recursive: true });
+    writeFileSync(join(dir, "exports", "export_v1.pdf.html"), "<html>prep</html>");
+    assert.deepEqual(await (await fetch(`${base}/api/export`)).json(), [], "the PDF-prep copy is not an export");
+
+    const post = await fetch(`${base}/api/export`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 1, format: "html" }),
+    });
+    assert.equal(post.status, 200);
+    const { file } = await post.json();
+
+    const list = await (await fetch(`${base}/api/export`)).json();
+    assert.equal(list.length, 1, `exactly one export listed: ${JSON.stringify(list)}`);
+    const [row] = list;
+    assert.equal(row.version, 1);
+    assert.equal(row.format, "html");
+    assert.equal(row.name, file);
+    assert.equal(row.name, `${basename(dir)}_v1.html`, "name is the deterministic download name <slug>_v1.html");
+    assert.ok(Number.isInteger(row.bytes) && row.bytes > 0, "bytes is the file size");
+    assert.ok(!Number.isNaN(Date.parse(row.generated_at)), "generated_at is an ISO timestamp");
+    assert.deepEqual(Object.keys(row).sort(), ["bytes", "format", "generated_at", "name", "version"]);
+
+    // Every listed name resolves at the download route.
+    const dl = await fetch(`${base}/api/export/file/${encodeURIComponent(row.name)}`);
+    assert.equal(dl.status, 200);
+    assert.equal(Number(dl.headers.get("content-length")), row.bytes);
+  } finally { await cleanup(); }
+});
+
 // Regression (#169): send's default dotfiles:"ignore" 404s any absolute path carrying a
 // dot-segment, so a docs root under e.g. ~/.local/share or a .wicked/ worktree broke downloads
 // while every other route kept working. The download endpoint passes dotfiles:"allow".
@@ -126,12 +169,27 @@ test("GET /api/export/file rejects path-traversal attempts", async () => {
     assert.equal((await fetch(`${base}/api/export/file/${encodeURIComponent("../_v0.html")}`)).status, 400);
     // With dotfiles:"allow" on this route (#169), leading-dot names must be rejected up front:
     // "." and ".." pass the charset test and resolve to DIRECTORIES, and ".hidden" would be served.
-    // "." / ".." may be swallowed by express's own URL normalization (404, never reaching the
-    // handler) or rejected by the handler (400) — either way, NOT served and NOT a 500.
-    for (const dotted of ["..", ".", ".hidden"]) {
+    // "." may be swallowed by express's own URL normalization (404, never reaching the handler)
+    // or rejected by the handler (400) — either way, NOT served and NOT a 500.
+    for (const dotted of [".", ".hidden"]) {
       const st = (await fetch(`${base}/api/export/file/${encodeURIComponent(dotted)}`)).status;
       assert.ok(st === 400 || st === 404, `dotted name ${dotted} must be refused, got ${st}`);
     }
+    // ".." never reaches the file route from a URL client: the WHATWG URL parser collapses the
+    // segment before the request is sent, so `/api/export/file/..` IS `/api/export/` — the export
+    // listing (#236), a JSON array, never a file. The handler's own guard is proven with a raw
+    // request that keeps the dot-segment on the wire.
+    const collapsed = await fetch(`${base}/api/export/file/..`);
+    assert.equal(collapsed.status, 200);
+    assert.ok(Array.isArray(await collapsed.json()), "a collapsed .. lands on the listing, not a file");
+    const raw = await new Promise((resolve, reject) => {
+      // options form, not a URL string: `new URL()` would collapse the segment too
+      const { hostname, port } = new URL(base);
+      const req = request({ hostname, port, path: "/api/export/file/..", method: "GET" }, (res) => { res.resume(); res.on("end", () => resolve(res.statusCode)); });
+      req.on("error", reject);
+      req.end();
+    });
+    assert.equal(raw, 400, "the handler itself refuses a raw ..");
   } finally { await cleanup(); }
 });
 

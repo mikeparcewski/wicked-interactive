@@ -8,7 +8,7 @@
 //       absorbed prezzie export pipeline used — ADR-0020). Print rules are injected into the
 //       PDF-prep copy ONLY, and page geometry only for a document that DECLARES itself a deck.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, resolve, basename } from "node:path";
 import { spawn } from "node:child_process";
 import * as cheerio from "cheerio";
@@ -571,6 +571,32 @@ function exportsDir(dir) {
   const out = join(dir, "exports");
   mkdirSync(out, { recursive: true });
   return out;
+}
+
+/** A finished export's on-disk name: `<base>_v<version>.<html|pdf|pptx>`. The PDF-prep copy
+ *  (`export_v<N>.pdf.html`) does not match — its `_v<N>` is followed by `.pdf.html`, not an ext. */
+const EXPORT_NAME = /^[A-Za-z0-9._-]+_v(\d+)\.(html|pdf|pptx)$/;
+
+/**
+ * The document's finished exports on disk (#236) — what a client needs to hydrate its export
+ * row after a reload without probing names: `[{ version, format, name, bytes, generated_at }]`,
+ * oldest first. Reads only; never creates the exports directory. The PDF-prep copy and anything
+ * not shaped like a download name are not exports and are not listed.
+ * @returns {{ version: number, format: "html"|"pdf"|"pptx", name: string, bytes: number, generated_at: string }[]}
+ */
+export function listExports(dir) {
+  const out = join(dir, "exports");
+  if (!existsSync(out)) return [];
+  const rows = [];
+  for (const name of readdirSync(out)) {
+    const m = EXPORT_NAME.exec(name);
+    if (!m) continue;
+    let st;
+    try { st = statSync(join(out, name)); } catch { continue; }
+    if (!st.isFile()) continue;
+    rows.push({ version: Number(m[1]), format: m[2], name, bytes: st.size, generated_at: st.mtime.toISOString() });
+  }
+  return rows.sort((a, b) => a.generated_at.localeCompare(b.generated_at) || a.version - b.version || a.format.localeCompare(b.format));
 }
 
 /** The doc's recorded style (POST /api/docs `style`, persisted on the manifest), or null. */
