@@ -346,6 +346,7 @@ test("stripAnsi removes CSI style codes, OSC sequences and bare ESC controls; pl
   assert.equal(_stripAnsi("\x1b[1;31mred\x1b[0m plain"), "red plain");
   assert.equal(_stripAnsi("\x1b]0;title\x07after"), "after");
   assert.equal(_stripAnsi("no codes here [2m literal brackets stay"), "no codes here [2m literal brackets stay");
+  assert.equal(_stripAnsi("a\x1bc b\x1b7 c\x1b(B d \x1b[31mred\x1b[0m e\x9b1mf"), "a b c d red ef", "bare ESC controls (RIS, DECSC, charset) and 8-bit CSI go too");
   assert.equal(_stripAnsi(null), "");
   assert.equal(_stripAnsi(42), "42");
 });
@@ -364,4 +365,16 @@ test("classify + payload carry the kept attempt clip (attempt_video) and strip A
   // No clip → no field (additive: consumers that never read it see the old shape).
   const bare = _payload(_classify(new Error("browserType.launch: Failed to launch")));
   assert.equal("attempt_video" in bare, false);
+});
+
+test("a RecorderError born from raw CLI output (an install failure) is ANSI-free in message, cause and on the wire (codex r1)", async () => {
+  const installErr = new Error("playwright install chromium-headless-shell exited 1: \x1b[2mDownloading Chrome Headless Shell\x1b[22m | \x1b[31mError: ENOTFOUND cdn.playwright.dev\x1b[0m");
+  const err = await ensureRecorderBrowser({ headless: true, autoInstall: true, status: async () => ({ ok: false, browser: "chromium-headless-shell", missing: ["chromium-headless-shell"], components: [], install_command: "x", remedy: "wicked-interactive doctor --install", message: "missing" }), install: async () => { throw installErr; } })
+    .then(() => null, (e) => e);
+  assert.ok(err instanceof RecorderError, String(err));
+  assert.equal(err.code, "recorder_browser_install_failed");
+  assert.doesNotMatch(err.message, /\x1b/);
+  assert.doesNotMatch(String(err.cause), /\x1b/);
+  assert.match(String(err.cause), /ENOTFOUND cdn\.playwright\.dev/);
+  assert.doesNotMatch(JSON.stringify(recorderErrorPayload(err)), /\\u001b/);
 });

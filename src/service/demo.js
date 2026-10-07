@@ -229,7 +229,6 @@ export async function recordDemo(dir, opts = {}) {
   const startedAt = Date.now();
   let context;
   let page = null;
-  let firstStepSettledSec = null;   // when the first step's view had settled — the poster frame (#211)
   try {
     context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
@@ -320,9 +319,6 @@ export async function recordDemo(dir, opts = {}) {
         await showCaption(page, say, captionPosition);
         if (hold > 0) await page.waitForTimeout(hold);
       }
-      // The first step's settled view is the hero frame (poster) — a fixed 2 s grab caught the
-      // pre-hydration dashboard with wrong numbers (wicked-interactive#211).
-      if (firstStepSettledSec == null) firstStepSettledSec = (Date.now() - startedAt) / 1000;
 
       // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action.
       // The seek target stays `at` (chapter start); the frame is the post-action state, which
@@ -395,15 +391,16 @@ export async function recordDemo(dir, opts = {}) {
         "-i", webmPath, "-vcodec", "libx264", "-acodec", "aac", "-pix_fmt", "yuv420p", mp4Path, "-y",
       ], { timeout: 120_000 });
     }
-    // Poster = the frame where the FIRST step's view had settled (its caption hold done), not a
-    // fixed 2 s — at 2 s a dashboard is often still hydrating and the hero frame carries wrong
-    // numbers (#211). Falls back to 2 s, then the first frame, if that grab yields nothing.
+    // Poster = the FIRST step's thumbnail (its settled view, caption cleared) — not a fixed 2 s
+    // grab of the clip, which caught a dashboard still hydrating with wrong numbers (#211). Only
+    // when no step left a thumbnail does it fall back to the clip at 2 s, then the first frame.
     const posterPath = join(recDir, videoFile.replace(/\.webm$/, "-poster.jpg"));
-    if (ffmpeg && existsSync(mp4Path) && !existsSync(posterPath)) {
-      const candidates = [firstStepSettledSec, 2, 0].filter((s) => Number.isFinite(s) && s >= 0);
-      for (const at of candidates) {
-        spawnSync(ffmpeg, ["-ss", at.toFixed(2), "-i", mp4Path, "-vframes", "1", "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
-        if (existsSync(posterPath)) break;
+    if (ffmpeg && !existsSync(posterPath)) {
+      const firstThumb = stepTimings.find((s) => s.thumb && existsSync(join(recDir, s.thumb)))?.thumb;
+      if (firstThumb) spawnSync(ffmpeg, ["-i", join(recDir, firstThumb), "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
+      for (const at of [2, 0]) {
+        if (existsSync(posterPath) || !existsSync(mp4Path)) break;
+        spawnSync(ffmpeg, ["-ss", String(at), "-i", mp4Path, "-vframes", "1", "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
       }
     }
   } catch { /* conversion is best-effort */ }
@@ -460,10 +457,10 @@ const CAPTION_ID = "__wi_caption__";
 export const DEFAULT_HOLD_MS = 2000;
 export const CAPTION_HOLD_CAP_MS = 3000;
 
-// The band is TRANSLUCENT (a dark glass strip, not an opaque brand gradient) and slimmer, so the
-// UI the narration describes stays visible underneath — the opaque 70 px bar covered the
-// dashboard's bottom row and a form's submit button for the whole clip (#211). `position` is
-// "bottom" (default) or "top" for pages whose narrated UI lives at the bottom.
+// The band is TRANSLUCENT (a dark strip at .62 alpha, no blur, not an opaque brand gradient) and
+// slimmer, so the UI the narration describes stays readable underneath — the opaque 70 px bar
+// covered the dashboard's bottom row and a form's submit button for the whole clip (#211).
+// `position` is "bottom" (default) or "top" for pages whose narrated UI lives at the bottom.
 async function showCaption(page, text, position = "bottom") {
   try {
     await page.evaluate(({ id, text, position }) => {
@@ -476,7 +473,7 @@ async function showCaption(page, text, position = "bottom") {
         bar.style.cssText =
           "position:fixed;left:0;right:0;" + (top ? "top:0;" : "bottom:0;") + "z-index:2147483647;" +
           "padding:12px 32px;box-sizing:border-box;text-align:center;pointer-events:none;" +
-          "background:rgba(15,23,42,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);" +
+          "background:rgba(15,23,42,.62);" +
           "color:#fff;font:600 20px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
           "letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.6);" +
           (top ? "border-bottom" : "border-top") + ":1px solid rgba(255,255,255,.18);" +

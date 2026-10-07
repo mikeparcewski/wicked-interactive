@@ -76,13 +76,16 @@ export function doctorRemedy(env = process.env) {
  */
 export class RecorderError extends Error {
   constructor(code, message, details = {}) {
-    super(message);
+    // ANSI-free at the source (#210): an install failure's message is built from the CLI's raw
+    // stderr/stdout, and a RecorderError passes through classify unchanged — so the codes are
+    // stripped here, where every typed error is born, and again on the wire below.
+    super(stripAnsi(message));
     this.name = "RecorderError";
     this.code = code;
     this.source = "recorder";
     this.retryable = false;
-    this.remedy = details.remedy ?? null;
-    for (const [k, v] of Object.entries(details)) if (k !== "remedy" && v !== undefined) this[k] = v;
+    this.remedy = details.remedy == null ? null : stripAnsi(details.remedy);
+    for (const [k, v] of Object.entries(details)) if (k !== "remedy" && v !== undefined) this[k] = typeof v === "string" ? stripAnsi(v) : v;
   }
   /** The wire shape — identical on `status.posted` (flattened), `error.raised.context` and HTTP bodies. */
   toJSON() { return recorderErrorPayload(this); }
@@ -90,8 +93,13 @@ export class RecorderError extends Error {
 
 const WIRE_FIELDS = ["remedy", "browser", "missing", "executable_path", "install_command", "playwright_version", "browsers_path", "step", "request", "cause", "state", "started_at", "attempt_video"];
 
-/** ANSI escape sequences (CSI colour/style codes, OSC, single ESC controls). */
-const ANSI_RE = /\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[@-Z\\-_])/g;
+/**
+ * ANSI escape sequences: CSI (`ESC [ … final`, the colour/style codes), OSC (`ESC ] … BEL|ST`),
+ * and every other ESC-introduced control (`ESC c`, `ESC 7`, `ESC ( B`, …: optional intermediates
+ * 0x20–0x2F then one final 0x30–0x7E) — plus the 8-bit CSI introducer. ESC never occurs in text
+ * a user should read, so eating the sequence it introduces loses nothing legitimate.
+ */
+const ANSI_RE = /(?:\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[ -\/]*[0-~])|\x9b[0-?]*[ -\/]*[@-~])/g;
 
 /**
  * Strip ANSI escape codes from a narrated CLI line. Playwright's install and error output carry
@@ -105,8 +113,8 @@ export function stripAnsi(s) {
 /** Flatten a RecorderError (or any error) into the additive wire fields consumers key on. */
 export function recorderErrorPayload(err) {
   const e = err instanceof RecorderError ? err : classifyRecorderError(err);
-  const out = { code: e.code, source: "recorder", retryable: e.retryable === true, error: e.message };
-  for (const f of WIRE_FIELDS) if (e[f] !== undefined && e[f] !== null) out[f] = e[f];
+  const out = { code: e.code, source: "recorder", retryable: e.retryable === true, error: stripAnsi(e.message) };
+  for (const f of WIRE_FIELDS) if (e[f] !== undefined && e[f] !== null) out[f] = typeof e[f] === "string" ? stripAnsi(e[f]) : e[f];
   return out;
 }
 

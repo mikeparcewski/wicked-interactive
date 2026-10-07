@@ -291,7 +291,8 @@ test("GET /api/demo/status starts idle and carries the recorder browser snapshot
 test("POST /api/docs (kind demo) seeds the user's brief as the first conversation entry — GET /d/:doc/api/conversation restores it (#210)", async () => {
   // The multi-server opens a bus at start (ADR-0021): give this test its own, released on stop().
   const prevBus = process.env.WICKED_BUS_DATA_DIR;
-  process.env.WICKED_BUS_DATA_DIR = mkdtempSync(join(tmpdir(), "wi-bus-srv-"));
+  const busDir = mkdtempSync(join(tmpdir(), "wi-bus-srv-"));
+  process.env.WICKED_BUS_DATA_DIR = busDir;
   const root = mkdtempSync(join(tmpdir(), "wi-srv-multi-"));
   const svc = createMultiServer({ root, recorder: { status: async () => ({ ok: true, browser: "chromium-headless-shell", missing: [], components: [] }) } });
   const port = await svc.start(0);
@@ -317,6 +318,7 @@ test("POST /api/docs (kind demo) seeds the user's brief as the first conversatio
   } finally {
     await svc.stop();
     rmSync(root, { recursive: true, force: true });
+    rmSync(busDir, { recursive: true, force: true });
     if (prevBus === undefined) delete process.env.WICKED_BUS_DATA_DIR; else process.env.WICKED_BUS_DATA_DIR = prevBus;
   }
 });
