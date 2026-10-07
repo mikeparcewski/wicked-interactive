@@ -66,12 +66,20 @@ export function demoPlaceholder(name, url, brief = "") {
  * instrument() when the version lands), so a user can highlight "step 3" and ask for a
  * change exactly as they would any other block.
  *
- * The video src is a root-absolute path to this doc's locked recording endpoint, so it
- * resolves correctly regardless of which version path the iframe is currently showing.
+ * The video sources are root-absolute paths to this doc's locked recording endpoint, so they
+ * resolve correctly regardless of which version path the iframe is currently showing. Like
+ * `/api/demo/player/:version`, the element carries the poster and lists the h264 mp4 FIRST
+ * (Safari / mobile play it inline; the browser falls through to the webm when there is no mp4)
+ * — before this, the storyboard was webm-only with no poster, so the conversion and the poster
+ * were produced and never served (wicked-interactive#211). `mp4File` / `posterFile` are passed
+ * only when they exist, so a recording without ffmpeg renders exactly as before.
  */
-export function storyboard({ documentId, title, url, videoFile, steps = [] }) {
+export function storyboard({ documentId, title, url, videoFile, mp4File = null, posterFile = null, steps = [] }) {
   const rec = (file) => `/d/${documentId}/api/demo/recording/${encodeURIComponent(file)}`;
-  const videoSrc = rec(videoFile);
+  const sources =
+    (mp4File ? `<source src="${rec(mp4File)}" type="video/mp4">` : "") +
+    `<source src="${rec(videoFile)}" type="video/webm">`;
+  const posterAttr = posterFile ? ` poster="${rec(posterFile)}"` : "";
   // YouTube-style chapters: a clickable thumbnail per step that seeks the video to that
   // step's start time (data-seek, wired by the inline script below). The thumbnail is the
   // frame captured at the end of the step (its resulting view); the time is the chapter start.
@@ -139,7 +147,7 @@ export function storyboard({ documentId, title, url, videoFile, steps = [] }) {
         `<p class="wi-demo__target">Recorded against <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a></p>` +
       `</header>` +
       `<div class="wi-demo__player">` +
-        `<video id="wi-demo-video" controls playsinline preload="metadata" src="${videoSrc}"></video>` +
+        `<video id="wi-demo-video" controls playsinline preload="metadata"${posterAttr}>${sources}</video>` +
       `</div>` +
       `<p class="wi-demo__chaptitle">Chapters</p>` +
       chapters +
@@ -220,6 +228,8 @@ export async function recordDemo(dir, opts = {}) {
   const stepTimings = [];
   const startedAt = Date.now();
   let context;
+  let page = null;
+  let produced = null;   // the clip Playwright wrote (page@<hash>.webm) until it is renamed to ours
   try {
     context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
@@ -255,7 +265,7 @@ export async function recordDemo(dir, opts = {}) {
     };
 
     if (!dryRun) await context.tracing.start({ screenshots: true, snapshots: true });
-    const page = await context.newPage();
+    page = await context.newPage();
 
     // On-screen narration: the caption is the curated `say` — describe what's HAPPENING and
     // why it matters, NOT the mechanical action. The step `label` drives the storyboard chapter
@@ -264,10 +274,15 @@ export async function recordDemo(dir, opts = {}) {
     // shown BEFORE the action (covers same-page steps) AND re-asserted AFTER it — a step that
     // navigates (page.goto / waitForURL) wipes the injected node, so the post-action re-show is
     // what guarantees it's visible on the settled view. meta.captions:false suppresses all;
-    // tune the read-pause with meta.captionHoldMs or per step via { say, holdMs }. A dry run
-    // shows no captions and holds nothing — it only proves the steps work.
+    // tune the read-pause with meta.captionHoldMs or per step via { say, holdMs } — both are
+    // CAPPED at CAPTION_HOLD_CAP_MS: the hold is the one static frame a viewer sees per step,
+    // and uncapped holds made half a clip one frozen dashboard (wicked-interactive#211). The
+    // band sits at the bottom unless meta.captionPosition is "top" (when the narrated UI lives
+    // at the bottom). A dry run shows no captions and holds nothing — it only proves the steps work.
     const captionsOn = !dryRun && meta.captions !== false;
-    const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? Math.max(0, meta.captionHoldMs) : 2500;
+    const clampHold = (ms) => Math.min(CAPTION_HOLD_CAP_MS, Math.max(0, ms));
+    const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? clampHold(meta.captionHoldMs) : DEFAULT_HOLD_MS;
+    const captionPosition = meta.captionPosition === "top" ? "top" : "bottom";
 
     // `step` annotates a labelled segment so the storyboard can show ordered, timed steps
     // and so a failure points at the exact step. The agent wraps each action in step().
@@ -282,9 +297,9 @@ export async function recordDemo(dir, opts = {}) {
 
       const say = sopts.say != null ? String(sopts.say).trim() : "";
       const showCap = captionsOn && say.length > 0;
-      const hold = Number.isFinite(sopts.holdMs) ? Math.max(0, sopts.holdMs) : defaultHoldMs;
+      const hold = Number.isFinite(sopts.holdMs) ? clampHold(sopts.holdMs) : defaultHoldMs;
 
-      if (showCap) await showCaption(page, say);          // before the action (same-page steps)
+      if (showCap) await showCaption(page, say, captionPosition);          // before the action (same-page steps)
 
       // Tag a failing step so the typed error (recorder-preflight.classifyRecorderError) can
       // say WHICH step broke — the storyboard highlight the user refines. A blocked write is the
@@ -302,7 +317,7 @@ export async function recordDemo(dir, opts = {}) {
       // Re-assert after the action (fn may have navigated and wiped the node), then pause so
       // the viewer reads it against the settled, resulting view.
       if (showCap) {
-        await showCaption(page, say);
+        await showCaption(page, say, captionPosition);
         if (hold > 0) await page.waitForTimeout(hold);
       }
 
@@ -344,12 +359,24 @@ export async function recordDemo(dir, opts = {}) {
 
     // Playwright names the video with a random id; resolve the real path, then rename to
     // our deterministic per-version filename so the storyboard + endpoint are predictable.
-    let produced = null;
     try { produced = pageVideo ? await pageVideo.path() : null; } catch { produced = null; }
     if (!produced) produced = newestWebm(recDir, startedAt);
     if (produced && existsSync(produced) && produced !== join(recDir, videoFile)) {
       renameSync(produced, join(recDir, videoFile));
     }
+    produced = null;   // renamed: nothing left to keep
+  } catch (e) {
+    // A failed recording keeps its partial clip AS the failure evidence — `_attempt-<n>.failed.webm`
+    // (with that attempt's step thumbnails beside it) instead of an orphan `page@<hash>.webm` the
+    // manifest never references and nothing can link (wicked-interactive#210). The file name
+    // rides on the error (`attempt_video`) so the typed failure can point the user at it. Also
+    // covers a rename that failed AFTER the context closed (codex r2): `produced` still names the clip.
+    if (!dryRun && (context || produced)) {
+      const kept = await keepFailedAttempt({ context, page, recDir, startedAt, version, produced });
+      context = null;
+      if (kept && e && typeof e === "object") e.attempt_video = kept;
+    }
+    throw e;
   } finally {
     if (context) { try { await context.close(); } catch { /* already closing */ } }
     await browser.close();
@@ -366,10 +393,17 @@ export async function recordDemo(dir, opts = {}) {
         "-i", webmPath, "-vcodec", "libx264", "-acodec", "aac", "-pix_fmt", "yuv420p", mp4Path, "-y",
       ], { timeout: 120_000 });
     }
-    // Generate a poster thumbnail from the mp4 at 2 seconds for the video player preview frame.
+    // Poster = the FIRST step's thumbnail (its settled view, caption cleared) — not a fixed 2 s
+    // grab of the clip, which caught a dashboard still hydrating with wrong numbers (#211). Only
+    // when no step left a thumbnail does it fall back to the clip at 2 s, then the first frame.
     const posterPath = join(recDir, videoFile.replace(/\.webm$/, "-poster.jpg"));
-    if (ffmpeg && existsSync(mp4Path) && !existsSync(posterPath)) {
-      spawnSync(ffmpeg, ["-i", mp4Path, "-ss", "00:00:02", "-vframes", "1", "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
+    if (ffmpeg && !existsSync(posterPath)) {
+      const firstThumb = stepTimings.find((s) => s.thumb && existsSync(join(recDir, s.thumb)))?.thumb;
+      if (firstThumb) spawnSync(ffmpeg, ["-i", join(recDir, firstThumb), "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
+      for (const at of [2, 0]) {
+        if (existsSync(posterPath) || !existsSync(mp4Path)) break;
+        spawnSync(ffmpeg, ["-ss", String(at), "-i", mp4Path, "-vframes", "1", "-q:v", "2", posterPath, "-y"], { timeout: 30_000 });
+      }
     }
   } catch { /* conversion is best-effort */ }
 
@@ -378,6 +412,8 @@ export async function recordDemo(dir, opts = {}) {
     title: meta.title || documentId,
     url,
     videoFile,
+    mp4File: existsSync(mp4Path) ? videoFile.replace(/\.webm$/, ".mp4") : null,
+    posterFile: existsSync(join(recDir, videoFile.replace(/\.webm$/, "-poster.jpg"))) ? videoFile.replace(/\.webm$/, "-poster.jpg") : null,
     steps: stepTimings,
   });
 
@@ -419,29 +455,74 @@ function sideEffectBlocked(b, stepInfo) {
 // re-created on the next showCaption(). Best-effort: a mid-navigation page may reject
 // evaluate(), so a failed caption never fails the recording.
 const CAPTION_ID = "__wi_caption__";
+/** Default read-pause after a captioned step, and the cap every hold is clamped to (#211). */
+export const DEFAULT_HOLD_MS = 2000;
+export const CAPTION_HOLD_CAP_MS = 3000;
 
-async function showCaption(page, text) {
+// The band is TRANSLUCENT (a dark strip at .62 alpha, no blur, not an opaque brand gradient) and
+// slimmer, so the UI the narration describes stays readable underneath — the opaque 70 px bar
+// covered the dashboard's bottom row and a form's submit button for the whole clip (#211).
+// `position` is "bottom" (default) or "top" for pages whose narrated UI lives at the bottom.
+async function showCaption(page, text, position = "bottom") {
   try {
-    await page.evaluate(({ id, text }) => {
+    await page.evaluate(({ id, text, position }) => {
       let bar = document.getElementById(id);
+      const top = position === "top";
       if (!bar) {
         bar = document.createElement("div");
         bar.id = id;
         bar.setAttribute("aria-hidden", "true");
         bar.style.cssText =
-          "position:fixed;left:0;right:0;bottom:0;z-index:2147483647;" +
-          "padding:20px 40px;box-sizing:border-box;text-align:center;pointer-events:none;" +
-          "background:linear-gradient(90deg,#1e40af 0%,#2563eb 50%,#1e40af 100%);" +
-          "color:#fff;font:600 23px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
-          "letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.35);" +
-          "box-shadow:0 -8px 30px rgba(37,99,235,.45);border-top:2px solid rgba(255,255,255,.35);" +
-          "opacity:0;transform:translateY(8px);transition:opacity .28s ease,transform .28s ease;";
+          "position:fixed;left:0;right:0;" + (top ? "top:0;" : "bottom:0;") + "z-index:2147483647;" +
+          "padding:12px 32px;box-sizing:border-box;text-align:center;pointer-events:none;" +
+          "background:rgba(15,23,42,.62);" +
+          "color:#fff;font:600 20px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
+          "letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.6);" +
+          (top ? "border-bottom" : "border-top") + ":1px solid rgba(255,255,255,.18);" +
+          "opacity:0;transform:translateY(" + (top ? "-8px" : "8px") + ");transition:opacity .28s ease,transform .28s ease;";
         (document.body || document.documentElement).appendChild(bar);
       }
       bar.textContent = text;
       requestAnimationFrame(() => { bar.style.opacity = "1"; bar.style.transform = "translateY(0)"; });
-    }, { id: CAPTION_ID, text });
+    }, { id: CAPTION_ID, text, position });
   } catch { /* page navigating / no document yet — skip the caption for this beat */ }
+}
+
+/** `_attempt-<n>.failed.webm` names already in `recDir` → the next attempt number. */
+function nextAttemptNumber(recDir) {
+  let n = 0;
+  for (const f of readdirSync(recDir)) {
+    const m = /^_attempt-(\d+)\.failed\.webm$/.exec(f);
+    if (m) n = Math.max(n, Number(m[1]));
+  }
+  return n + 1;
+}
+
+/**
+ * A recording failed mid-run: flush the context so Playwright writes the partial clip, then keep
+ * it as `_attempt-<n>.failed.webm` (and that attempt's `_vN.stepNN.png` thumbnails as
+ * `_attempt-<n>.stepNN.png`) — the best debugging artifact the user can get, linkable by the UI
+ * — instead of leaving `page@<hash>.webm` orphans the manifest never references (#210).
+ * Returns the kept file name, or null when the run produced no clip. Never throws.
+ */
+async function keepFailedAttempt({ context, page, recDir, startedAt, version, produced = null }) {
+  let pageVideo = null;
+  try { pageVideo = page?.video?.() ?? null; } catch { pageVideo = null; }
+  if (context) { try { await context.close(); } catch { /* already closing */ } }
+  try { if (!produced && pageVideo) produced = await pageVideo.path(); } catch { produced = null; }
+  try { if (!produced) produced = newestWebm(recDir, startedAt); } catch { produced = null; }
+  if (!produced || !existsSync(produced) || !/\.webm$/.test(produced)) return null;
+  try {
+    const n = nextAttemptNumber(recDir);
+    const kept = `_attempt-${n}.failed.webm`;
+    renameSync(produced, join(recDir, kept));
+    const thumbRe = new RegExp(`^_v${version}\\.step(\\d+)\\.png$`);
+    for (const f of readdirSync(recDir)) {
+      const m = thumbRe.exec(f);
+      if (m) { try { renameSync(join(recDir, f), join(recDir, `_attempt-${n}.step${m[1]}.png`)); } catch { /* keep going */ } }
+    }
+    return kept;
+  } catch { return null; }
 }
 
 async function clearCaption(page) {
@@ -507,7 +588,7 @@ export function exportGif(dir, version, { encoder = ffmpegGifEncoder, ffmpegPath
 function newestWebm(dir, sinceMs) {
   let best = null, bestMtime = sinceMs - 1000;
   for (const f of readdirSync(dir)) {
-    if (!f.endsWith(".webm")) continue;
+    if (!f.endsWith(".webm") || f.startsWith("_")) continue;   // `_vN.webm` / `_attempt-n.failed.webm` are ours already
     const full = join(dir, f);
     try {
       const mt = statSync(full).mtimeMs;

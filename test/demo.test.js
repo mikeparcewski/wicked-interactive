@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { exportGif } from "../src/service/demo.js";
+import { exportGif, storyboard, DEFAULT_HOLD_MS, CAPTION_HOLD_CAP_MS } from "../src/service/demo.js";
 
 function workspaceWithRecording(version = 1, webmBytes = "fake-webm-bytes") {
   const dir = mkdtempSync(join(tmpdir(), "wi-gif-"));
@@ -67,4 +67,33 @@ test("exportGif re-encodes when the source webm is newer than the cached gif", (
 test("exportGif throws a clear error when the version was never recorded", () => {
   const { dir } = workspaceWithRecording(1);
   assert.throws(() => exportGif(dir, 9, { encoder: fakeEncoder() }), /no recording for v9/);
+});
+
+
+// ── storyboard: the player the studio embeds serves the mp4 + poster it already produced (#211) ──
+
+test("storyboard emits the poster and an mp4-first <source> list when both exist (the player route's shape)", () => {
+  const html = storyboard({ documentId: "tour", title: "Tour", url: "http://app.test/", videoFile: "_v1.webm", mp4File: "_v1.mp4", posterFile: "_v1-poster.jpg", steps: [] });
+  const video = /<video[^>]*>[\s\S]*?<\/video>/.exec(html)?.[0];
+  assert.ok(video, "one <video> element");
+  assert.match(video, /poster="\/d\/tour\/api\/demo\/recording\/_v1-poster\.jpg"/);
+  const sources = [...video.matchAll(/<source src="([^"]+)" type="([^"]+)">/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(sources, [
+    ["/d/tour/api/demo/recording/_v1.mp4", "video/mp4"],
+    ["/d/tour/api/demo/recording/_v1.webm", "video/webm"],
+  ], "h264 first, webm second");
+  assert.doesNotMatch(video, /<video[^>]*\ssrc=/, "no webm-only src attribute (it would double-fetch past the sources)");
+});
+
+test("storyboard without an mp4/poster (no ffmpeg) is webm-only with no poster attribute — exactly the old rendering", () => {
+  const html = storyboard({ documentId: "tour", title: "Tour", url: "http://app.test/", videoFile: "_v2.webm", steps: [] });
+  const video = /<video[^>]*>[\s\S]*?<\/video>/.exec(html)?.[0];
+  assert.doesNotMatch(video, /poster=/);
+  const sources = [...video.matchAll(/<source src="([^"]+)" type="([^"]+)">/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(sources, [["/d/tour/api/demo/recording/_v2.webm", "video/webm"]]);
+});
+
+test("caption holds: the default read-pause is under the cap, and the cap is what every hold is clamped to (#211)", () => {
+  assert.ok(DEFAULT_HOLD_MS <= CAPTION_HOLD_CAP_MS);
+  assert.ok(CAPTION_HOLD_CAP_MS <= 3000, "a static hold longer than 3 s per step is the half-frozen clip the issue measured");
 });

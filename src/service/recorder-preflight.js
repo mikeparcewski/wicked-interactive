@@ -76,25 +76,45 @@ export function doctorRemedy(env = process.env) {
  */
 export class RecorderError extends Error {
   constructor(code, message, details = {}) {
-    super(message);
+    // ANSI-free at the source (#210): an install failure's message is built from the CLI's raw
+    // stderr/stdout, and a RecorderError passes through classify unchanged — so the codes are
+    // stripped here, where every typed error is born, and again on the wire below.
+    super(stripAnsi(message));
     this.name = "RecorderError";
     this.code = code;
     this.source = "recorder";
     this.retryable = false;
-    this.remedy = details.remedy ?? null;
-    for (const [k, v] of Object.entries(details)) if (k !== "remedy" && v !== undefined) this[k] = v;
+    this.remedy = details.remedy == null ? null : stripAnsi(details.remedy);
+    for (const [k, v] of Object.entries(details)) if (k !== "remedy" && v !== undefined) this[k] = typeof v === "string" ? stripAnsi(v) : v;
   }
   /** The wire shape — identical on `status.posted` (flattened), `error.raised.context` and HTTP bodies. */
   toJSON() { return recorderErrorPayload(this); }
 }
 
-const WIRE_FIELDS = ["remedy", "browser", "missing", "executable_path", "install_command", "playwright_version", "browsers_path", "step", "request", "cause", "state", "started_at"];
+const WIRE_FIELDS = ["remedy", "browser", "missing", "executable_path", "install_command", "playwright_version", "browsers_path", "step", "request", "cause", "state", "started_at", "attempt_video"];
+
+/**
+ * ANSI escape sequences: CSI (`ESC [ … final`, the colour/style codes), OSC (`ESC ] … BEL|ST`),
+ * and every other ESC-introduced control (`ESC c`, `ESC 7`, `ESC ( B`, …: optional intermediates
+ * 0x20–0x2F then one final 0x30–0x7E) — plus the 8-bit CSI introducer. ESC never occurs in text
+ * a user should read, so eating the sequence it introduces loses nothing legitimate.
+ */
+const ANSI_RE = /(?:\x1b(?:\[[0-?]*[ -\/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[ -\/]*[0-~])|\x9b[0-?]*[ -\/]*[@-~])/g;
+
+/**
+ * Strip ANSI escape codes from a narrated CLI line. Playwright's install and error output carry
+ * dim/bold codes (`ESC[2m … ESC[22m`) that rendered as literal "[2m" / "[22m" on the doc thread
+ * (wicked-interactive#210); every narrated line — progress and failure alike — goes through this.
+ */
+export function stripAnsi(s) {
+  return String(s ?? "").replace(ANSI_RE, "");
+}
 
 /** Flatten a RecorderError (or any error) into the additive wire fields consumers key on. */
 export function recorderErrorPayload(err) {
   const e = err instanceof RecorderError ? err : classifyRecorderError(err);
-  const out = { code: e.code, source: "recorder", retryable: e.retryable === true, error: e.message };
-  for (const f of WIRE_FIELDS) if (e[f] !== undefined && e[f] !== null) out[f] = e[f];
+  const out = { code: e.code, source: "recorder", retryable: e.retryable === true, error: stripAnsi(e.message) };
+  for (const f of WIRE_FIELDS) if (e[f] !== undefined && e[f] !== null) out[f] = typeof e[f] === "string" ? stripAnsi(e[f]) : e[f];
   return out;
 }
 
@@ -257,7 +277,8 @@ export function missingBrowserError(status) {
 export async function installRecorderBrowser({ browser, cli = playwrightCliPath(), onProgress, timeoutMs = recorderInstallTimeoutMs(), env = process.env } = {}) {
   if (!cli) throw new Error("the bundled Playwright CLI (playwright/cli.js) could not be resolved");
   let lastPercent = -1;
-  const onLine = (line) => {
+  const onLine = (raw) => {
+    const line = stripAnsi(raw);   // the CLI dims its progress lines (ESC[2m) — never narrate the codes (#210)
     const pct = /(\d{1,3})%\s+of\s+([\d.]+\s*\w+)/.exec(line);
     if (pct) {
       const percent = Number(pct[1]);
@@ -327,8 +348,16 @@ export async function ensureRecorderBrowser({
  * terminal (retryable: false): the same spec on the same machine replays the same failure.
  */
 export function classifyRecorderError(err, { headless = true } = {}) {
+  const typed = classifyRecorderErrorInner(err, { headless });
+  // The partial clip recordDemo kept for a failed attempt (`_attempt-<n>.failed.webm`, #210) rides
+  // on the raw error; carry it onto the typed one so the wire can link it.
+  if (typeof err?.attempt_video === "string" && err.attempt_video && typed.attempt_video == null) typed.attempt_video = err.attempt_video;
+  return typed;
+}
+
+function classifyRecorderErrorInner(err, { headless = true } = {}) {
   if (err instanceof RecorderError) return err;
-  const msg = String(err?.message ?? err ?? "unknown error");
+  const msg = stripAnsi(err?.message ?? err ?? "unknown error");
   const browser = recorderBrowserName({ headless });
   const step = err?.recorderStep;
   const C = RECORDER_ERROR_CODES;
@@ -367,6 +396,7 @@ export function classifyRecorderError(err, { headless = true } = {}) {
 
 /** Strip Playwright's ASCII box + stack to the first meaningful line. */
 function firstLine(msg) {
-  const line = String(msg).split(/\r?\n/).map((l) => l.trim()).find((l) => l && !/^[╔╗╚╝║═]/.test(l));
-  return (line || String(msg)).slice(0, 400);
+  const clean = stripAnsi(msg);
+  const line = clean.split(/\r?\n/).map((l) => l.trim()).find((l) => l && !/^[╔╗╚╝║═]/.test(l));
+  return (line || clean).slice(0, 400);
 }
