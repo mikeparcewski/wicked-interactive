@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { grabUrlToPdf, chromeUrlRenderer, playwrightUrlRenderer, assertPublicUrl, isBlockedIp, resolveRedirectChain } from "../src/service/theme-grab.js";
+import { grabUrlToPdf, chromeUrlRenderer, playwrightUrlRenderer, assertPublicUrl, isBlockedIp, resolveRedirectChain, ensureThemeBrowser } from "../src/service/theme-grab.js";
+import { ensureRecorderBrowser, RecorderError, RECORDER_ERROR_CODES, recorderErrorPayload } from "../src/service/recorder-preflight.js";
 
 process.env.WICKED_NO_BUS = "1";
 
@@ -23,6 +24,10 @@ function fakeResponse(status, location) {
 }
 // fetchImpl that always returns a final (non-redirect) 200 — keeps the grab tests off the network.
 const fetch200 = async () => fakeResponse(200);
+
+// Browser preflight stub (#264): "already provisioned" — keeps the renderer tests off the real
+// Playwright CLI probe. The missing-browser path is covered by its own tests below.
+const browserReady = async () => ({ ok: true });
 
 test("grabUrlToPdf delegates to the renderer with the LIVE url + pinned IP and writes a PDF", async () => {
   const dir = tmp();
@@ -64,11 +69,13 @@ test("grabUrlToPdf rejects a non-http(s) url before spawning (no DNS, no fetch)"
 
 // Build a fake `playwright` import: chromium.launch → browser → newContext → newPage, recording
 // every call. `failTimes` makes the first N goto() calls throw (to exercise the retry loop).
-function fakePlaywrightImport({ pdfBytes = "%PDF-1.4 pw", failTimes = 0 } = {}) {
-  const captured = { launchArgs: null, contextOpts: null, gotoArgs: [], pageCalls: [], closed: 0, attempts: 0 };
+function fakePlaywrightImport({ pdfBytes = "%PDF-1.4 pw", failTimes = 0, launchError = null } = {}) {
+  const captured = { launchArgs: null, contextOpts: null, gotoArgs: [], pageCalls: [], closed: 0, attempts: 0, launches: 0 };
   let failsLeft = failTimes;
   const chromium = {
     launch: async ({ headless, args }) => {
+      captured.launches++;
+      if (launchError) throw new Error(launchError);
       captured.launchArgs = args;
       return {
         newContext: async (opts) => {
@@ -98,7 +105,7 @@ test("playwrightUrlRenderer waits for networkidle, pins the IP, settles, and wri
     const out = join(dir, "learned.pdf");
     const { import: importPlaywright, captured } = fakePlaywrightImport();
     const res = await playwrightUrlRenderer("https://500designs.com/", out, {
-      pinnedIp: "93.184.216.34", settleMs: 10, importPlaywright,
+      pinnedIp: "93.184.216.34", settleMs: 10, importPlaywright, ensureBrowser: browserReady,
     });
     assert.equal(res.path, out);
     assert.ok(existsSync(out), "the playwright renderer produced a PDF");
@@ -118,7 +125,7 @@ test("playwrightUrlRenderer retries a transient nav failure, then succeeds", asy
   try {
     const out = join(dir, "learned.pdf");
     const { import: importPlaywright, captured } = fakePlaywrightImport({ failTimes: 1 });
-    const res = await playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 2, importPlaywright });
+    const res = await playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 2, importPlaywright, ensureBrowser: browserReady });
     assert.equal(res.path, out);
     assert.ok(existsSync(out), "produced a PDF after a retry");
     assert.equal(captured.attempts, 2, "retried once (first goto threw) then succeeded");
@@ -132,7 +139,7 @@ test("playwrightUrlRenderer surfaces a render failure after retries (no silent e
     const out = join(dir, "learned.pdf");
     const { import: importPlaywright } = fakePlaywrightImport({ failTimes: 99 });
     await assert.rejects(
-      playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 1, importPlaywright }),
+      playwrightUrlRenderer("https://anti-bot.example.com/", out, { settleMs: 1, maxRetries: 1, importPlaywright, ensureBrowser: browserReady }),
       /Playwright URL render failed/,
     );
     assert.ok(!existsSync(out), "no PDF artifact on failure");
@@ -142,7 +149,7 @@ test("playwrightUrlRenderer surfaces a render failure after retries (no silent e
 test("playwrightUrlRenderer throws a clear 'Playwright is not installed' error when the import fails", async () => {
   const importPlaywright = async () => { throw new Error("Cannot find package 'playwright'"); };
   await assert.rejects(
-    playwrightUrlRenderer("https://example.com/", "/tmp/nope.pdf", { importPlaywright }),
+    playwrightUrlRenderer("https://example.com/", "/tmp/nope.pdf", { importPlaywright, ensureBrowser: browserReady }),
     /Playwright is not installed/,
   );
 });
@@ -154,7 +161,7 @@ test("grabUrlToPdf uses the playwright renderer by default and wires through the
     const { import: importPlaywright, captured } = fakePlaywrightImport();
     // Inject ONLY the playwright import (via renderOpts) — let grabUrlToPdf pick its DEFAULT renderer.
     await grabUrlToPdf("https://example.com/pricing", out, {
-      validate: approve, fetchImpl: fetch200, renderOpts: { settleMs: 5, importPlaywright },
+      validate: approve, fetchImpl: fetch200, renderOpts: { settleMs: 5, importPlaywright, ensureBrowser: browserReady },
     });
     assert.ok(existsSync(out), "default (playwright) renderer produced a PDF");
     assert.equal(captured.gotoArgs[0][0], "https://example.com/pricing", "rendered the validated final URL");
@@ -325,4 +332,95 @@ test("grabUrlToPdf REJECTS a redirect to the metadata IP before rendering (issue
     /SSRF guard/,
   );
   assert.equal(rendered, 0, "the renderer is never invoked when a redirect hop fails the guard");
+});
+
+// --- missing browser (wicked-interactive#264): crew hands the bridge a private
+// PLAYWRIGHT_BROWSERS_PATH that only the recorder used to fill, so a fresh install launched into an
+// empty cache. The grab now runs the recorder preflight first. The launcher, the presence probe and
+// the installer are all mocked — no real browser, CLI or download. ---
+
+const EMPTY_CACHE = "/state-home/interactive/recorder-browsers";
+function missingStatus({ auto = true } = {}) {
+  return {
+    ok: false, browser: "chromium-headless-shell", headless: true, playwright_version: "1.60.0", cli: "/fake/cli.js",
+    browsers_path: EMPTY_CACHE, install_command: `node "/fake/cli.js" install chromium-headless-shell`,
+    remedy: "wicked-interactive doctor --install", auto_install: auto, components: [], missing: ["chromium-headless-shell", "ffmpeg"],
+    message: "the recorder's browser is not installed",
+  };
+}
+
+test("playwrightUrlRenderer provisions a MISSING browser once (with status lines) before launching (#264)", async () => {
+  const dir = tmp();
+  try {
+    const out = join(dir, "learned.pdf");
+    const { import: importPlaywright, captured } = fakePlaywrightImport();
+    const order = [];
+    let provisioned = false;
+    const status = async () => { order.push("probe"); return provisioned ? { ok: true, browser: "chromium-headless-shell" } : missingStatus(); };
+    const install = async ({ browser, onProgress }) => {
+      order.push(`install:${browser}`);
+      assert.equal(captured.launches, 0, "nothing launches before the install finished");
+      onProgress?.({ phase: "downloading", percent: 50, size: "90 MiB" });
+      provisioned = true;
+    };
+    const progress = [];
+    const res = await playwrightUrlRenderer("https://example.org/", out, {
+      settleMs: 1, importPlaywright, onProgress: (p) => progress.push(p),
+      ensureBrowser: (o) => ensureThemeBrowser({ ...o, autoInstall: true, status, install }),
+    });
+    assert.equal(res.path, out);
+    assert.ok(existsSync(out), "the grab ran against the freshly provisioned browser");
+    assert.deepEqual(order, ["probe", "install:chromium-headless-shell", "probe"], "probe → install once → re-probe");
+    assert.equal(captured.launches, 1, "launched exactly once, after provisioning");
+    assert.deepEqual(progress.map((p) => p.phase), ["installing", "downloading", "installed"], "a clear status line for the one-time download");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("playwrightUrlRenderer returns a TYPED missing-browser error (no launch, no raw stack) when it cannot provision (#264)", async () => {
+  const { import: importPlaywright, captured } = fakePlaywrightImport();
+  let installs = 0;
+  const err = await playwrightUrlRenderer("https://example.org/", "/tmp/never.pdf", {
+    settleMs: 1, importPlaywright,
+    ensureBrowser: (o) => ensureRecorderBrowser({ ...o, autoInstall: false, status: async () => missingStatus({ auto: false }), install: async () => { installs++; } }),
+  }).then(() => null, (e) => e);
+  assert.ok(err instanceof RecorderError, "typed, not a bare Error");
+  assert.equal(err.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+  assert.equal(err.retryable, false);
+  assert.equal(err.source, "theme");
+  assert.match(err.remedy, /doctor --install/);
+  assert.match(err.message, /headless browser that reads the page is not installed/);
+  assert.match(err.message, /Learn again/);
+  assert.ok(err.message.includes(EMPTY_CACHE), "names the cache it looked in");
+  assert.doesNotMatch(err.message, /Re-record|browserType\.launch/, "theme-voiced, not the recorder's line or a launch stack");
+  assert.equal(installs, 0, "auto-install off → no provisioning attempt");
+  assert.equal(captured.launches, 0, "never launched into an empty cache");
+  const wire = recorderErrorPayload(err);
+  assert.equal(wire.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+  assert.deepEqual(wire.missing, ["chromium-headless-shell", "ffmpeg"]);
+});
+
+test("playwrightUrlRenderer turns a failed provisioning into a typed install-failed error (#264)", async () => {
+  const { import: importPlaywright, captured } = fakePlaywrightImport();
+  const err = await playwrightUrlRenderer("https://example.org/", "/tmp/never.pdf", {
+    settleMs: 1, importPlaywright,
+    ensureBrowser: (o) => ensureRecorderBrowser({ ...o, autoInstall: true, status: async () => missingStatus(), install: async () => { throw new Error("getaddrinfo ENOTFOUND cdn.playwright.dev"); } }),
+  }).then(() => null, (e) => e);
+  assert.ok(err instanceof RecorderError);
+  assert.equal(err.code, RECORDER_ERROR_CODES.BROWSER_INSTALL_FAILED);
+  assert.match(err.message, /ENOTFOUND/);
+  assert.match(err.message, /check the network, then Learn again/);
+  assert.equal(captured.launches, 0);
+});
+
+test("playwrightUrlRenderer fails typed and WITHOUT retrying when the launch finds no executable (#264)", async () => {
+  const exe = `${EMPTY_CACHE}/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`;
+  const { import: importPlaywright, captured } = fakePlaywrightImport({ launchError: `browserType.launch: Executable doesn't exist at ${exe}\n╔════╗\n║ Looks like Playwright was just installed ║` });
+  const err = await playwrightUrlRenderer("https://example.org/", "/tmp/never.pdf", {
+    settleMs: 1, maxRetries: 2, importPlaywright, ensureBrowser: browserReady,
+  }).then(() => null, (e) => e);
+  assert.ok(err instanceof RecorderError);
+  assert.equal(err.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+  assert.equal(err.executable_path, exe);
+  assert.doesNotMatch(err.message, /╔|║/, "no Playwright ASCII box on the wire");
+  assert.equal(captured.launches, 1, "a deterministic launch failure is not retried");
 });

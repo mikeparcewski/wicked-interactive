@@ -35,6 +35,9 @@ import { existsSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { findChrome as defaultFindChrome } from "./export.js";
+import {
+  ensureRecorderBrowser, classifyRecorderError, doctorRemedy, RecorderError, RECORDER_ERROR_CODES,
+} from "./recorder-preflight.js";
 
 // Hostnames that must never be fetched server-side regardless of how they resolve.
 const BLOCKED_HOSTS = new Set(["localhost", "metadata", "metadata.google.internal", "instance-data"]);
@@ -165,6 +168,73 @@ export async function resolveRedirectChain(url, { fetchImpl = fetch, maxHops = 5
   throw new Error(`theme URL exceeded ${maxHops} redirects (possible loop) starting from ${url} (SSRF guard)`);
 }
 
+// --- Browser provisioning for the grab (wicked-interactive#264). ---
+// The grabber launches the SAME bundled Playwright Chromium headless shell the recorder does, and
+// crew hands every bridge a private PLAYWRIGHT_BROWSERS_PATH that only the recorder preflight used
+// to fill — so on a state home that never recorded a demo, every "learn a look from a URL" died on
+// `browserType.launch: Executable doesn't exist`. The grab now runs the recorder's preflight
+// (recorder-preflight.ensureRecorderBrowser: launch-free presence probe, one-time provision with
+// the bundled CLI, WI_RECORDER_AUTO_INSTALL opt-out) before launching, and every browser failure
+// comes back as a typed RecorderError (stable `code`, `retryable:false`, one-line `remedy`)
+// re-voiced for the theme surface instead of a raw launch stack.
+
+/** The `source` a theme-grab browser failure carries on the wire (the recorder's is "recorder"). */
+export const THEME_GRAB_SOURCE = "theme";
+
+let inflightEnsure = null;
+/**
+ * Single-flight `ensureRecorderBrowser` for the grab: two Learn clicks on a fresh install share ONE
+ * provisioning run instead of racing two downloads into the same cache. Only the first caller's
+ * `onProgress` narrates; the rest await the same result.
+ */
+export function ensureThemeBrowser(opts = {}) {
+  if (!inflightEnsure) {
+    inflightEnsure = Promise.resolve()
+      .then(() => ensureRecorderBrowser(opts))
+      .finally(() => { inflightEnsure = null; });
+  }
+  return inflightEnsure;
+}
+
+/**
+ * Re-voice a browser failure (missing / install failed / launch failed) as a typed error for the
+ * theme surface; returns null for anything that is not a browser problem (a navigation timeout, an
+ * anti-bot 403), which keeps its plain "Playwright URL render failed" message.
+ */
+export function themeBrowserError(err, { headless = true, env = process.env } = {}) {
+  const typed = classifyRecorderError(err, { headless });
+  const C = RECORDER_ERROR_CODES;
+  const remedy = doctorRemedy(env);
+  const cause = typed.cause ?? null;
+  let message;
+  if (typed.code === C.BROWSER_MISSING && /Playwright is not installed/i.test(cause ?? "")) {
+    message = `Playwright is not installed in this bridge — run \`${remedy}\` (or reinstall wicked-interactive), then Learn again.`;
+  } else if (typed.code === C.BROWSER_MISSING) {
+    const what = typed.missing?.length ? typed.missing.join(" + ") : (typed.browser || "chromium-headless-shell");
+    const where = typed.browsers_path ? ` under ${typed.browsers_path}` : (typed.executable_path ? ` (expected ${typed.executable_path})` : "");
+    message = `the headless browser that reads the page is not installed — Playwright ${typed.playwright_version ?? ""}`.trimEnd() +
+      ` needs ${what}${where}. Run \`${remedy}\`, then Learn again.`;
+  } else if (typed.code === C.BROWSER_INSTALL_FAILED) {
+    message = `installing the headless browser that reads the page failed${cause ? `: ${cause}` : ""}. Run \`${remedy}\` and check the network, then Learn again.`;
+  } else if (typed.code === C.LAUNCH_FAILED) {
+    message = `the headless browser that reads the page could not be launched${cause ? `: ${cause}` : ""}. Run \`${remedy}\` and inspect the bridge log, then Learn again.`;
+  } else {
+    return null;
+  }
+  const out = new RecorderError(typed.code, message, {
+    remedy,
+    browser: typed.browser,
+    missing: typed.missing,
+    executable_path: typed.executable_path,
+    install_command: typed.install_command,
+    playwright_version: typed.playwright_version,
+    browsers_path: typed.browsers_path,
+    cause,
+  });
+  out.source = THEME_GRAB_SOURCE;
+  return out;
+}
+
 /**
  * Playwright URL renderer (the default, ADR-0024): drive a real headless Chromium so JS-heavy /
  * anti-bot pages (e.g. https://500designs.com) are fully PAINTED before we capture. Unlike the raw
@@ -196,13 +266,23 @@ export async function playwrightUrlRenderer(url, pdfPath, opts = {}) {
     navigationTimeoutMs = 45000,
     maxRetries = 2,               // retry transient nav failures (anti-bot 403, flaky net)
     importPlaywright = () => import("playwright"),
+    ensureBrowser = ensureThemeBrowser,   // preflight + one-time provision (#264); injectable for tests
+    onProgress,                           // ({phase, message?, percent?, size?, line?}) while provisioning
   } = opts;
 
   let chromium;
   try {
     ({ chromium } = await importPlaywright());
   } catch {
-    throw new Error("Playwright is not installed — run `wicked-interactive doctor --install` (the install gate should have caught this)");
+    throw themeBrowserError(new Error("Playwright is not installed — run `wicked-interactive doctor --install`"), { headless });
+  }
+
+  // Resolve (and on a fresh state home, provision once) the browser BEFORE launching (#264): the
+  // bridge's PLAYWRIGHT_BROWSERS_PATH is empty until something installs into it.
+  try {
+    await ensureBrowser({ headless, onProgress });
+  } catch (e) {
+    throw themeBrowserError(e, { headless }) ?? e;
   }
 
   // Pin the validated IP into Chromium so the address it connects to is exactly the one the SSRF
@@ -233,6 +313,12 @@ export async function playwrightUrlRenderer(url, pdfPath, opts = {}) {
       lastErr = new Error("no PDF produced");
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e));
+      // A launch that cannot find/start the browser is deterministic — retrying replays it. Fail
+      // typed and immediately (the preflight passed, so this is a cache that changed under us).
+      if (!browser) {
+        const typed = themeBrowserError(lastErr, { headless });
+        if (typed) throw typed;
+      }
     } finally {
       if (browser) await browser.close().catch(() => {});  // never leave a Chromium bound after a grab
     }
