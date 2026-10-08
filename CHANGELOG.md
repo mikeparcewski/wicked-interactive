@@ -4,7 +4,26 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-10-08
+
+### Added
+- **`GET /api/export` lists a document's finished exports** (#236, #261). It returns
+  `[{version, format, name, bytes, generated_at}]` for every file in the doc's `exports/` shaped like
+  a download name (`<base>_v<N>.<html|pdf|pptx>`). The PDF prep copy and unrelated files are left
+  out, and a read never creates the directory. crew's `/d/:doc/api/*` proxy carries it unchanged, so
+  a reloaded client can find its exports again without guessing download names.
+
 ### Fixed
+- **Learning a look from a URL works on a fresh install** (#264). The theme grabber launched
+  Playwright into the bridge's `PLAYWRIGHT_BROWSERS_PATH`, which only the recorder preflight ever
+  filled, so every grab on a state home that had never recorded a demo failed with a raw
+  `browserType.launch: Executable doesn't exist` stack. Before launching, the grabber now runs the
+  recorder's preflight (`ensureRecorderBrowser`): a probe that does not launch anything, then a
+  one-time provision with the bundled CLI when the browser is missing, reported as `working` status
+  lines. `WI_RECORDER_AUTO_INSTALL=0` still turns provisioning off. A missing browser, a failed
+  install or a failed launch comes back typed on `status.posted` and `error.raised`: `source:
+  "theme"`, a stable `code`, `retryable: false` and a one-line `remedy`. A launch that finds no
+  executable is no longer retried.
 - **Demo recorder residuals (wicked-interactive#211, #210).** The caption is a translucent band (dark at .62 alpha, no blur, slimmer, `meta.captionPosition: "top"` to move it off a bottom-anchored UI) instead of the opaque 70 px gradient that covered what the narration described; every caption hold is capped (`CAPTION_HOLD_CAP_MS` 3 s, default `DEFAULT_HOLD_MS` 2 s — `meta.captionHoldMs` / per-step `holdMs` above the cap are clamped) so a step never freezes the clip on one frame; the poster is the FIRST step's thumbnail (its settled view, caption cleared; the clip at 2 s only when no step left one), not a fixed 2 s grab that caught a pre-hydration dashboard; and the storyboard's `<video>` carries that poster and lists the h264 mp4 first with the webm as fallback — the same shape as `/api/demo/player/:version` — so the conversion and poster the recorder produced are finally served (a recording without ffmpeg renders webm-only, as before). A failed attempt keeps its partial clip as `recordings/_attempt-<n>.failed.webm` (its step thumbnails as `_attempt-<n>.stepNN.png`) instead of leaving `page@<hash>.webm` orphans nothing references; the typed failure carries it as `attempt_video` (additive wire field on `status.posted` / `error.raised.context`) and the human line names it. Every narrated line is ANSI-free (`stripAnsi`, exported from `recorder-preflight.js`): the install CLI's dim codes used to reach the thread as literal `[2m` / `[22m`. A demo created with a brief seeds that brief as the first `conversation.jsonl` entry (as "from my content" docs already did), so `GET /d/:doc/api/conversation` restores what the user asked for. `test/recorder-smoke.mjs` now also checks the mp4 / poster / storyboard sources and the clip's static share (`freezedetect`, must be < 0.3 against an animating page).
 
 ## [0.10.0] — 2026-10-01
@@ -290,7 +309,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...v0.10.0
 [0.9.4]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.2...v0.9.3
