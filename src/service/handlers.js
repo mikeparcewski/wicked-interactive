@@ -18,7 +18,7 @@ import { writeFeedback, applyFeedbackItems } from "./workspace.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
 import { recordDemo } from "./demo.js";
-import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload, stripAnsi } from "./recorder-preflight.js";
+import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload, stripAnsi, RecorderError } from "./recorder-preflight.js";
 import { grabUrlToPdf } from "./theme-grab.js";
 import { resolveLearnedTheme } from "./theme-source.js";
 
@@ -220,11 +220,31 @@ export async function materializeThemeRequested(dir, payload, ctx, { grab = grab
     mkdirSync(resolve(dir, THEME_DIR), { recursive: true });
     const renderPath = themeArtifactPath(dir);
     ctx.emit("wicked.interactive.status.posted", { state: "working", message: "Grabbing the page to read its design…" });
-    const { path } = await grab(url, renderPath);
+    // A fresh state home provisions the headless browser once before the first grab (#264): narrate
+    // it so the Theme tab shows a one-time download, not a silent multi-minute spinner.
+    let lastProgressAt = 0;
+    const emitWorking = (message) => ctx.emit("wicked.interactive.status.posted", { state: "working", message: stripAnsi(message) });
+    const onProgress = (p) => {
+      if (p.phase === "installing") { emitWorking("Installing the headless browser that reads the page — a one-time download, then the grab starts…"); return; }
+      if (p.phase === "installed") { emitWorking("Headless browser installed — grabbing the page…"); return; }
+      const now = Date.now();
+      if (now - lastProgressAt < 2000 && p.percent !== 100) return;
+      lastProgressAt = now;
+      emitWorking(p.percent != null ? `Installing the headless browser… ${p.percent}% of ${p.size}` : `Installing the headless browser… ${p.line ?? ""}`);
+    };
+    const { path } = await grab(url, renderPath, { renderOpts: { onProgress } });
     ctx.emit("wicked.interactive.theme.learned", { url, render_path: path, format: "pdf" });
     return { url, render_path: path };
   } catch (e) {
-    ctx.emit("wicked.interactive.status.posted", { state: "error", message: `Couldn't grab that URL: ${e.message}` });
+    // A browser failure is typed (code / retryable:false / remedy — the same wire fields a recorder
+    // failure carries, source "theme") so studio can render the fix instead of a raw launch stack.
+    const wire = e instanceof RecorderError ? { ...recorderErrorPayload(e), source: e.source || "theme" } : null;
+    const message = `Couldn't grab that URL: ${stripAnsi(e?.message ?? e)}`;
+    ctx.emit("wicked.interactive.status.posted", { state: "error", message, ...(wire || {}) });
+    if (wire) {
+      ctx.emit("wicked.interactive.error.raised", { document_id: ctx.documentId, source: wire.source, error: wire.code, context: wire });
+      return { error: wire };
+    }
     return { error: e.message };
   }
 }

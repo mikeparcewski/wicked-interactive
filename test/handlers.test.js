@@ -478,3 +478,44 @@ test("materializeDemo: a failure with no clip kept names no clip (the sentence i
     assert.doesNotMatch(err.message, /attempt's clip/);
   } finally { cleanup(dir); }
 });
+
+test("materializeThemeRequested surfaces a TYPED browser error (code/remedy/source:theme) instead of a raw launch stack (#264)", async () => {
+  const { RecorderError, RECORDER_ERROR_CODES } = await import("../src/service/recorder-preflight.js");
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    const typed = new RecorderError(RECORDER_ERROR_CODES.BROWSER_MISSING, "the headless browser that reads the page is not installed. Run `wicked-interactive doctor --install`, then Learn again.", { remedy: "wicked-interactive doctor --install", browser: "chromium-headless-shell" });
+    typed.source = "theme";
+    let renderOpts = null;
+    const out = await materializeThemeRequested(dir, { url: "https://example.org/" }, ctx, { grab: async (_u, _p, o) => { renderOpts = o?.renderOpts; throw typed; } });
+    assert.equal(typeof renderOpts?.onProgress, "function", "the grab is handed a progress sink for provisioning");
+    assert.equal(out.error.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+    const st = ctx.events.find((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "error");
+    assert.ok(st);
+    assert.equal(st.payload.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+    assert.equal(st.payload.retryable, false);
+    assert.equal(st.payload.source, "theme");
+    assert.match(st.payload.remedy, /doctor --install/);
+    assert.match(st.payload.message, /^Couldn't grab that URL: the headless browser/);
+    const raised = ctx.events.find((e) => e.type === "wicked.interactive.error.raised");
+    assert.ok(raised && raised.payload.source === "theme" && raised.payload.error === RECORDER_ERROR_CODES.BROWSER_MISSING);
+  } finally { cleanup(dir); }
+});
+
+test("materializeThemeRequested narrates a one-time browser provision as working status lines (#264)", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    const out = await materializeThemeRequested(dir, { url: "https://example.org/" }, ctx, {
+      grab: async (_u, p, o) => {
+        o.renderOpts.onProgress({ phase: "installing", message: "x" });
+        o.renderOpts.onProgress({ phase: "installed", message: "y" });
+        return { path: p };
+      },
+    });
+    assert.ok(out.render_path);
+    const lines = ctx.events.filter((e) => e.type === "wicked.interactive.status.posted" && e.payload.state === "working").map((e) => e.payload.message);
+    assert.ok(lines.some((m) => /Installing the headless browser.*one-time download/.test(m)), lines.join(" | "));
+    assert.ok(lines.some((m) => /Headless browser installed/.test(m)));
+  } finally { cleanup(dir); }
+});
