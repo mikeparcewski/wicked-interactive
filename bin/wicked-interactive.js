@@ -48,7 +48,7 @@ import { fileURLToPath } from "node:url";
 import { createMultiServer } from "../src/service/server.js";
 import {
   readLock, writeLock, removeLock, pidAlive, pickPort, bridgeIdentity, stopDaemon,
-  normalizeOrigin, readStudioOrigin,
+  normalizeOrigin, readStudioOrigin, spawnTokenField,
 } from "../src/service/serve-bridge.mjs";
 import { registerInstance, deregisterInstance } from "../src/service/instances.mjs";
 import { resolveCrewApi } from "../src/service/project.js";
@@ -122,7 +122,7 @@ async function runServer(root, requested, { restart = false, standalone = false,
     else throw e;
   }
   const base = `http://localhost:${actualPort}`;
-  const wrote = writeLock(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, startedAt: new Date().toISOString(), version: pkgVersion(), ...(origin ? { studio_origin: origin } : {}) });
+  const wrote = writeLock(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, startedAt: new Date().toISOString(), version: pkgVersion(), ...(origin ? { studio_origin: origin } : {}), ...spawnTokenField() });
   registerInstance(root, { port: actualPort, host: "127.0.0.1", pid: process.pid, version: pkgVersion() }); // cross-instance registry (the UI project switcher)
   printBanner("wicked-interactive (multi-doc) serving", root, base, standalone);
   if (!standalone) console.log(`  studio: ${origin || "not recorded yet — crew records it on start/adopt (POST /api/studio-origin)"}`);
