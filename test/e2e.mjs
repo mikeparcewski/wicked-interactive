@@ -65,7 +65,7 @@ stub = startSubscription({
   },
 });
 
-const browser = await puppeteer.launch({ executablePath: chrome, headless: "new", args: ["--no-sandbox"] });
+const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ["--no-sandbox"] });
 let ok = false;
 try {
   const page = await browser.newPage();
