@@ -26,6 +26,19 @@ export function writeLock(root, info) {
   catch { return false; } // unwritable root — serve still runs, reuse just won't be available
 }
 
+// ── Spawn token (wicked-interactive#271, wicked-crew#509) ───────────────────────────────
+// crew hands each bridge it spawns a random per-spawn WICKED_BRIDGE_SPAWN_TOKEN and proves the
+// bridge is its own when the lockfile echoes it back as `spawnToken` (no ps/PowerShell parent
+// walk). The field is optional: an operator's own `serve` (no env var) writes no key, and crew
+// falls back to its process-table check when the key is absent.
+export const SPAWN_TOKEN_ENV = "WICKED_BRIDGE_SPAWN_TOKEN";
+
+/** `{ spawnToken }` to spread into the lock when the env carries a non-empty token, else `{}`. */
+export function spawnTokenField(env = process.env) {
+  const token = env[SPAWN_TOKEN_ENV];
+  return typeof token === "string" && token !== "" ? { spawnToken: token } : {};
+}
+
 export function removeLock(root) {
   try { unlinkSync(lockPath(root)); } catch { /* already gone */ }
 }

@@ -11,8 +11,10 @@ import { createServer as httpServer } from "node:http";
 import {
   LOCK_NAME, lockPath, readLock, writeLock, removeLock,
   pidAlive, isPortFree, pickPort, bridgeHealthy, bridgeIdentity, stopDaemon,
-  normalizeOrigin, readStudioOrigin, recordStudioOrigin,
+  normalizeOrigin, readStudioOrigin, recordStudioOrigin, SPAWN_TOKEN_ENV, spawnTokenField,
 } from "../src/service/serve-bridge.mjs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 function tmpRoot() {
   const d = mkdtempSync(join(tmpdir(), "wi-bridge-"));
@@ -194,4 +196,59 @@ test("recordStudioOrigin merges into the live lock; readStudioOrigin reads it ba
     writeLock(root, { port: 4400, studio_origin: "not a url" });
     assert.equal(readStudioOrigin(root), null, "an unusable recorded value reads as absent");
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// ── Spawn token echo (wicked-interactive#271, wicked-crew#509) ───────────────────────────
+
+test("spawnTokenField: a non-empty token becomes { spawnToken }; absent/empty adds no key", () => {
+  assert.equal(SPAWN_TOKEN_ENV, "WICKED_BRIDGE_SPAWN_TOKEN");
+  assert.deepEqual(spawnTokenField({ WICKED_BRIDGE_SPAWN_TOKEN: "abc" }), { spawnToken: "abc" });
+  assert.deepEqual(spawnTokenField({}), {});
+  assert.deepEqual(spawnTokenField({ WICKED_BRIDGE_SPAWN_TOKEN: "" }), {});
+});
+
+test("recordStudioOrigin keeps the spawnToken already in the lock", () => {
+  const root = tmpRoot();
+  try {
+    writeLock(root, { port: 4400, host: "127.0.0.1", pid: process.pid, spawnToken: "t-1" });
+    assert.equal(recordStudioOrigin(root, "http://localhost:5173"), "http://localhost:5173");
+    assert.equal(readLock(root).spawnToken, "t-1");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// Run the real CLI `serve --root X` (foreground) and return the lockfile it writes.
+const BIN = fileURLToPath(new URL("../bin/wicked-interactive.js", import.meta.url));
+async function serveAndReadLock(extraEnv) {
+  const root = tmpRoot();
+  const home = tmpRoot(); // the instance registry lives under $HOME — keep it out of the real one
+  const env = { ...process.env, HOME: home, USERPROFILE: home, ...extraEnv };
+  delete env.WI_DAEMON_CHILD;
+  if (!(SPAWN_TOKEN_ENV in extraEnv)) delete env[SPAWN_TOKEN_ENV];
+  const child = spawn(process.execPath, [BIN, "serve", "--root", root], { env, stdio: "ignore" });
+  try {
+    for (let waited = 0; waited < 15000; waited += 100) {
+      const lock = readLock(root);
+      if (lock && lock.pid === child.pid) return lock;
+      if (child.exitCode !== null) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error(`serve wrote no lock (exit ${child.exitCode})`);
+  } finally {
+    const exited = child.exitCode !== null ? Promise.resolve() : new Promise((r) => child.once("exit", r));
+    child.kill("SIGTERM");
+    const cap = setTimeout(() => child.kill("SIGKILL"), 4000);
+    await exited; clearTimeout(cap);
+    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+test("serve echoes WICKED_BRIDGE_SPAWN_TOKEN into .wi-serve.json as spawnToken (#271)", async () => {
+  const lock = await serveAndReadLock({ [SPAWN_TOKEN_ENV]: "abc" });
+  assert.equal(lock.spawnToken, "abc");
+});
+
+test("serve without WICKED_BRIDGE_SPAWN_TOKEN writes no spawnToken key (#271)", async () => {
+  const lock = await serveAndReadLock({});
+  assert.equal("spawnToken" in lock, false);
 });
