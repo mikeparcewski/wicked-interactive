@@ -4,6 +4,17 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-10-08
+
+### Added
+- **`serve` echoes crew's spawn token into the lockfile** (#271, wicked-crew#509). When the bridge
+  starts with `WICKED_BRIDGE_SPAWN_TOKEN` in its environment, it writes the value to
+  `<root>/.wi-serve.json` as `spawnToken`. crew passes a random token on every spawn and treats the
+  bridge as its own when the lockfile echoes it, so it no longer needs a `ps`/PowerShell parent-pid
+  walk to tell. When the variable is absent or empty, no key is written. That is the case for an
+  operator's own `serve`, and crew keeps its old check for it. The token survives the studio-origin
+  rewrite of the lockfile (`POST /api/studio-origin`).
+
 ## [0.11.0] — 2026-10-08
 
 ### Added
@@ -309,7 +320,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...v0.10.0
 [0.9.4]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.3...v0.9.4
