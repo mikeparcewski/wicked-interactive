@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from "node:fs";
-import { join, basename } from "node:path";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync, symlinkSync, chmodSync } from "node:fs";
+import { join, basename, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import {
   inlineHtml, exportHtml, exportPdf, decorateForExport, finalizeHtml, isDeck, classifyLayout,
   collectGradientClipSelectors, inspectPdf, describePageSize, findChrome, chromeRenderer, DECK_PAGE_SIZE,
-  printScopedCss, mediaAppliesToPrint, LAYOUT_SOURCES, listExports,
+  printScopedCss, mediaAppliesToPrint, LAYOUT_SOURCES, listExports, approvedAssetRoots,
 } from "../src/service/export.js";
 import * as cheerio from "cheerio";
 import { initWorkspace } from "../src/service/workspace.js";
@@ -672,4 +672,202 @@ test("POST /api/export html returns a self-contained file path", async () => {
     assert.ok(existsSync(body.path));
     assert.match(readFileSync(body.path, "utf-8"), /data:image\/png/);
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---------------------------------------------------------------------------
+// #287 asset containment + #288 dependency receipt / strict offline. Harmless fixtures only:
+// a temp docs root with a sibling marker file next to the document folder.
+// ---------------------------------------------------------------------------
+
+function escapeFixture() {
+  const root = mkdtempSync(join(tmpdir(), "wi-contain-"));
+  const doc = join(root, "doc");
+  mkdirSync(join(doc, "css"), { recursive: true });
+  writeFileSync(join(root, "outside-marker.css"), "/* OUTSIDE-MARKER */");
+  writeFileSync(join(root, "outside-marker.png"), Buffer.from(PNG_B64, "base64"));
+  writeFileSync(join(doc, "logo.png"), Buffer.from(PNG_B64, "base64"));
+  // Nested CSS-relative asset: css/site.css -> ../logo.png (inside the doc) and ../../outside (not).
+  writeFileSync(join(doc, "css", "site.css"), ".a{background:url(../logo.png)} .b{background:url('../../outside-marker.png')}");
+  symlinkSync(join(root, "outside-marker.css"), join(doc, "link.css"));
+  return { root, doc, marker: join(root, "outside-marker.css") };
+}
+
+test("#287 inlineHtml embeds in-root assets and refuses ../, absolute and symlink escapes", () => {
+  const { root, doc, marker } = escapeFixture();
+  try {
+    const html = `<html><head>
+      <link rel="stylesheet" href="../outside-marker.css">
+      <link rel="stylesheet" href="${marker}">
+      <link rel="stylesheet" href="link.css">
+      <link rel="stylesheet" href="css/site.css">
+      </head><body><img src="logo.png"><img src="../outside-marker.png"><script src="file://${marker}"></script></body></html>`;
+    const { html: out, dependencies } = inlineHtml(html, { baseDir: doc, assetRoots: [], withReceipt: true });
+    assert.doesNotMatch(out, /OUTSIDE-MARKER/);
+    assert.doesNotMatch(out, /outside-marker/, "refused references are dropped from the output");
+    assert.match(out, /\.a\{background:url\(data:image\/png;base64,/, "nested CSS-relative in-root asset embedded");
+    assert.match(out, /\.b\{background:url\("data:,"\)\}/, "nested CSS escape dropped to an empty data URI");
+    assert.match(out, /<img src="data:image\/png;base64,[^"]+"><img>/);
+    const reasons = Object.fromEntries(dependencies.unresolved.map((u) => [u.ref, u.reason]));
+    assert.equal(reasons["../outside-marker.css"], "outside_asset_roots");
+    assert.equal(reasons[marker], "outside_asset_roots");
+    assert.equal(reasons["link.css"], "outside_asset_roots", "a symlink is judged by its real path");
+    assert.equal(reasons["../../outside-marker.png"], "outside_asset_roots");
+    assert.equal(reasons["../outside-marker.png"], "outside_asset_roots");
+    assert.equal(reasons[`file://${marker}`], "unsupported_scheme");
+    assert.ok(dependencies.unresolved.every((u) => typeof u.remedy === "string" && u.remedy.length > 0));
+    assert.deepEqual(dependencies.embedded.map((e) => e.ref).sort(), ["../logo.png", "css/site.css", "logo.png"]);
+    assert.equal(dependencies.self_contained, false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("#287 an explicitly approved root may be read (absolute or relative reference)", () => {
+  const { root, doc, marker } = escapeFixture();
+  try {
+    const html = `<link rel="stylesheet" href="../outside-marker.css"><link rel="stylesheet" href="${marker}">`;
+    const { html: out, dependencies } = inlineHtml(html, { baseDir: doc, assetRoots: approvedAssetRoots(root), withReceipt: true });
+    assert.match(out, /OUTSIDE-MARKER/);
+    assert.equal(dependencies.unresolved.length, 0);
+    assert.equal(dependencies.self_contained, true);
+    // Relative / missing approved-root entries approve nothing.
+    assert.deepEqual(approvedAssetRoots(`relative/dir${delimiter}${join(root, "nope")}`), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("#287 srcset, poster, style attributes and @import follow the same rule", () => {
+  const { root, doc } = escapeFixture();
+  try {
+    writeFileSync(join(doc, "inner.css"), "/* INNER */");
+    const html = `<style>@import "inner.css"; @import url("../outside-marker.css");</style>
+      <img srcset="logo.png 1x, ../outside-marker.png 2x"><video poster="../outside-marker.png"></video>
+      <div style="background:url(../outside-marker.png)"></div><div style="background:url(logo.png)"></div>`;
+    const { html: out, dependencies } = inlineHtml(html, { baseDir: doc, assetRoots: [], withReceipt: true });
+    assert.match(out, /INNER/);
+    assert.doesNotMatch(out, /OUTSIDE-MARKER|outside-marker/);
+    assert.match(out, /srcset="data:image\/png;base64,[^ ]+ 1x"/);
+    assert.match(out, /<video><\/video>/);
+    assert.match(out, /style="background:url\(data:image\/png/);
+    assert.equal(dependencies.unresolved.length, 4);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("#288 the receipt lists remote resources and leaves them as authored", () => {
+  const html = `<link rel="stylesheet" href="https://fonts.example/css"><script src="//cdn.example/x.js"></script>
+    <img src="https://img.example/a.png"><style>@font-face{src:url(https://fonts.example/f.woff2)}</style>
+    <a href="https://example.com/">link, not a resource</a><img src="data:image/png;base64,AAA">`;
+  const { html: out, dependencies } = inlineHtml(html, { baseDir: "/nonexistent", assetRoots: [], withReceipt: true });
+  assert.match(out, /href="https:\/\/fonts\.example\/css"/);
+  assert.match(out, /src="\/\/cdn\.example\/x\.js"/);
+  assert.deepEqual(dependencies.remote.map((r) => [r.kind, r.ref]), [
+    ["stylesheet", "https://fonts.example/css"], ["script", "//cdn.example/x.js"],
+    ["image", "https://img.example/a.png"], ["css-url", "https://fonts.example/f.woff2"],
+  ]);
+  assert.equal(dependencies.self_contained, false);
+});
+
+test("#287 chromeRenderer serves the print copy from a loopback http origin, never file://", { skip: process.platform === "win32" }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-serve-once-"));
+  try {
+    const fake = join(dir, "fake-chrome.mjs");
+    const seen = join(dir, "seen.json");
+    // A stand-in browser: records the URL it was handed, fetches it, probes a second path, writes a PDF.
+    writeFileSync(fake, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+const args = process.argv.slice(2);
+const url = args[args.length - 1];
+const pdf = args.find((a) => a.startsWith("--print-to-pdf=")).slice("--print-to-pdf=".length);
+const page = await (await fetch(url)).text();
+const other = (await fetch(new URL("/other.html", url))).status;
+writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ url, page, other }));
+writeFileSync(pdf, "%PDF-1.4 fake");
+`);
+    chmodSync(fake, 0o755);
+    const html = join(dir, "prep.html");
+    writeFileSync(html, "<p>PRINT-COPY</p>");
+    await chromeRenderer(html, join(dir, "out.pdf"), { chromePath: fake });
+    const r = JSON.parse(readFileSync(seen, "utf-8"));
+    assert.match(r.url, /^http:\/\/127\.0\.0\.1:\d+\/[0-9a-f-]{36}\.html$/);
+    assert.equal(r.page, "<p>PRINT-COPY</p>");
+    assert.equal(r.other, 404, "only the token path is served");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("#287 srcset candidates without a space after the comma and URL() in caps are still confined", () => {
+  const { root, doc } = escapeFixture();
+  try {
+    const html = `<img srcset="https://img.example/a.png 1x,../outside-marker.png 2x,logo.png 3x">
+      <style>.x{background:URL(../outside-marker.png)}</style>`;
+    const { html: out, dependencies } = inlineHtml(html, { baseDir: doc, assetRoots: [], withReceipt: true });
+    assert.doesNotMatch(out, /outside-marker/);
+    assert.match(out, /srcset="https:\/\/img\.example\/a\.png 1x, data:image\/png;base64,[^ ]+ 3x"/);
+    assert.equal(dependencies.unresolved.filter((u) => u.reason === "outside_asset_roots").length, 2);
+    assert.deepEqual(dependencies.remote.map((x) => x.ref), ["https://img.example/a.png"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("#287 cyclic @import is cut, quoted @import with spaces resolves, legacy background is confined", () => {
+  const { root, doc } = escapeFixture();
+  try {
+    writeFileSync(join(doc, "a.css"), '@import "b.css"; .a{}');
+    writeFileSync(join(doc, "b.css"), '@import url("a.css"); .b{}');
+    writeFileSync(join(doc, "my styles.css"), ".spaced{}");
+    const html = `<style>@import "a.css"; @import "my styles.css";</style><body background="../outside-marker.png"></body>`;
+    const { html: out, dependencies } = inlineHtml(html, { baseDir: doc, assetRoots: [], withReceipt: true });
+    assert.match(out, /\.a\{\}/);
+    assert.match(out, /\.b\{\}/);
+    assert.match(out, /\.spaced\{\}/);
+    assert.doesNotMatch(out, /outside-marker/);
+    assert.deepEqual(dependencies.unresolved.map((u) => [u.kind, u.reason]), [["body-background", "outside_asset_roots"]]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+async function postExport(port, body) {
+  const res = await fetch(`http://127.0.0.1:${port}/api/export`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+test("#287 POST /api/export refuses escapes at the real endpoint and returns the receipt", async () => {
+  const { root, doc, marker } = escapeFixture();
+  initWorkspace(doc, `<html><head><link rel="stylesheet" href="../outside-marker.css"><link rel="stylesheet" href="${marker}"><link rel="stylesheet" href="link.css"></head><body><img src="logo.png"></body></html>`);
+  const svc = createServer({ dir: doc, watch: false });
+  const port = await svc.start(0);
+  try {
+    const { status, body } = await postExport(port, { version: 0, format: "html" });
+    assert.equal(status, 200);
+    const out = readFileSync(body.path, "utf-8");
+    assert.doesNotMatch(out, /OUTSIDE-MARKER/);
+    assert.match(out, /data:image\/png/);
+    assert.equal(body.dependencies.unresolved.length, 3);
+    assert.ok(body.dependencies.unresolved.every((u) => u.reason === "outside_asset_roots"));
+  } finally { await svc.stop(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("#288 strict offline export: 422 with each unresolved resource, 200 when everything embeds", async () => {
+  const { root, doc } = escapeFixture();
+  initWorkspace(doc, `<html><head><link rel="stylesheet" href="https://fonts.example/css"></head><body><img src="logo.png"><img src="missing.png"></body></html>`);
+  const svc = createServer({ dir: doc, watch: false });
+  const port = await svc.start(0);
+  try {
+    let r = await postExport(port, { version: 0, format: "html", offline: true });
+    assert.equal(r.status, 422);
+    assert.equal(r.body.code, "export_not_offline");
+    assert.deepEqual(r.body.dependencies.remote.map((x) => x.ref), ["https://fonts.example/css"]);
+    assert.deepEqual(r.body.dependencies.unresolved.map((x) => [x.ref, x.reason]), [["missing.png", "missing"]]);
+    assert.equal(listExports(doc).length, 0, "a refused offline export writes nothing");
+    await assert.rejects(exportPdf(doc, 0, undefined, { renderer: () => assert.fail("must not render"), offline: true }),
+      (e) => e.code === "export_not_offline" && e.dependencies.unresolved.length === 1);
+    // Default mode still exports, with the same receipt.
+    r = await postExport(port, { version: 0, format: "html" });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.dependencies.self_contained, false);
+    // A document whose every resource embeds passes strict offline.
+    initWorkspace(doc, `<html><body><img src="logo.png"></body></html>`);
+    r = await postExport(port, { version: 0, format: "html", offline: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.dependencies.self_contained, true);
+    const fake = (_h, pdfPath) => writeFileSync(pdfPath, "%PDF-1.4 fake");
+    const pdf = await exportPdf(doc, 0, undefined, { renderer: fake, offline: true });
+    assert.equal(pdf.dependencies.self_contained, true);
+  } finally { await svc.stop(); rmSync(root, { recursive: true, force: true }); }
 });

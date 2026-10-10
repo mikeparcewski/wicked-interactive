@@ -19,5 +19,13 @@ disk — or to PDF via headless Chrome (the same primitive the absorbed prezzie 
 ADR-0020). Export is browser-triggered; the POST creates the file and returns a `download` URL.
 A follow-up gate: the service announces each freshly-rendered artifact with its event.
 
+**Amended 2026-10-10 (#287, #288):** inlining reads only files whose real path (symlinks
+resolved) is inside the document folder or an operator-approved `WI_EXPORT_ASSET_ROOTS` root;
+anything else is dropped from the output and reported. Remote resources are never fetched and stay
+links. Every export returns a `dependencies` receipt (embedded / remote / unresolved), and
+`"offline": true` refuses (422) any export that would not be fully embedded. Chrome renders the PDF
+print copy from a one-file loopback http origin instead of `file://`, so the page cannot load or
+navigate to local files.
+
 **Tag sites:** `src/service/export.js:1`, `src/service/server.js:132`,
 `src/service/events.js:56`.

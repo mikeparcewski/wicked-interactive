@@ -13,7 +13,7 @@
 The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-now-lives-in-wicked-studio) below). The **engine** did not move — this repo is its sole implementation:
 
 - 📦 **Documents & lineage** — every change is a write-once saved version; rewind to any of them, or fork a version and chase two ideas at once without losing either.
-- 📤 **Exports** — self-contained HTML, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`), and video. Nothing for the recipient to install.
+- 📤 **Exports** — single-file HTML with the document's local assets embedded, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`; needs `python-pptx` on the exporting machine), and video. The recipient needs no wicked install, but remote fonts, scripts, stylesheets and images stay links to the network unless you export in strict offline mode — every export tells you which ones (see [Exports](#exports)).
 - 🎬 **Demo recording** — narrated walkthroughs of a live app with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
 - 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls, and its write side (`PUT`/`DELETE` on the same path): every token is checked against a per-field grammar before it can reach the CSS.
 - 🔌 **One HTTP API + one bus vocabulary** — the `/api/*` surface and the `wicked.interactive.*` event types (ADR-0019) that the studio UI and supervising agents both speak.
@@ -41,6 +41,56 @@ The package also ships a CLI for artifact work — `wicked-interactive create | 
 /plugin install wicked-interactive
 ```
 
+## Exports
+
+`POST /api/export {"version": N, "format": "html" | "pdf" | "pptx"}` writes the file under the
+document's `exports/` folder and answers with a `download` URL. What it embeds, and what it does not:
+
+- **Local assets are embedded, from the document only.** Stylesheets, scripts, images and media
+  (`src`, `srcset`, `poster`, `<object data>`, SVG `<image href>`, icon/preload links), CSS `url()`
+  and `@import` become inline text or `data:` URIs. A reference is read only when its real path,
+  after symlinks are resolved, is inside the document's own folder or inside a folder the operator
+  approved with `WI_EXPORT_ASSET_ROOTS` (absolute paths, separated like `PATH`). A `../` escape, an
+  absolute path elsewhere, a symlink pointing out, a missing file or a `file:` URL is not read: it
+  is dropped from the output and reported.
+- **Remote resources are never fetched.** `http(s):` and protocol-relative references stay as
+  authored, so the exported file still needs the network for them.
+- **Every export returns a dependency receipt** in `dependencies`:
+  `{ self_contained, embedded: [{ref, kind}], remote: [{ref, kind, remedy}], unresolved: [{ref, kind, reason, remedy}] }`.
+  `self_contained` is true only when nothing is remote or unresolved. PPTX is built natively
+  from the markup and carries no linked resources, so its receipt is always empty.
+- **Strict offline mode:** add `"offline": true`. The export succeeds only when every resource is
+  embedded; otherwise it answers `422 {code: "export_not_offline", dependencies}` listing each
+  remote or unresolved resource, and writes nothing.
+- The PDF renderer opens its print copy from a one-file loopback `http://127.0.0.1` origin, never
+  from `file://`, so neither a resource nor a navigation in the page can reach local files.
+
+The receipt covers what the markup and CSS reference. It cannot see a URL that a script builds at
+runtime, a CSS `image-set()` string, or markup inside an `<iframe srcdoc>`.
+
+## What Studio exposes
+
+Every engine capability is reachable over this API. Not every one has a Studio action yet.
+Checked against wicked-studio `main` (2026-10-10):
+
+| Capability | Engine API | Studio action |
+|---|---|---|
+| Create a document | `POST /api/docs` | Yes |
+| Browse documents and versions | `GET /api/docs`, `GET /d/:doc/api/versions` | Yes |
+| Point-and-edit / feedback | `wicked.interactive.feedback.submitted` | Yes |
+| Chat on the document thread | `wicked.interactive.chat.posted` | Yes |
+| Fork / rewind a version | `POST /d/:doc/api/fork` | Yes |
+| Retire a document | `DELETE /api/docs/:doc` | Yes |
+| Export HTML / PDF / PPTX | `POST /d/:doc/api/export` | Yes |
+| List and download exports | `GET /d/:doc/api/export`, `GET /d/:doc/api/export/file/:name` | Yes |
+| Export dependency receipt + strict offline | `dependencies`, `"offline": true` on export | No (API only) |
+| Learn a theme from a page | `wicked.interactive.theme.requested` | Yes |
+| Read the learned theme | `GET /d/:doc/api/theme/learned` | Yes |
+| Edit / clear the learned theme | `PUT` / `DELETE /d/:doc/api/theme/learned` | No (API only) |
+| Attach / list reference sources | `POST` / `GET /d/:doc/api/sources` | No (client wrapper, no UI action) |
+| Record a demo through this bridge | `wicked.interactive.demo.requested`, `/api/demo/*` | No (Studio records demos through crew's governed `demo` run instead) |
+| Analyze / review a document | `wicked.interactive.review.requested` | No (API only; Studio shows `review.completed` verdicts on the thread) |
+
 ## Moving? The builder UI now lives in wicked-studio
 
 If you used the standalone builder UI — the page this service served at `http://localhost:<port>/` —
@@ -50,7 +100,8 @@ here's what changed and where things went.
 docs root, versions and all). The builder is now a mode inside the merged **wicked-studio** app,
 which is where you point, comment, rewind, fork, export and record from. Nothing was dropped in the
 move: the [merge design](https://github.com/mikeparcewski/wicked-studio)'s parity ledger had to be
-green before this landed.
+green before this landed. That ledger covers the old shell's actions; engine APIs that never had a
+button still have none (see [What Studio exposes](#what-studio-exposes)).
 
 **This service is API-only now.** It still runs, still owns your documents, and still answers every
 `/api/*` route — it just doesn't serve a UI:
@@ -72,8 +123,8 @@ wicked-interactive serve --root ~/wicked-interactive/docs --standalone   # or WI
 That serves the retired SPA exactly as before. It is a development escape hatch, not the
 supported path — the merged app is where the UI is maintained.
 
-**One capability has no button in studio yet:** *analyze / review* (the reviewer pass over a
-document). It remains fully reachable over the API — `POST /api/events` with
+**Some capabilities have no button in studio yet** (see [What Studio exposes](#what-studio-exposes)),
+notably *analyze / review* (the reviewer pass over a document). It remains fully reachable over the API — `POST /api/events` with
 `wicked.interactive.review.requested` — and the affordance for it belongs to the studio side.
 
 ## Why this repo stays live

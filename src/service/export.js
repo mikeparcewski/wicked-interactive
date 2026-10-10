@@ -1,16 +1,20 @@
 // export.js — export a version to a self-contained interactive HTML or a PDF (ADR-0009).
 //
-// HTML: inline local stylesheets, scripts, images (data-URI), and url() refs inside inlined
+// HTML: inline local stylesheets, scripts, images/media (data-URI), and url() refs inside inlined
 //       CSS, so the file renders + stays interactive opened straight from disk (no server).
+//       Reads are confined to the document folder + approved roots (#287); remote resources
+//       stay external and every export returns a dependency receipt (#288).
 //       The deliverable carries the author's markup and CSS AS AUTHORED — the only additions
 //       are a document head (doctype / charset / viewport). No print rules are injected.
 // PDF:  render a PDF-prep copy of that HTML via headless Chrome (the same primitive the
 //       absorbed prezzie export pipeline used — ADR-0020). Print rules are injected into the
 //       PDF-prep copy ONLY, and page geometry only for a document that DECLARES itself a deck.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { join, dirname, resolve, basename } from "node:path";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, realpathSync } from "node:fs";
+import { join, dirname, resolve, basename, relative, isAbsolute, sep, delimiter } from "node:path";
 import { spawn } from "node:child_process";
+import { createServer as createHttpServer } from "node:http";
+import { randomUUID } from "node:crypto";
 import * as cheerio from "cheerio";
 import { readVersionHtml, loadManifest } from "./fsstore.js";
 
@@ -20,12 +24,6 @@ const MIME = {
   ".ttf": "font/ttf", ".otf": "font/otf", ".css": "text/css", ".js": "application/javascript",
 };
 const ext = (p) => { const i = p.lastIndexOf("."); return i < 0 ? "" : p.slice(i).toLowerCase(); };
-const isLocal = (url) => url && !/^(https?:)?\/\//.test(url) && !url.startsWith("data:") && !url.startsWith("#");
-
-function dataUri(absPath) {
-  const mime = MIME[ext(absPath)] || "application/octet-stream";
-  return `data:${mime};base64,${readFileSync(absPath).toString("base64")}`;
-}
 
 // ---------------------------------------------------------------------------
 // Print contract (issue #12, re-scoped by F-050).
@@ -452,55 +450,249 @@ export function decorateForExport(html, { style = null, withLayout = false } = {
   return withLayout ? { html: out, layout } : out;
 }
 
-// Rewrite url(local) inside CSS to data-URIs, resolved relative to the CSS file's dir.
-function inlineCssUrls(css, cssDir) {
-  return css.replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g, (m, url) => {
-    if (!isLocal(url)) return m;
-    const abs = resolve(cssDir, url);
-    return existsSync(abs) ? `url(${dataUri(abs)})` : m;
-  });
+// ---------------------------------------------------------------------------
+// Asset inlining, confined (#287) and receipted (#288).
+//
+// Document HTML is model-generated or imported, so every asset reference in it is untrusted. One
+// resolver decides each reference:
+//  - remote (http:, https:, protocol-relative): never fetched; left as authored and listed in
+//    the receipt's `remote`.
+//  - local path: resolved against the referencing file, then canonicalized with realpath (so a
+//    symlink is judged by where it points) and embedded ONLY when that real path sits under the
+//    document's own real root or a root the operator approved in WI_EXPORT_ASSET_ROOTS. A `../`
+//    escape, an absolute path elsewhere, a symlink out, a missing file, or another scheme
+//    (file:, …) is not read: the reference is dropped from the output, so neither the recipient's
+//    browser nor the PDF renderer loads it, and listed in `unresolved` with a reason + remedy.
+// The same rule covers stylesheets, scripts, images/media (src, srcset, poster, object data, SVG
+// image href, link icons/preloads), CSS url() (CSS-file-relative for an inlined stylesheet) and
+// CSS @import. Strict offline mode refuses an export whose receipt is not empty of both lists.
+// ---------------------------------------------------------------------------
+
+/** Env var naming extra asset roots an export may read from (path.delimiter-separated, absolute). */
+export const ASSET_ROOTS_ENV = "WI_EXPORT_ASSET_ROOTS";
+
+const REMEDY = {
+  outside_asset_roots: `copy the file into the document folder, or approve its folder with ${ASSET_ROOTS_ENV}`,
+  missing: "add the file to the document folder or fix the reference",
+  not_a_file: "point the reference at a file, not a folder",
+  unsupported_scheme: "use a path inside the document folder or a data: URI",
+  remote: "download the resource into the document folder and reference it by relative path",
+};
+
+/** The operator-approved extra roots, canonicalized; relative or missing entries are ignored. */
+export function approvedAssetRoots(value = process.env[ASSET_ROOTS_ENV]) {
+  const roots = [];
+  for (const raw of String(value || "").split(delimiter)) {
+    const p = raw.trim();
+    if (!p || !isAbsolute(p)) continue;
+    try { roots.push(realpathSync(p)); } catch { /* a root that does not exist approves nothing */ }
+  }
+  return roots;
+}
+
+const within = (root, p) => {
+  const rel = relative(root, p);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+};
+
+function refKind(url) {
+  const u = String(url ?? "").trim();
+  if (!u || u.startsWith("#") || /^(data|blob|about|javascript|mailto|tel):/i.test(u)) return "skip";
+  if (/^(https?:)?\/\//i.test(u)) return "remote";
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u) && !/^[a-z]:[\\/]/i.test(u)) return "scheme";
+  return "local";
+}
+
+/** The receipt shape every export returns (also the empty receipt for PPTX, which embeds no resources). */
+export function emptyReceipt() {
+  return { self_contained: true, embedded: [], remote: [], unresolved: [] };
+}
+
+function assetScope(baseDir, assetRoots) {
+  let docRoot;
+  try { docRoot = realpathSync(baseDir); } catch { docRoot = resolve(baseDir); }
+  const roots = [docRoot, ...assetRoots];
+  const receipt = emptyReceipt();
+  const seen = new Set();
+  const note = (list, entry) => {
+    const key = `${list}\u0000${entry.kind}\u0000${entry.ref}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    receipt[list].push(entry);
+    if (list !== "embedded") receipt.self_contained = false;
+  };
+  const refuse = (ref, kind, reason) => { note("unresolved", { ref, kind, reason, remedy: REMEDY[reason] }); return null; };
+  return {
+    receipt,
+    /** Decide one reference: `{ keep: true }` (remote / not a resource), `{ path }` (embed it), or `{ drop: true }`. */
+    decide(ref, fromDir, kind) {
+      const k = refKind(ref);
+      if (k === "skip") return { keep: true };
+      if (k === "remote") { note("remote", { ref, kind, remedy: REMEDY.remote }); return { keep: true }; }
+      if (k === "scheme") { refuse(ref, kind, "unsupported_scheme"); return { drop: true }; }
+      let p = String(ref).trim().replace(/[?#].*$/, "");
+      try { p = decodeURIComponent(p); } catch { /* keep the raw spelling */ }
+      let real;
+      try { real = realpathSync(resolve(fromDir, p)); } catch { refuse(ref, kind, "missing"); return { drop: true }; }
+      if (!roots.some((r) => within(r, real))) { refuse(ref, kind, "outside_asset_roots"); return { drop: true }; }
+      if (!statSync(real).isFile()) { refuse(ref, kind, "not_a_file"); return { drop: true }; }
+      note("embedded", { ref, kind });
+      return { path: real };
+    },
+  };
+}
+
+function dataUri(absPath) {
+  const mime = MIME[ext(absPath)] || "application/octet-stream";
+  return `data:${mime};base64,${readFileSync(absPath).toString("base64")}`;
+}
+
+// An empty data URI: a dropped url() still parses and loads nothing.
+const DROPPED_URL = 'url("data:,")';
+
+// Rewrite url() + @import inside CSS, resolved relative to `cssDir` (the CSS file's real dir).
+// `importing` holds the real paths on the active @import chain, so a cycle is cut, not recursed.
+function inlineCss(css, cssDir, scope, importing = new Set()) {
+  return css
+    .replace(/@import\s+(?:url\(\s*)?(?:"([^"]*)"|'([^']*)'|([^'")\s;]+))\s*\)?[^;]*;/gi, (m, dq, sq, bare) => {
+      const url = dq ?? sq ?? bare;
+      const d = scope.decide(url, cssDir, "css-import");
+      if (d.keep) return m;
+      if (d.drop || importing.has(d.path)) return "";
+      const chain = new Set(importing).add(d.path);
+      return `${inlineCss(readFileSync(d.path, "utf-8"), dirname(d.path), scope, chain)}\n`;
+    })
+    .replace(/url\(\s*['"]?([^'")]+)['"]?\s*\)/gi, (m, url) => {
+      const d = scope.decide(url, cssDir, "css-url");
+      if (d.keep) return m;
+      return d.drop ? DROPPED_URL : `url(${dataUri(d.path)})`;
+    });
+}
+
+// srcset candidates per the HTML parsing rules: a URL runs to whitespace (trailing commas end the
+// candidate), then descriptors run to the next comma — so "a.png 1x,b.png 2x" is two candidates.
+function parseSrcset(value) {
+  const out = [];
+  const s = String(value);
+  let i = 0;
+  while (i < s.length) {
+    while (i < s.length && /[\s,]/.test(s[i])) i++;
+    if (i >= s.length) break;
+    let j = i;
+    while (j < s.length && !/\s/.test(s[j])) j++;
+    let url = s.slice(i, j);
+    let desc = "";
+    if (url.endsWith(",")) url = url.replace(/,+$/, "");
+    else {
+      let k = j;
+      while (k < s.length && s[k] !== ",") k++;
+      desc = s.slice(j, k).trim();
+      j = k;
+    }
+    out.push({ url, desc });
+    i = j;
+  }
+  return out;
+}
+
+// Single-URL resource attributes embedded as data URIs (beyond <link stylesheet> / <script src>).
+// Navigation targets (<a href>, <form action>, …) are links, not resources, and are left alone.
+const LINK_RESOURCE_RELS = /\b(icon|apple-touch-icon|preload|modulepreload|prefetch|manifest)\b/i;
+function resourceAttrs(el) {
+  const tag = (el.name || "").toLowerCase();
+  const attrs = el.attribs || {};
+  const out = [];
+  if (tag === "script" || tag === "a" || tag === "area" || tag === "base") return out;
+  if (tag === "link") {
+    if (attrs.href && LINK_RESOURCE_RELS.test(attrs.rel || "")) out.push("href");
+    return out;
+  }
+  for (const a of ["src", "poster", "background"]) if (attrs[a]) out.push(a);
+  if (tag === "object" && attrs.data) out.push("data");
+  if ((tag === "image" || tag === "feimage") && attrs.href) out.push("href");
+  if ((tag === "image" || tag === "feimage") && attrs["xlink:href"]) out.push("xlink:href");
+  return out;
 }
 
 /**
- * Produce a self-contained version of `html`. Local assets are resolved against `baseDir`.
- * @returns {string}
+ * Produce a self-contained version of `html`. Local assets are resolved against `baseDir` and
+ * embedded only from inside it (real path) or an approved root (`assetRoots`, default
+ * WI_EXPORT_ASSET_ROOTS). Returns the HTML string, or `{ html, dependencies }` with `withReceipt`.
+ * @returns {string | { html: string, dependencies: ReturnType<typeof emptyReceipt> }}
  */
-export function inlineHtml(html, { baseDir }) {
+export function inlineHtml(html, { baseDir, assetRoots = approvedAssetRoots(), withReceipt = false }) {
   const $ = cheerio.load(html);
+  const scope = assetScope(baseDir, assetRoots);
 
-  $('link[rel="stylesheet"]').each((_, el) => {
+  $('link[rel~="stylesheet"][href]').each((_, el) => {
     const href = $(el).attr("href");
-    if (!isLocal(href)) return;
-    const abs = resolve(baseDir, href);
-    if (!existsSync(abs)) return;
-    const css = inlineCssUrls(readFileSync(abs, "utf-8"), dirname(abs));
+    const d = scope.decide(href, baseDir, "stylesheet");
+    if (d.keep) return;
+    if (d.drop) { $(el).remove(); return; }
+    const css = inlineCss(readFileSync(d.path, "utf-8"), dirname(d.path), scope);
     // Keep the link's media scope: a screen-only stylesheet must stay screen-only once inlined.
     const media = $(el).attr("media");
     $(el).replaceWith(media ? `<style media="${media.replace(/"/g, "&quot;")}">${css}</style>` : `<style>${css}</style>`);
   });
 
   $("script[src]").each((_, el) => {
-    const src = $(el).attr("src");
-    if (!isLocal(src)) return;
-    const abs = resolve(baseDir, src);
-    if (!existsSync(abs)) return;
-    $(el).removeAttr("src").text(readFileSync(abs, "utf-8"));
+    const d = scope.decide($(el).attr("src"), baseDir, "script");
+    if (d.keep) return;
+    $(el).removeAttr("src");
+    if (d.path) $(el).text(readFileSync(d.path, "utf-8"));
   });
 
-  $("img[src]").each((_, el) => {
-    const src = $(el).attr("src");
-    if (!isLocal(src)) return;
-    const abs = resolve(baseDir, src);
-    if (existsSync(abs)) $(el).attr("src", dataUri(abs));
+  $("*").each((_, el) => {
+    const tag = (el.name || "").toLowerCase();
+    for (const attr of resourceAttrs(el)) {
+      const d = scope.decide($(el).attr(attr), baseDir, tag === "img" ? "image" : `${tag}-${attr}`);
+      if (d.keep) continue;
+      if (d.drop) $(el).removeAttr(attr);
+      else $(el).attr(attr, dataUri(d.path));
+    }
+    for (const attr of ["srcset", "imagesrcset"]) {
+      const srcset = $(el).attr(attr);
+      if (!srcset || tag === "script") continue;
+      const kept = [];
+      for (const { url, desc } of parseSrcset(srcset)) {
+        const d = scope.decide(url, baseDir, attr);
+        if (d.drop) continue;
+        kept.push([d.path ? dataUri(d.path) : url, desc].filter(Boolean).join(" "));
+      }
+      if (kept.length) $(el).attr(attr, kept.join(", "));
+      else $(el).removeAttr(attr);
+    }
+    const style = $(el).attr("style");
+    if (style && /url\(|@import/i.test(style)) $(el).attr("style", inlineCss(style, baseDir, scope));
   });
 
-  // Inline any remaining <style> blocks' url() refs (baseDir-relative).
+  // Remaining <style> blocks' url() / @import refs (baseDir-relative).
   $("style").each((_, el) => {
     const css = $(el).html();
-    if (css && css.includes("url(")) $(el).text(inlineCssUrls(css, baseDir));
+    if (css && /url\(|@import/i.test(css)) $(el).text(inlineCss(css, baseDir, scope));
   });
 
-  return $.html();
+  const out = $.html();
+  return withReceipt ? { html: out, dependencies: scope.receipt } : out;
+}
+
+/** Thrown by strict offline export when anything would stay external or unresolved (HTTP 422). */
+export class ExportNotOfflineError extends Error {
+  constructor(dependencies) {
+    const n = dependencies.remote.length + dependencies.unresolved.length;
+    super(`offline export refused: ${n} resource(s) are not embedded (see dependencies)`);
+    this.code = "export_not_offline";
+    this.dependencies = dependencies;
+  }
+}
+
+/** Inline a version for export, enforcing strict offline mode when asked. */
+function inlineForExport(dir, version, { offline = false, assetRoots } = {}) {
+  const { html, dependencies } = inlineHtml(readVersionHtml(dir, version), {
+    baseDir: dir, withReceipt: true, ...(assetRoots ? { assetRoots } : {}),
+  });
+  if (offline && !dependencies.self_contained) throw new ExportNotOfflineError(dependencies);
+  return { html, dependencies };
 }
 
 // ---------------------------------------------------------------------------
@@ -614,14 +806,14 @@ function layoutReport(layout) {
  * plus a document head; no print injection (see finalizeHtml).
  * @returns {{ path: string, bytes: number, layout: string, layout_source: string, page_size: string|null, pages: null }}
  */
-export function exportHtml(dir, version, outPath) {
-  const inlined = inlineHtml(readVersionHtml(dir, version), { baseDir: dir });
+export function exportHtml(dir, version, outPath, opts = {}) {
+  const { html: inlined, dependencies } = inlineForExport(dir, version, opts);
   const html = finalizeHtml(inlined);
   const path = outPath || join(exportsDir(dir), `${downloadBase(dir, version)}.html`);
   writeFileSync(path, html);
   // Report the layout the PDF export WOULD use, so the UI can say "document · A4 portrait" up front.
   const layout = classifyLayout(inlined, { style: recordedStyle(dir) });
-  return { path, bytes: Buffer.byteLength(html), ...layoutReport(layout), pages: null };
+  return { path, bytes: Buffer.byteLength(html), ...layoutReport(layout), pages: null, dependencies };
 }
 
 /** Locate a Chrome/Chromium binary (env override wins). */
@@ -658,8 +850,8 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
   if (!chrome) throw new Error("no Chrome/Chromium found for PDF render (set WI_CHROME)");
   const flags = ["--headless=new", "--disable-gpu", "--no-sandbox"];
   if (noHeaderFooter) flags.push("--no-pdf-header-footer");
-  flags.push(...args, `--print-to-pdf=${pdfPath}`, `file://${htmlPath}`);
-  return new Promise((resolveP, reject) => {
+  return serveOnce(htmlPath, (url) => new Promise((resolveP, reject) => {
+    flags.push(...args, `--print-to-pdf=${pdfPath}`, url);
     // ignore stdout (unread + full → deadlock); pipe stderr only; guard the stderr stream.
     const child = spawn(chrome, flags, { timeout: 60000, stdio: ["ignore", "ignore", "pipe"] });
     let stderr = "";
@@ -673,7 +865,30 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
         resolveP();
       }
     });
+  }));
+}
+
+/**
+ * Serve ONE file on a loopback port for the life of `fn(url)` (#287). The renderer never opens the
+ * PDF-prep copy from file://, where a page may load or navigate to any local file: from an http
+ * origin Chrome refuses file: subresources and file: navigations alike. The URL path is a random
+ * token; every other path is a 404, so a leftover relative reference reaches nothing.
+ */
+async function serveOnce(filePath, fn) {
+  const token = `/${randomUUID()}.html`;
+  const body = readFileSync(filePath); // read up front: a throw here rejects the export, never the process
+  const server = createHttpServer((req, res) => {
+    if (req.url !== token) { res.statusCode = 404; res.end(); return; }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(body);
   });
+  await new Promise((r, j) => { server.once("error", j); server.listen(0, "127.0.0.1", r); });
+  try {
+    return await fn(`http://127.0.0.1:${server.address().port}${token}`);
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((r) => server.close(() => r()));
+  }
 }
 
 /**
@@ -684,8 +899,8 @@ export function chromeRenderer(htmlPath, pdfPath, opts = {}) {
  * @returns {Promise<{ path: string, layout: string, layout_source: string, page_size: string|null,
  *                     page_size_pt: {width:number,height:number}|null, pages: number|null }>}
  */
-export async function exportPdf(dir, version, outPath, { renderer = chromeRenderer, chromePath, renderOpts = {} } = {}) {
-  const inlined = inlineHtml(readVersionHtml(dir, version), { baseDir: dir });
+export async function exportPdf(dir, version, outPath, { renderer = chromeRenderer, chromePath, renderOpts = {}, offline = false, assetRoots } = {}) {
+  const { html: inlined, dependencies } = inlineForExport(dir, version, { offline, assetRoots });
   const { html, layout } = decorateForExport(inlined, { style: recordedStyle(dir), withLayout: true });
   const htmlPath = join(exportsDir(dir), `export_v${version}.pdf.html`);
   writeFileSync(htmlPath, html);
@@ -699,5 +914,6 @@ export async function exportPdf(dir, version, outPath, { renderer = chromeRender
     page_size: produced.page_size ?? layout.page_size ?? null,
     page_size_pt: produced.page_size_pt,
     pages: produced.pages,
+    dependencies,
   };
 }
