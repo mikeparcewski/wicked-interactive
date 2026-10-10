@@ -4,6 +4,32 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-10-10
+
+### Security
+- **Export reads only the document's own asset files** (#287, #289). Export used to resolve every
+  local stylesheet, script, image and CSS `url()` with `path.resolve` and read it, so a `../` path,
+  an absolute path or a symlink in a document pulled any file the bridge could read into the export.
+  Each reference is now realpathed (so symlinks are judged by where they point) and embedded only
+  when it sits inside the document folder or a root the operator approves with
+  `WI_EXPORT_ASSET_ROOTS`. Anything else is not read. It is dropped from the output and reported.
+  The rule also covers `srcset`/`imagesrcset`, `poster`, `background`, `<object data>`, SVG
+  `<image href>`, icon/preload links and CSS `@import`. Chrome renders the PDF print copy from a
+  one-file loopback http origin instead of `file://`, so the page cannot load or navigate to local
+  files.
+
+### Added
+- **Every export returns a dependency receipt** (#288, #289). `POST /api/export` answers with
+  `dependencies: { self_contained, embedded, remote, unresolved }`. Remote resources are never
+  fetched, and they stay links. PPTX carries no linked resources, so its receipt is empty.
+- **Strict offline export:** `POST /api/export {"offline": true}` succeeds only when every resource is
+  embedded. Otherwise it answers `422 {code: "export_not_offline", dependencies}` and writes nothing.
+
+### Changed
+- The README's "self-contained / nothing to install" export line now says what ships: local assets
+  embedded, remote resources still need the network. The README gains an **Exports** section and a
+  **What Studio exposes** matrix showing which engine APIs have a Studio action.
+
 ## [0.11.1] — 2026-10-08
 
 ### Added
@@ -320,7 +346,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.9.4...v0.10.0
