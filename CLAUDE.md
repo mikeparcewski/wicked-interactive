@@ -1,35 +1,55 @@
 # wicked-interactive
 
-Interactive HTML & Presentation Builder with an in-browser feedback loop for
-non-technical business users. Inline `(ADR-00NN)` tags throughout the code mark
-the load-bearing decisions; this file is the operating manual for the
-supervising agent.
+The wicked family's **document engine** — an API-only local service. It owns document storage
+with write-once version lineage and forking (`data-wid` anchoring), renders and exports
+HTML / PDF / native PowerPoint / video, records narrated demos, and learns themes. It has **no
+supported UI of its own**: wicked-crew spawns it as a local bridge and reverse-proxies its HTTP
+surface at `/api/v1/projects/:projectId/interactive/*`, and wicked-studio is where people point,
+edit, rewind, fork and export. Inline `(ADR-00NN)` tags mark the load-bearing decisions
+(`docs/architecture-decisions.md`); this file is dev guidance for working on the repo.
 
-## Working on this plugin locally
+## What runs where (today)
 
-**Runtime behavior lives in the skills, not here.** How the supervising agent starts the
-service, runs the in-browser loop, indexes attached sources, and records demos is defined
-entirely by the shipped skills — `skills/serve/SKILL.md` and `skills/assist/SKILL.md`. That's
-what an installed user actually gets (this `CLAUDE.md` never loads for them). **Change agent
-behavior in the skills; this file is only dev guidance for working on the repo.**
+- **Supported path:** `npx wicked-crew serve` spawns this package from npm (crew's
+  `INTERACTIVE_DEFAULT_RANGE`, overridable with `WICKED_INTERACTIVE_SPEC`) and proxies it. The
+  studio client only ever talks to crew.
+- **Direct, as an API:** `wicked-interactive serve [--root <docs-dir>]` — `GET /` redirects to the
+  studio origin recorded in `<root>/.wi-serve.json` (or answers a short page saying none is
+  recorded: "it serves the API, not the UI"); every `/api/*` route answers as before.
+- **Dev escape hatch only:** `--standalone` (or `WI_STANDALONE=1`) serves the retired SPA shell from
+  `frontend/dist`. Use it to develop the engine; never treat it as the product UI or add features
+  to it — UI work belongs in wicked-studio.
+- **One capability has no studio button yet:** analyze / review — reachable over the API
+  (`POST /api/events` with `wicked.interactive.review.requested`).
 
-**The control plane is wicked-bus (ADR-0019).** The UI, the service, and the agent all speak
-one event vocabulary (`src/service/events.js`, domain `wicked-interactive`). The service bridges
-the bus to the browser (`GET /api/events` SSE down, `POST /api/events` up) and consumes commands
-via two `subscribe()` loops; the agent uses `wicked-bus subscribe`/`emit`. The state plane
-(versions, INV-2/`data-wid`, fork model) is unchanged — only the trigger/announce path is the bus.
-The bus is transport, not storage (TTL-swept), so durable state always lives in workspace files.
-See `docs/architecture-decisions.md` for ADR-0019/0020/0021.
+## The control plane is wicked-bus (ADR-0019, ADR-0021)
 
-When developing/testing locally I run the service myself:
+The studio UI (through crew), the service and supervising agents speak one event vocabulary
+(`src/service/events.js`, `src/service/event-schemas/`, domain `wicked-interactive`). The service
+bridges the bus to HTTP (`GET /api/events` SSE down, a whitelisted `POST /api/events` up) and
+consumes commands via `subscribe()` loops; an agent uses `wicked-bus subscribe`/`emit`. The state
+plane (versions, INV-2 / `data-wid`, the fork model) lives in workspace files — the bus is
+transport, not storage (TTL-swept). The service opens the bus fail-fast before it accepts traffic
+(`server.js`, ADR-0021). Crew-governed generation answers these bus events too
+(`wicked.interactive.doc.created` → a governed run → `wicked.interactive.draft.completed`).
 
-- **Start it:** `node bin/wicked-interactive.js serve --root /tmp/wi-docs --port 4400`
-  (in the background; no more `--watch` — chokidar is gone). Docs persist under `--root`, so a
-  restart is non-destructive. The service opens the bus fail-fast on start (ADR-0021).
-- **Restart after editing `src/service/**` or rebuilding `frontend/dist`** — the running
-  process serves the old backend + old static bundle until restarted; a 404 on a route I just
-  added almost always means a stale process. Verify with a quick `curl` of the changed route.
+## Working on this repo locally
+
+**Runtime behaviour an installed user gets lives in the shipped skills** (`skills/serve/SKILL.md`,
+`skills/assist/SKILL.md`), not here — this file never loads for them. Note those skills still
+describe the retired in-browser builder loop; treat them as legacy until they are rewritten for
+the API-only engine, and don't copy their UI claims into new docs.
+
+- **Start it:** `node bin/wicked-interactive.js serve --root "$TMPDIR/wi-docs"` (in the
+  background). The port is dynamic — first free from 4400 up; `--port N` is a preference that
+  falls forward (ADR-0022/0025) — and the live port is in `<root>/.wi-serve.json`. Docs persist
+  under `--root`, so a restart is non-destructive. Add `--standalone` only when you need the old
+  shell to poke at the engine by hand.
+- **Restart after editing `src/service/**`** (or rebuilding `frontend/dist` for the dev shell) —
+  a running process serves the old backend until restarted; a 404 on a route you just added almost
+  always means a stale process. Verify with a quick `curl` of the changed route.
 - **Watch the loop:** `wicked-bus subscribe --plugin dev --filter '*@wicked-interactive' --cursor-init latest`
-  tails every event (replaces the old `wi-watch` tail).
-- **Stop it when done** — kill the `serve` process so nothing is left bound to the port. Leave
-  the shared wicked-bus server alone.
+  tails every event.
+- **Tests:** `npm test` (`node --test test/*.test.js`).
+- **Stop it when done** — kill the `serve` process you started so nothing stays bound to the port.
+  Leave the shared wicked-bus server alone.
