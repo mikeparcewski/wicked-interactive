@@ -23,7 +23,7 @@ import { isRetired as manifestRetired, retireManifest } from "../core/versions.j
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
-import { exportHtml, exportPdf, listExports } from "./export.js";
+import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
 import {
@@ -192,16 +192,20 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   });
 
   // Export to self-contained HTML or PDF (ADR-0009), triggered from the browser. POST creates
-  // the file; the response carries a `download` URL the frontend hits to pull the bytes.
+  // the file; the response carries a `download` URL the frontend hits to pull the bytes, and a
+  // `dependencies` receipt (embedded / remote / unresolved resources, #288).
   app.post("/api/export", async (req, res) => {
     const version = Number(req.body?.version);
     const format = String(req.body?.format || "html").toLowerCase();
     if (!Number.isInteger(version)) return res.status(400).json({ error: "version (number) required" });
     if (!["html", "pdf", "pptx"].includes(format)) return res.status(400).json({ error: "format must be html, pdf, or pptx" });
+    // Strict offline mode (#288): embed everything or refuse with the list of what is not.
+    const offline = req.body?.offline === true;
     try {
-      const result = format === "pdf" ? await exportPdf(dir, version)
-        : format === "pptx" ? exportPptx(dir, version)
-        : exportHtml(dir, version);
+      // PPTX is built natively from the markup's text and shapes: it carries no linked resources.
+      const result = format === "pdf" ? await exportPdf(dir, version, undefined, { offline })
+        : format === "pptx" ? { ...exportPptx(dir, version), dependencies: emptyReceipt() }
+        : exportHtml(dir, version, undefined, { offline });
       const file = basename(result.path);
       const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
       emit("wicked.interactive.export.requested", { version, format });
@@ -218,6 +222,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       emit("wicked.interactive.export.generated", { version, format, path: result.path, file, download, ...report });
       res.json({ format, ...result, file, download });
     } catch (e) {
+      if (e instanceof ExportNotOfflineError) {
+        return res.status(422).json({ error: e.message, code: e.code, format, dependencies: e.dependencies });
+      }
       res.status(400).json({ error: e.message });
     }
   });

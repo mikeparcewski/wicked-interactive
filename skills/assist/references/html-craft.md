@@ -32,10 +32,14 @@ A base theme (`src/themes/*.json`) is injected as element-level CSS variables, s
 
 ## Export-clean
 
-Exports inline everything for a single self-contained file (HTML/PDF). So:
+Exports embed the document's own local assets into a single file (HTML/PDF). Only files inside
+the document folder (or a root the operator approved with `WI_EXPORT_ASSET_ROOTS`) are read: a
+`../` path, an absolute path elsewhere or a symlink pointing out is dropped and reported. Remote
+(`https:`) resources stay links, and the export's `dependencies` receipt lists them. So:
 
-- **Prefer inline SVG and data-URI or absolute https images** over local file paths the export
-  can't resolve. (See image sourcing below.)
+- **Prefer inline SVG, data-URI images, or files saved inside the document folder.** An https
+  image works but keeps the export online-only, and strict offline export (`"offline": true`)
+  refuses it. (See image sourcing below.)
 - **No external runtime JS** for core content — the document must render correctly as static
   HTML opened straight from disk. Interactivity that matters should survive without a server.
 - **Avoid web-font CDNs** for anything load-bearing; the theme's font stack uses system/Office
