@@ -3,7 +3,7 @@
 // the user's wicked.interactive.question.answered, and fulfils with wicked.interactive.edit.completed — exercising the
 // inline-comment + clarification + hot-reload path entirely over wicked-bus. Exit 0 = PASS.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import puppeteer from "puppeteer-core";
@@ -169,8 +169,23 @@ try {
   step("chat message round-trips into the transcript (bus: wicked.interactive.chat.posted)");
 
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join("; ")}`);
+  // The lineage the loop must leave (F-RECON-005, #224): the inline comment is a structural-only
+  // batch, so it lands NO version of its own — it reserves v1 on `_v1.md` as the handoff key — and
+  // the agent's edit.completed lands AS v1, parented on v0 and carrying that feedback file. Before
+  // #224 the batch minted a byte-identical phantom v1 and the agent's edit became v2, which is what
+  // the old `head < 2` check encoded (issue #285).
   const m = loadManifest(join(root, DOC));
-  if (m.head < 2) throw new Error(`expected an agent-finalized structural version (head=${m.head})`);
+  const lineage = JSON.stringify(m.versions.map(({ version, parent, feedback_file }) => ({ version, parent, feedback_file })));
+  if (m.head !== 1 || m.versions.length !== 2) {
+    throw new Error(`expected v0 + one agent-finalized structural version as head v1 (head=${m.head}, versions=${lineage})`);
+  }
+  const v1 = m.versions.find((v) => v.version === 1);
+  if (v1?.parent !== 0 || v1?.feedback_file !== "_v1.md") {
+    throw new Error(`expected v1 parented on v0 and carrying the batch's _v1.md (versions=${lineage})`);
+  }
+  if (!readFileSync(join(root, DOC, v1.html_file), "utf-8").includes(ANSWER)) {
+    throw new Error(`expected ${v1.html_file} to hold the agent's answer "${ANSWER}"`);
+  }
 
   console.log("\nACCEPTANCE PASS — inline comment + ask/answer clarification loop verified over the bus in a real browser.");
   ok = true;
