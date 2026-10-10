@@ -54,6 +54,28 @@ jobs:
           curl -fsS -o /dev/null -w "GET / (API-only bridge) -> HTTP %{http_code}\n" "http://127.0.0.1:4411/"
           kill "$SVC" 2>/dev/null || true
 
+  # The browser acceptance (test/e2e.mjs, ADR-0019): the full bus loop — inline comment, ask/answer,
+  # agent edit, hot-reload, version rewind, chat — in a real headless Chrome, then the version
+  # lineage it must leave on disk. It ran nowhere in CI before, which is how #224 left its stale
+  # head assertion failing on main unnoticed (issue #285). The runner image ships Google Chrome at
+  # /usr/bin/google-chrome; WI_CHROME pins it so a missing browser fails (exit 2) instead of passing.
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      WI_CHROME: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install (clean, from lockfile)
+        run: npm ci
+      - name: Browser acceptance (bus loop in headless Chrome)
+        run: node test/e2e.mjs
+
   # The recorder's browser is NOT provisioned by `npm install` (F-RECON-012). This job proves the
   # provisioning path a fresh install relies on, end to end and against a REAL cache dir: doctor
   # says MISSING (exit 1) → `doctor --install` downloads the headless shell + ffmpeg with the
