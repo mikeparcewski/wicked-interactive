@@ -24,6 +24,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - **A legacy deck's no-op batch mints no version.** The unchanged check now compares against the base
   as the pipeline would prepare it, so slide ids added on the way are not counted as a change.
+- **The PowerPoint export has the deck's slides, no more and no fewer.** The builder now reads a slide
+  the way the engine does: a top-level `section`, `[data-slide]` or `.slide` (nested ones stay part of
+  their slide), never a void element and never anything inside a notes aside. A blank inserted slide
+  is kept. Content before the first slide is folded into it in reading order instead of becoming a
+  slide of its own.
 
 ### CI
 - The unit tests run with python-pptx installed (a venv), so the PowerPoint read-back tests run
