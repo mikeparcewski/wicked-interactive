@@ -409,3 +409,20 @@ test("codex r4: a slide container inside a notes aside is notes, not a slide (co
     assert.equal(r.stdout.trim(), "1");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("codex r5: content before the first slide joins that slide in PPTX (core and PPTX agree, nothing dropped)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+  const html = '<h1>Deck title</h1><p>lead para</p><section><h2>A</h2><p>a body</p></section><section><h2>B</h2></section>';
+  assert.equal(instrument(html, { slideIds: true }).slideIds.length, 2);
+  const dir = deck(html);
+  try {
+    const { path } = exportPptx(dir, 0, { ready: READY });
+    const r = spawnSync(READY.python, ["-c", "import sys, json; from pptx import Presentation; print(json.dumps([[sh.text_frame.text for sh in s.shapes if sh.has_text_frame] for s in Presentation(sys.argv[1]).slides]))", path], { encoding: "utf-8" });
+    assert.equal(r.status, 0, r.stderr);
+    const slides = JSON.parse(r.stdout);
+    assert.equal(slides.length, 2);
+    assert.equal(slides[0][0], "Deck title");
+    const body = slides[0].join(" ");
+    for (const t of ["lead para", "A", "a body"]) assert.ok(body.includes(t), `${t} in ${body}`);
+    assert.equal(slides[1][0], "B");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

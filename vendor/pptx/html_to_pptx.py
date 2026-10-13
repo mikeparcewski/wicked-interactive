@@ -143,7 +143,26 @@ class SlideParser(HTMLParser):
             self._end_notes()
         # The deck's own slides are all kept (an inserted slide is blank until it is written);
         # implicit ones (content outside any slide) only when they hold something.
-        return [s for s in self.slides if s["explicit"] or s["title"] or s["blocks"] or s["notes"]]
+        slides = [s for s in self.slides if s["explicit"] or s["title"] or s["blocks"] or s["notes"]]
+        # Once the document has slide containers, the slide count is theirs (core/deck.js topSlides —
+        # codex r5). Content after a slide already joins it (`cur` stays set); content BEFORE the first
+        # one is the only implicit slide left, and it is folded into that first slide, never dropped.
+        first = next((i for i, s in enumerate(slides) if s["explicit"]), None)
+        if first:
+            lead, e = slides[:first], slides[first]
+            # Every heading in reading order; the first becomes the title, the rest stay headings.
+            title, blocks = None, []
+            for s in lead + [e]:
+                if s["title"]:
+                    if title is None:
+                        title = s["title"]
+                    else:
+                        blocks.append(("head", s["title"]))
+                blocks.extend(s["blocks"])
+            e["title"], e["blocks"] = title, blocks
+            e["notes"] = "\n".join(n for n in [s["notes"] for s in lead] + [e["notes"]] if n)
+            slides = slides[first:]
+        return slides
 
 
 def _rgb(hex_str, fallback):
