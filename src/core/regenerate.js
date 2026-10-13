@@ -1,6 +1,7 @@
 // regenerate.js — determinism-first hybrid regeneration engine (ADR-0003).
 //
 // content-edit / style-edit  -> cheerio DOM surgery, no LLM.
+// slide-insert / -duplicate / -move, notes-set -> deck ops (deck.js), no LLM.
 // structural-change          -> fragment-scoped LLM (opts.llm), increment 4.
 //
 // Guardrails:
@@ -17,6 +18,7 @@
 import * as cheerio from "cheerio";
 import { collectWids } from "./instrument.js";
 import { checkStyleMap } from "./style-grammar.js";
+import { applyDeckOp, DECK_OPS } from "./deck.js";
 
 export class Inv2Error extends Error {
   constructor(missing) {
@@ -72,6 +74,14 @@ export async function regenerate(prevHtml, feedback, opts = {}) {
   const removed = [];  // anchors intentionally deleted (exempt from the INV-2 net)
 
   for (const item of feedback.items) {
+    // Deck ops (I-D1) name a slide by its `data-slide-id`, not a data-wid; anchors move with their
+    // slide, so INV-2 holds by construction (the net below still checks it).
+    if (DECK_OPS.includes(item.type)) {
+      const r = applyDeckOp($, item);
+      if (r.ok) applied.push(item.selector);
+      else rejected.push({ selector: item.selector, reason: r.reason });
+      continue;
+    }
     const $el = $(`[data-wid="${item.selector}"]`);
     if ($el.length === 0) {
       rejected.push({ selector: item.selector, reason: "selector-not-found" });

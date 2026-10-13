@@ -21,6 +21,7 @@
 // skipped.
 
 import * as cheerio from "cheerio";
+import { assignSlideIds, linkNotes } from "./deck.js";
 
 export const DEFAULT_REVIEWABLE = [
   "h1", "h2", "h3", "h4", "h5", "h6",
@@ -101,7 +102,9 @@ function roleFor(el) {
  * @param {string} html
  * @param {object} [opts]
  * @param {string[]} [opts.reviewable] selectors considered reviewable blocks
- * @returns {{ html: string, ids: string[] }}
+ * @param {boolean} [opts.slideIds] a deck: give every top-level slide a stable `data-slide-id`
+ *   (deck.js; I-D1) and point its speaker notes at it
+ * @returns {{ html: string, ids: string[], sectionIds: string[], slideIds?: string[] }}
  */
 export function instrument(html, opts = {}) {
   const reviewable = opts.reviewable || DEFAULT_REVIEWABLE;
@@ -201,7 +204,14 @@ export function instrument(html, opts = {}) {
   const blockIds = [];
   $("[data-wid]").each((_, el) => { if (!sectionEls.has(el)) blockIds.push($(el).attr("data-wid")); });
 
-  return { html: $.html(), ids: blockIds, sectionIds };
+  // A deck's slide identity (I-D1): assigned once, kept (deck.js). Documents are left alone.
+  let slideIds;
+  if (opts.slideIds === true) {
+    slideIds = assignSlideIds($);
+    linkNotes($);
+  }
+
+  return { html: $.html(), ids: blockIds, sectionIds, ...(slideIds ? { slideIds } : {}) };
 }
 
 /**

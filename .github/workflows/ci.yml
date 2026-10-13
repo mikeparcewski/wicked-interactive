@@ -30,8 +30,14 @@ jobs:
           cache: npm
       - name: Install (clean, from lockfile)
         run: npm ci
+      # python-pptx for the PPTX read-back tests (deck.test.js, pptx.test.js), which skip without it.
+      # A venv, so the runner's system python stays untouched (PEP 668).
+      - name: python-pptx for the PowerPoint read-back tests
+        run: python3 -m venv "$RUNNER_TEMP/pptx" && "$RUNNER_TEMP/pptx/bin/pip" install --quiet python-pptx
       - name: Unit tests
         run: npm test
+        env:
+          WI_PYTHON: ${{ runner.temp }}/pptx/bin/python
       - name: Plugin version is consistent (and matches the tag, if tagged)
         run: npm run check:version
       - name: Cross-machine smoke — packaged tarball installs & serves from a foreign dir

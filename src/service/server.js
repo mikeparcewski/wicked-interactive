@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync,
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
-import { appendConversation, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
+import { appendConversation, deckOpProblem, materializeDeckOp, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead } from "./workspace.js";
 import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
@@ -188,6 +188,29 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       emit("wicked.interactive.version.created", { version, parent, kind: "fork", html_file: `_v${version}.html` });
       return { version, parent };
     }).then((r) => (r.headMoved ? res.status(409).json({ error: "head_moved", head: r.head }) : res.json(r)))
+      .catch((e) => res.status(400).json({ error: e.message }));
+  });
+
+  // Deck ops (DES-PRESENTATION-EDITOR-001 I-D1): insert / duplicate / move a slide, set its speaker
+  // notes. One op per call, one version per op, no model. `expect_head` is REQUIRED (C5): checked
+  // inside the queue, so a version queued ahead of this op is seen, and a moved head is a 409
+  // head_moved with nothing written. A slide is named by its `data-slide-id`; delete a slide with
+  // the existing `remove` feedback item on its data-wid.
+  app.post("/api/deck", (req, res) => {
+    const expectHead = req.body?.expect_head;
+    if (!Number.isInteger(expectHead)) return res.status(400).json({ error: "expect_head (the version you are editing) is required" });
+    const op = req.body?.op;
+    const problem = deckOpProblem(op);
+    if (problem) return res.status(400).json({ error: problem });
+    const ctx = { emit, documentId, dir };
+    enqueue(() => materializeDeckOp(dir, { expect_head: expectHead, op }, ctx))
+      .then((r) => {
+        if (r.notDeck) return res.status(409).json({ error: "not_a_deck" });
+        if (r.headMoved) return res.status(409).json({ error: "head_moved", head: r.head });
+        if (r.refused) return res.status(422).json({ error: "refused", reason: r.refused, head: r.head });
+        if (r.unchanged) return res.json({ unchanged: true, head: r.head });
+        return res.json({ version: r.version, parent: r.parent });
+      })
       .catch((e) => res.status(400).json({ error: e.message }));
   });
 

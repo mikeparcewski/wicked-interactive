@@ -11,6 +11,7 @@
 // so instrument() simply assigns fresh ones.
 
 import { join } from "node:path";
+import { isDeckManifest } from "../core/deck.js";
 import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
@@ -58,7 +59,7 @@ export async function applyGeneratedHtml(dir, html, opts = {}) {
   let manifest = loadManifest(dir);
   const parent = manifest.head;
   const version = nextVersionNumber(manifest);
-  const prepared = themed(instrument(html).html, opts);
+  const prepared = themed(instrument(html, { slideIds: isDeckManifest(manifest) }).html, opts);
   atomicWrite(join(dir, `_v${version}.html`), prepared);
   ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: opts.feedbackFile ?? null }));
   saveManifest(dir, manifest);

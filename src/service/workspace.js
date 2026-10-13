@@ -14,6 +14,7 @@ import { mkdirSync, readdirSync, copyFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { instrument } from "../core/instrument.js";
+import { DECK_STYLES, isDeckManifest } from "../core/deck.js";
 import { parseFeedback, serializeFeedback } from "../core/feedback-schema.js";
 import { regenerate } from "../core/regenerate.js";
 import { initManifest, recordVersion, getVersion, nextVersionNumber } from "../core/versions.js";
@@ -42,7 +43,7 @@ function highestVersionOnDisk(dir) {
  */
 export function initWorkspace(dir, html, opts = {}) {
   mkdirSync(dir, { recursive: true });
-  const anchored = opts.instrument === false ? html : instrument(html).html;
+  const anchored = opts.instrument === false ? html : instrument(html, { slideIds: DECK_STYLES.has(opts.style) }).html;
   // Apply the in-repo base theme so every version (including v0) shares a consistent
   // look (ADR-0016 Slice C). Idempotent + anchor-free, so INV-1/INV-2 are unaffected.
   const prepared = themed(anchored, opts);
@@ -105,7 +106,9 @@ export async function applyFeedbackItems(dir, { version, parent, items }, opts =
   const { html: regenerated, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
   // Re-instrument (adds wids to new blocks, INV-1 preserves existing) then re-theme
   // (idempotent), exactly as the legacy path — so a partial version stays clickable + themed.
-  const html = themed(instrument(regenerated).html, opts);
+  // A deck's slides get their stable ids (I-D1) on every version it lands.
+  const slideIds = isDeckManifest(manifest);
+  const html = themed(instrument(regenerated, { slideIds }).html, opts);
   const feedback_file = `_v${version}.md`;
   // Extract each structural item's CURRENT fragment so the agent edits real markup (the data-wid
   // contract — ADR-0001 — rides in the fragment). When nothing landed, "current" is the base.
@@ -114,7 +117,9 @@ export async function applyFeedbackItems(dir, { version, parent, items }, opts =
     instruction: it.instruction,
     fragment: extractFragment(src, it.selector),
   }));
-  if (contentHash(html) === contentHash(prevHtml)) {
+  // Compared with the base AS THIS PIPELINE WOULD PREPARE IT, so a legacy deck that had no slide ids
+  // (deterministic ids, deck.js) does not mint a phantom version for a batch that changed nothing.
+  if (contentHash(html) === contentHash(prevHtml) || contentHash(html) === contentHash(themed(instrument(prevHtml, { slideIds }).html, opts))) {
     return {
       version, html_file: `_v${parent}.html`, applied, rejected, stale,
       structural_items: fragmentsFrom(prevHtml),

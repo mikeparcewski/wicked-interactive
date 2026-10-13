@@ -14,7 +14,8 @@
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { writeFeedback, applyFeedbackItems } from "./workspace.js";
+import { writeFeedback, applyFeedbackItems, loadManifest } from "./workspace.js";
+import { DECK_OPS, isDeckManifest, isSafeSlideId } from "../core/deck.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
 import { recordDemo } from "./demo.js";
@@ -52,6 +53,18 @@ function themeOpts(ctx, dir) {
  */
 export async function materializeFeedback(dir, payload, ctx) {
   const { items, author } = payload;
+  // Optional `expect_head` (I-D1, C5): the head the batch was made against. A head that moved is
+  // refused with nothing written, said on the doc thread as a typed error.
+  if (Number.isInteger(payload.expect_head)) {
+    const { head } = loadManifest(dir);
+    if (head !== payload.expect_head) {
+      ctx.emit("wicked.interactive.status.posted", {
+        state: "error", code: "head_moved", retryable: false, head,
+        message: `The document changed (version ${head}) before this edit arrived; nothing was changed.`,
+      });
+      return { headMoved: true, head };
+    }
+  }
   const { version, parent } = writeFeedback(dir, { items, author });
   const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
   // version.created announces a version that EXISTS. An unchanged batch (structural-only, or
@@ -75,6 +88,49 @@ export async function materializeFeedback(dir, payload, ctx) {
     ...(result.feedback_file ? { feedback_file: result.feedback_file } : {}),
   });
   return { version, ...result };
+}
+
+/**
+ * Why a deck op cannot be applied as given, or null (I-D1). Checks the SHAPE only; the slides it
+ * names are checked against the version itself when it is applied (regenerate → deck.js).
+ */
+export function deckOpProblem(op) {
+  if (typeof op !== "object" || op === null || Array.isArray(op)) return "op must be an object";
+  if (!DECK_OPS.includes(op.type)) return `op.type must be one of ${DECK_OPS.join(", ")}`;
+  if (!isSafeSlideId(op.slide)) return "op.slide must be a slide id";
+  if (op.type === "slide-insert" || op.type === "slide-move") {
+    if (op.after !== null && op.after !== "" && !isSafeSlideId(op.after)) return "op.after must be a slide id, or null for first";
+  }
+  if (op.type === "notes-set" && typeof op.text !== "string") return "op.text must be text";
+  if (op.type === "notes-set" && op.text.length > 20000) return "op.text is too long (20000 characters at most)";
+  return null;
+}
+
+/**
+ * One deck op → exactly one version (I-D1; `POST /d/:doc/api/deck`). The caller names the head it
+ * edits (`expect_head`); a head that moved is refused (`{ headMoved, head }`, the C5 shape), and so is
+ * a document that is not a deck. The op lands through the feedback pipeline (a `_v{n}.md` and a
+ * deterministic `_v{n}.html`), so its lineage, the INV-2 gate and the no-phantom-version rule are the
+ * feedback batch's own. An op that changes nothing (a move to where the slide already is) lands no
+ * version (`unchanged`); one the version cannot take (an unknown slide) is `refused` with its reason.
+ */
+export async function materializeDeckOp(dir, { expect_head: expectHead, op, author }, ctx) {
+  const manifest = loadManifest(dir);
+  if (!isDeckManifest(manifest)) return { notDeck: true };
+  if (manifest.head !== expectHead) return { headMoved: true, head: manifest.head };
+  const item = {
+    selector: op.slide,
+    type: op.type,
+    ...(op.type === "slide-insert" || op.type === "slide-move" ? { after: op.after ?? "" } : {}),
+    ...(op.type === "notes-set" ? { value: op.text } : {}),
+  };
+  const items = [item];
+  const { version, parent } = writeFeedback(dir, { items, author: author ?? "studio" });
+  const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
+  if (result.rejected.length > 0) return { refused: result.rejected[0].reason, head: manifest.head };
+  if (!result.landed) return { unchanged: true, head: manifest.head };
+  ctx.emit("wicked.interactive.version.created", { version, parent, kind: "deterministic", html_file: result.html_file });
+  return { version, parent };
 }
 
 /** Agent structural results → follow-on version (INV-2 gate). */

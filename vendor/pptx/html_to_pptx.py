@@ -4,7 +4,8 @@ HTML (ADR-0020, the absorbed prezzie export capability).
 
 Structure-based, not pixel-based: each <section> becomes a slide; the first heading is the
 slide title; paragraphs and list items become the body; cards/sub-headings become bold lead
-lines. This is robust and dependency-light (stdlib html.parser + python-pptx only — no Chrome
+lines. A slide's speaker notes (`<aside class="notes" data-notes-for>`, I-D1) go to the slide's notes
+page, never onto the slide. This is robust and dependency-light (stdlib html.parser + python-pptx only — no Chrome
 geometry extraction, no BeautifulSoup), and produces a clean deck a user can edit in PowerPoint.
 
 Usage:  python3 html_to_pptx.py <input.html> <output.pptx> [theme.json]
@@ -36,9 +37,10 @@ class SlideParser(HTMLParser):
         self.cap_tag = None     # the block tag currently being captured
         self.cap_kind = None    # "head" | "para" | "bullet"
         self.buf = []           # text fragments for the current capture
+        self.notes = None       # text fragments of the speaker notes being read, or None
 
     def _new_slide(self):
-        self.cur = {"title": None, "blocks": []}
+        self.cur = {"title": None, "blocks": [], "notes": ""}
         self.slides.append(self.cur)
 
     def _ensure_slide(self):
@@ -46,6 +48,13 @@ class SlideParser(HTMLParser):
             self._new_slide()
 
     def handle_starttag(self, tag, attrs):
+        if tag == "aside" and "data-notes-for" in dict(attrs) and self.notes is None:
+            self._finalize()
+            self._ensure_slide()
+            self.notes = []
+            return
+        if self.notes is not None:
+            return
         if tag == "section":
             self._finalize()
             self._new_slide()
@@ -57,10 +66,18 @@ class SlideParser(HTMLParser):
             self.buf = []
 
     def handle_data(self, data):
+        if self.notes is not None:
+            self.notes.append(data)
+            return
         if self.cap_tag is not None:
             self.buf.append(data)
 
     def handle_endtag(self, tag):
+        if self.notes is not None:
+            if tag == "aside":
+                self.cur["notes"] = "".join(self.notes).strip()
+                self.notes = None
+            return
         if tag == self.cap_tag:
             self._finalize()
 
@@ -80,7 +97,7 @@ class SlideParser(HTMLParser):
     def result(self):
         self._finalize()
         # Drop slides with no title AND no content (e.g. a stray wrapper section).
-        return [s for s in self.slides if s["title"] or s["blocks"]]
+        return [s for s in self.slides if s["title"] or s["blocks"] or s["notes"]]
 
 
 def _rgb(hex_str, fallback):
@@ -165,6 +182,9 @@ def build(html, out_path, theme):
             else:
                 r.font.size = Pt(18)
                 r.font.color.rgb = theme["text"]
+
+        if slide.get("notes"):
+            s.notes_slide.notes_text_frame.text = slide["notes"]
 
     prs.save(out_path)
     return len(slides)
