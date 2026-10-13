@@ -18,6 +18,7 @@ import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, deckOpProblem, materializeDeckOp, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead } from "./workspace.js";
+import { closeProposal, openProposal, recordDecision, reviewFor, setAudience } from "./deck-review.js";
 import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
@@ -211,6 +212,43 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         if (r.unchanged) return res.json({ unchanged: true, head: r.head });
         return res.json({ version: r.version, parent: r.parent });
       })
+      .catch((e) => res.status(400).json({ error: e.message }));
+  });
+
+  // A deck's review (DES-PRESENTATION-EDITOR-001 I-D2, the approvals half): per-slide decisions given
+  // on a version and carried forward only on an unchanged slide (D5), the deck's audience (D8) and an
+  // open audience proposal (D3). Review records only: no run's gate reads them (D4). Writes run in the
+  // FIFO, so they never race a version.
+  const reviewReply = (res, r, event) => {
+    if (r.error) return res.status(r.status ?? 400).json({ error: r.error, ...(r.proposal ? { proposal: r.proposal } : {}) });
+    if (event) emit(event.type, event.payload(r));
+    return res.json(r);
+  };
+  app.get("/api/deck/review", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const raw = req.query?.version;
+    const version = raw === undefined ? undefined : Number(raw);
+    if (version !== undefined && !Number.isInteger(version)) return res.status(400).json({ error: "version must be a version number" });
+    try { reviewReply(res, reviewFor(dir, version)); } catch (e) { res.status(400).json({ error: e.message }); }
+  });
+  app.post("/api/deck/decisions", (req, res) => {
+    enqueue(async () => recordDecision(dir, req.body ?? {}))
+      .then((r) => reviewReply(res, r, { type: "wicked.interactive.slide.decided", payload: (o) => ({ slide_id: o.decision.slide_id, version: o.decision.version, decision: o.decision.decision }) }))
+      .catch((e) => res.status(400).json({ error: e.message }));
+  });
+  app.put("/api/deck/audience", (req, res) => {
+    enqueue(async () => setAudience(dir, req.body ?? {}))
+      .then((r) => reviewReply(res, r, { type: "wicked.interactive.audience.changed", payload: (o) => ({ state: "set", preset: o.audience.preset, label: o.audience.label, version: o.audience.version }) }))
+      .catch((e) => res.status(400).json({ error: e.message }));
+  });
+  app.post("/api/deck/proposal", (req, res) => {
+    enqueue(async () => openProposal(dir, req.body ?? {}))
+      .then((r) => reviewReply(res, r, { type: "wicked.interactive.audience.changed", payload: (o) => ({ state: "proposed", preset: o.proposal.preset, label: o.proposal.label, version: o.proposal.base }) }))
+      .catch((e) => res.status(400).json({ error: e.message }));
+  });
+  app.post("/api/deck/proposal/close", (req, res) => {
+    enqueue(async () => closeProposal(dir, req.body ?? {}))
+      .then((r) => reviewReply(res, r, { type: "wicked.interactive.audience.changed", payload: (o) => ({ state: o.outcome, preset: o.proposal.preset, label: o.proposal.label, version: o.outcome === "kept" ? o.audience.version : o.proposal.base }) }))
       .catch((e) => res.status(400).json({ error: e.message }));
   });
 

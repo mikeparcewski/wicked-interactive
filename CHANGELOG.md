@@ -21,6 +21,20 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
   status error is posted. The PowerPoint export writes each slide's notes to its notes page, never
   onto the slide.
 
+- **A deck's review: slide approvals and the audience (DES-PRESENTATION-EDITOR-001 I-D2, the approvals
+  half).** `GET /d/:doc/api/deck/review?version=` lists each slide of a version with the newest
+  decision on it. `POST /d/:doc/api/deck/decisions {version, slide_id, decision, note?}` records
+  `approved`, `changes_requested` or `cleared` on a slide as it reads in that version. An approval
+  carries forward to a later version only while the slide's content hash is unchanged (`current:
+  true`). Otherwise the review says on which version it was given, and that the slide has changed
+  since. Moving a slide keeps its approval; editing its words, colours or notes does not.
+  `PUT /d/:doc/api/deck/audience {version, preset, label?}` records the deck's audience
+  (`exec`/`eng`/`customer`, or `custom` with its words). `POST /d/:doc/api/deck/proposal
+  {base, preset, label?}` opens one audience proposal at a time (409 `proposal_open`), and
+  `POST /d/:doc/api/deck/proposal/close {outcome: kept|dropped, version?}` closes it. Each write is
+  announced as `wicked.interactive.slide.decided` or `wicked.interactive.audience.changed`. These are
+  review records only: no run's gate reads them.
+
 ### Fixed
 - **A legacy deck's no-op batch mints no version.** The unchanged check now compares against the base
   as the pipeline would prepare it, so slide ids added on the way are not counted as a change.
