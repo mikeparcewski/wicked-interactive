@@ -134,6 +134,7 @@ class SlideParser(HTMLParser):
             return
         if kind == "head" and self.cur["title"] is None:
             self.cur["title"] = unescape(text)
+            self.cur["title_at"] = len(self.cur["blocks"])  # where it sat in reading order
         else:
             self.cur["blocks"].append((kind, unescape(text)))
 
@@ -150,16 +151,17 @@ class SlideParser(HTMLParser):
         first = next((i for i, s in enumerate(slides) if s["explicit"]), None)
         if first:
             lead, e = slides[:first], slides[first]
-            # Every heading in reading order; the first becomes the title, the rest stay headings.
-            title, blocks = None, []
+            # Each slide's blocks in reading order, its title back where it sat (codex r6); the first
+            # heading of the whole run becomes the title, every other block keeps its place.
+            reading = []
             for s in lead + [e]:
+                b = list(s["blocks"])
                 if s["title"]:
-                    if title is None:
-                        title = s["title"]
-                    else:
-                        blocks.append(("head", s["title"]))
-                blocks.extend(s["blocks"])
-            e["title"], e["blocks"] = title, blocks
+                    b.insert(s.get("title_at", 0), ("head", s["title"]))
+                reading.extend(b)
+            at = next((i for i, (kind, _) in enumerate(reading) if kind == "head"), None)
+            title = reading.pop(at)[1] if at is not None else None
+            e["title"], e["blocks"] = title, reading
             e["notes"] = "\n".join(n for n in [s["notes"] for s in lead] + [e["notes"]] if n)
             slides = slides[first:]
         return slides

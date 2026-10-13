@@ -426,3 +426,17 @@ test("codex r5: content before the first slide joins that slide in PPTX (core an
     assert.equal(slides[1][0], "B");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("codex r6: folding keeps reading order — a demoted title stays where it sat", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+  const dir = deck('<h1>Deck title</h1><section><p>intro</p><h2>A</h2><p>body</p></section>');
+  try {
+    const { path } = exportPptx(dir, 0, { ready: READY });
+    const r = spawnSync(READY.python, ["-c", "import sys, json; from pptx import Presentation; print(json.dumps([[sh.text_frame.text for sh in s.shapes if sh.has_text_frame] for s in Presentation(sys.argv[1]).slides]))", path], { encoding: "utf-8" });
+    assert.equal(r.status, 0, r.stderr);
+    const slides = JSON.parse(r.stdout);
+    assert.equal(slides.length, 1);
+    assert.equal(slides[0][0], "Deck title");
+    const body = slides[0].slice(1).join("\n");
+    assert.ok(body.indexOf("intro") < body.indexOf("A") && body.indexOf("A") < body.indexOf("body"), body);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
