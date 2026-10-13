@@ -4,7 +4,8 @@ HTML (ADR-0020, the absorbed prezzie export capability).
 
 Structure-based, not pixel-based: each <section> becomes a slide; the first heading is the
 slide title; paragraphs and list items become the body; cards/sub-headings become bold lead
-lines. This is robust and dependency-light (stdlib html.parser + python-pptx only — no Chrome
+lines. A slide's speaker notes (`<aside class="notes" data-notes-for>`, I-D1) go to the slide's notes
+page, never onto the slide. This is robust and dependency-light (stdlib html.parser + python-pptx only — no Chrome
 geometry extraction, no BeautifulSoup), and produces a clean deck a user can edit in PowerPoint.
 
 Usage:  python3 html_to_pptx.py <input.html> <output.pptx> [theme.json]
@@ -26,6 +27,14 @@ HEADINGS = {"h1", "h2", "h3", "h4"}
 # Block elements we turn into content. Inline tags (b/span/strong/em/a/code) are ignored for
 # structure — their text simply flows into the enclosing block via handle_data.
 BLOCKS = HEADINGS | {"p", "li"}
+# Elements with no end tag: never pushed on the open-element stack.
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+
+def is_slide_container(tag, attrs):
+    """The engine's slide container (core/deck.js SLIDE_SELECTOR): `section`, `[data-slide]`, `.slide`."""
+    a = dict(attrs)
+    return tag == "section" or "data-slide" in a or "slide" in (a.get("class") or "").split()
 
 
 class SlideParser(HTMLParser):
@@ -36,9 +45,15 @@ class SlideParser(HTMLParser):
         self.cap_tag = None     # the block tag currently being captured
         self.cap_kind = None    # "head" | "para" | "bullet"
         self.buf = []           # text fragments for the current capture
+        self.notes = None       # text fragments of the speaker notes being read, or None
+        self.stack = []         # open elements: (tag, starts_a_top_level_slide)
+        self.depth = 0          # open slide containers (a slide is a TOP-LEVEL container only)
+        self.notes_depth = 0    # stack depth at which the notes aside opened
+        self.notes_owner = None # the slide the notes being read belong to (None: dropped)
 
-    def _new_slide(self):
-        self.cur = {"title": None, "blocks": []}
+    def _new_slide(self, explicit=False):
+        # `explicit`: the deck's own slide container — kept even when empty (an inserted blank slide).
+        self.cur = {"title": None, "blocks": [], "notes": "", "explicit": explicit}
         self.slides.append(self.cur)
 
     def _ensure_slide(self):
@@ -46,9 +61,29 @@ class SlideParser(HTMLParser):
             self._new_slide()
 
     def handle_starttag(self, tag, attrs):
-        if tag == "section":
+        if self.notes is not None:
+            if tag not in VOID:
+                self.stack.append((tag, False))
+            return
+        if tag == "aside" and "data-notes-for" in dict(attrs):
+            # A notes aside is never a slide, whatever its class (core/deck.js agrees — codex r3).
+            # Outside every slide it belongs to the slide being read, if any; with none it is
+            # read and dropped (`notes_owner` None), so it never opens a slide of its own.
             self._finalize()
-            self._new_slide()
+            self.notes_owner = self.cur
+            self.notes = []
+            self.stack.append((tag, False))
+            self.notes_depth = len(self.stack)
+            return
+        # A void element is never a slide (it has no content; core/deck.js agrees — codex r2).
+        slide = tag not in VOID and is_slide_container(tag, attrs)
+        if tag not in VOID:
+            self.stack.append((tag, slide))
+        if slide:
+            self.depth += 1
+            if self.depth == 1:
+                self._finalize()
+                self._new_slide(explicit=True)
             return
         if tag in BLOCKS and self.cap_tag is None:
             self._ensure_slide()
@@ -57,12 +92,37 @@ class SlideParser(HTMLParser):
             self.buf = []
 
     def handle_data(self, data):
+        if self.notes is not None:
+            self.notes.append(data)
+            return
         if self.cap_tag is not None:
             self.buf.append(data)
 
+    def _close(self, tag):
+        """Pop the open-element stack to `tag` (HTML lets end tags be omitted); False if it is not open."""
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                for _, slide in self.stack[i:]:
+                    if slide:
+                        self.depth -= 1
+                del self.stack[i:]
+                return True
+        return False
+
     def handle_endtag(self, tag):
+        if self.notes is not None:
+            if self._close(tag) and len(self.stack) < self.notes_depth:
+                self._end_notes()
+            return
+        self._close(tag)
         if tag == self.cap_tag:
             self._finalize()
+
+    def _end_notes(self):
+        if self.notes_owner is not None:
+            self.notes_owner["notes"] = "".join(self.notes).strip()
+        self.notes = None
+        self.notes_owner = None
 
     def _finalize(self):
         if self.cap_tag is None:
@@ -74,13 +134,37 @@ class SlideParser(HTMLParser):
             return
         if kind == "head" and self.cur["title"] is None:
             self.cur["title"] = unescape(text)
+            self.cur["title_at"] = len(self.cur["blocks"])  # where it sat in reading order
         else:
             self.cur["blocks"].append((kind, unescape(text)))
 
     def result(self):
         self._finalize()
-        # Drop slides with no title AND no content (e.g. a stray wrapper section).
-        return [s for s in self.slides if s["title"] or s["blocks"]]
+        if self.notes is not None:  # an aside that never closed: its text is still the notes
+            self._end_notes()
+        # The deck's own slides are all kept (an inserted slide is blank until it is written);
+        # implicit ones (content outside any slide) only when they hold something.
+        slides = [s for s in self.slides if s["explicit"] or s["title"] or s["blocks"] or s["notes"]]
+        # Once the document has slide containers, the slide count is theirs (core/deck.js topSlides —
+        # codex r5). Content after a slide already joins it (`cur` stays set); content BEFORE the first
+        # one is the only implicit slide left, and it is folded into that first slide, never dropped.
+        first = next((i for i, s in enumerate(slides) if s["explicit"]), None)
+        if first:
+            lead, e = slides[:first], slides[first]
+            # Each slide's blocks in reading order, its title back where it sat (codex r6); the first
+            # heading of the whole run becomes the title, every other block keeps its place.
+            reading = []
+            for s in lead + [e]:
+                b = list(s["blocks"])
+                if s["title"]:
+                    b.insert(s.get("title_at", 0), ("head", s["title"]))
+                reading.extend(b)
+            at = next((i for i, (kind, _) in enumerate(reading) if kind == "head"), None)
+            title = reading.pop(at)[1] if at is not None else None
+            e["title"], e["blocks"] = title, reading
+            e["notes"] = "\n".join(n for n in [s["notes"] for s in lead] + [e["notes"]] if n)
+            slides = slides[first:]
+        return slides
 
 
 def _rgb(hex_str, fallback):
@@ -165,6 +249,9 @@ def build(html, out_path, theme):
             else:
                 r.font.size = Pt(18)
                 r.font.color.rgb = theme["text"]
+
+        if slide.get("notes"):
+            s.notes_slide.notes_text_frame.text = slide["notes"]
 
     prs.save(out_path)
     return len(slides)

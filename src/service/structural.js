@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFeedback } from "../core/feedback-schema.js";
 import { regenerate } from "../core/regenerate.js";
+import { isDeckManifest } from "../core/deck.js";
 import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
@@ -66,9 +67,9 @@ export async function applyStructuralResults(dir, { version, results }, opts = {
   // strictly additive.
   // Re-apply the base theme (idempotent) so agent-produced versions stay themed (ADR-0016
   // Slice C). Anchor-free, so the INV-2 gate that just passed is unaffected.
-  const html = themed(instrument(regenerated).html, opts);
-
   let manifest = loadManifest(dir);
+  const html = themed(instrument(regenerated, { slideIds: isDeckManifest(manifest) }).html, opts);
+
   const newVersion = nextVersionNumber(manifest);
   atomicWrite(join(dir, `_v${newVersion}.html`), html);
   ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? feedbackFile ?? null }));

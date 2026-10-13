@@ -120,7 +120,9 @@ export const PAGE_WRAPPER_SELECTOR = ".page, .wi-page, [data-page]";
 /** Recorded doc styles (POST /api/docs `style`) that are documents, never decks. */
 export const DOCUMENT_STYLES = new Set(["web", "doc", "brochure"]);
 /** Recorded doc styles that declare a deck. */
-export const DECK_STYLES = new Set(["ppt", "slides"]);
+// One set: the deck styles are the deck core's (core/deck.js), re-exported for existing importers.
+import { DECK_STYLES } from "../core/deck.js";
+export { DECK_STYLES };
 
 /**
  * The `layout_source` vocabulary — which rule decided the layout (reported on the export

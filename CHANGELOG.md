@@ -4,6 +4,36 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **Deck operations and stable slide ids (DES-PRESENTATION-EDITOR-001 I-D1).** A deck's top-level slides
+  now carry a `data-slide-id`. It is assigned once and kept: an id derived from the slide's content when
+  the slide is first seen, so the same HTML always gets the same ids. A deck's slide order is its
+  document order. The positional `section-{i}` / `slide-{i}-…` anchors stay rendering details.
+  `POST /d/:doc/api/deck {expect_head, op}` applies one op and makes one version, with no model:
+  `slide-insert` (a copy of a layout slide's structure with its text cleared), `slide-duplicate`
+  (fresh anchors, notes kept), `slide-move` and `notes-set` (speaker notes, kept as text in a hidden
+  `<aside class="notes">` in the slide). `expect_head` is required. A moved head is a 409
+  `head_moved` and nothing is written. A slide the version does not have is a 422 with its reason, a
+  document that is not a deck is a 409 `not_a_deck`, and a move that changes nothing makes no
+  version. The ops go through the feedback pipeline, so lineage, the INV-2 gate and the no-phantom-
+  version rule are unchanged. The same ops are accepted as `feedback.submitted` items. That event also
+  takes an optional `expect_head`: when the head has moved, the batch is refused and a `head_moved`
+  status error is posted. The PowerPoint export writes each slide's notes to its notes page, never
+  onto the slide.
+
+### Fixed
+- **A legacy deck's no-op batch mints no version.** The unchanged check now compares against the base
+  as the pipeline would prepare it, so slide ids added on the way are not counted as a change.
+- **The PowerPoint export has the deck's slides, no more and no fewer.** The builder now reads a slide
+  the way the engine does: a top-level `section`, `[data-slide]` or `.slide` (nested ones stay part of
+  their slide), never a void element and never anything inside a notes aside. A blank inserted slide
+  is kept. Content before the first slide is folded into it in reading order instead of becoming a
+  slide of its own.
+
+### CI
+- The unit tests run with python-pptx installed (a venv), so the PowerPoint read-back tests run
+  instead of skipping.
+
 ## [0.12.0] — 2026-10-10
 
 ### Security

@@ -24,13 +24,18 @@
 //   content-edit       -> value
 //   style-edit         -> style (map) and/or class_add[] / class_remove[]
 //   structural-change  -> instruction (free text, LLM)
+//   deck ops (I-D1; the item selector is the slide's data-slide-id, see core/deck.js):
+//   slide-insert       -> after (a slide id, or "" for first); the selector is the layout slide
+//   slide-duplicate    -> (nothing)
+//   slide-move         -> after (a slide id, or "" for first)
+//   notes-set          -> value (the notes, as text; "" removes them)
 
 // js-yaml v5 is ESM-only and dropped the CommonJS default export; import the
 // namespace so `yaml.load` / `yaml.dump` keep working (the functions themselves
 // are API-compatible with v4).
 import * as yaml from "js-yaml";
 
-export const TYPES = ["content-edit", "style-edit", "structural-change", "remove"];
+export const TYPES = ["content-edit", "style-edit", "structural-change", "remove", "slide-insert", "slide-duplicate", "slide-move", "notes-set"];
 
 const ITEM_HEADING = /^##\s+item:\s*(.+?)\s*$/;
 const FIELD = /^-\s+([a-z_]+):\s*([\s\S]*)$/;
@@ -75,16 +80,25 @@ export function parseFeedback(md) {
   return { frontmatter, items };
 }
 
+// Speaker notes are free text over many lines; the file is line-based, so a notes-set value is
+// written as a JSON string and read back from one (only for that type: other values are as typed).
+function notesValue(type, v) {
+  if (type !== "notes-set" || typeof v !== "string" || !v.startsWith('"')) return v;
+  try { const s = JSON.parse(v); return typeof s === "string" ? s : v; } catch { return v; }
+}
+
 function finalizeItem({ selector, _fields }) {
   return {
     selector,
     type: _fields.type,
     instruction: _fields.instruction ?? null,
     before: _fields.before ?? null,
-    value: _fields.value ?? null,
+    value: notesValue(_fields.type, _fields.value ?? null),
     style: _fields.style ?? null,
     class_add: normalizeList(_fields.class_add),
     class_remove: normalizeList(_fields.class_remove),
+    // `after` is a slide id or "" (first); kept as a string, never YAML-parsed.
+    after: _fields.after === undefined ? null : String(_fields.after),
   };
 }
 
@@ -105,6 +119,12 @@ function validateItem(it) {
   if (it.type === "style-edit" && it.style == null && !it.class_add && !it.class_remove) {
     throw new Error(`style-edit ${it.selector}: needs 'style', 'class_add', or 'class_remove'`);
   }
+  if ((it.type === "slide-insert" || it.type === "slide-move") && it.after == null) {
+    throw new Error(`${it.type} ${it.selector}: missing 'after' (a slide id, or "" for first)`);
+  }
+  if (it.type === "notes-set" && it.value == null) {
+    throw new Error(`notes-set ${it.selector}: missing 'value'`);
+  }
   if (it.type === "structural-change" && !it.instruction) {
     throw new Error(`structural-change ${it.selector}: missing 'instruction'`);
   }
@@ -117,10 +137,11 @@ export function serializeFeedback({ frontmatter, items }) {
     const lines = [`## item: ${it.selector}`, `- type: ${it.type}`];
     if (it.instruction != null) lines.push(`- instruction: ${it.instruction}`);
     if (it.before != null) lines.push(`- before: ${it.before}`);
-    if (it.value != null) lines.push(`- value: ${it.value}`);
+    if (it.value != null) lines.push(`- value: ${it.type === "notes-set" ? JSON.stringify(String(it.value)) : it.value}`);
     if (it.style != null) lines.push(`- style: ${JSON.stringify(it.style)}`);
     if (it.class_add) lines.push(`- class_add: [${it.class_add.join(", ")}]`);
     if (it.class_remove) lines.push(`- class_remove: [${it.class_remove.join(", ")}]`);
+    if (it.after != null) lines.push(`- after: ${it.after}`);
     return lines.join("\n");
   });
   return `---\n${fm}\n---\n\n${blocks.join("\n\n")}\n`;

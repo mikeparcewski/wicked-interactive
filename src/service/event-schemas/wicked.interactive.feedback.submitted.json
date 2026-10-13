@@ -28,6 +28,10 @@
     "project_id": {
       "type": "string",
       "description": "ADDITIVE (DES-PROJECT-001 \u00a72.3): the crew project this doc is bound to. Absent for unbound docs; consumers that don't know the field ignore it."
+    },
+    "expect_head": {
+      "type": "integer",
+      "description": "ADDITIVE (I-D1): the head version the batch was made against. When present and the head has moved, the batch is refused with nothing written (a status.posted error, code head_moved)."
     }
   },
   "additionalProperties": true
