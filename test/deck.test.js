@@ -397,3 +397,15 @@ test("codex r3: a notes aside is never a slide, whatever its class (core and PPT
     assert.equal(r.stdout.trim(), "1");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("codex r4: a slide container inside a notes aside is notes, not a slide (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+  const html = '<aside class="slide notes" data-notes-for="x" hidden><section><h2>Speaker notes</h2></section></aside><section><h1>B</h1></section>';
+  assert.equal(instrument(html, { slideIds: true }).slideIds.length, 1);
+  const dir = deck(html);
+  try {
+    const { path } = exportPptx(dir, 0, { ready: READY });
+    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), "1");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

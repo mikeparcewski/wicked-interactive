@@ -53,8 +53,11 @@ const isContainer = (el) => {
   return !VOID_TAGS.has(tag) && !(tag === "aside" && el.attribs && el.attribs["data-notes-for"] !== undefined);
 };
 
+// Nothing inside a notes aside is a slide either: the builder reads all of it as notes text (codex r4).
 export function topSlides($) {
-  return $(SLIDE_SELECTOR).toArray().filter((el) => isContainer(el) && $(el).parents(SLIDE_SELECTOR).filter((_, p) => isContainer(p)).length === 0);
+  return $(SLIDE_SELECTOR).toArray().filter((el) => isContainer(el)
+    && $(el).parents("aside[data-notes-for]").length === 0
+    && $(el).parents(SLIDE_SELECTOR).filter((_, p) => isContainer(p)).length === 0);
 }
 
 /** A slide's identity-free shape: its tags and text, without anchors, ids, styles or notes. */
