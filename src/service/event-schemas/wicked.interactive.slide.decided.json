@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A slide decision was recorded (approved, changes requested, or cleared) on a version",
+  "type": "object",
+  "required": ["document_id", "slide_id", "version", "decision"],
+  "properties": {
+    "document_id": { "type": "string" },
+    "slide_id": { "type": "string" },
+    "version": { "type": "integer", "minimum": 0 },
+    "decision": { "enum": ["approved", "changes_requested", "cleared"] }
+  },
+  "additionalProperties": true
+}

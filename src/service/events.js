@@ -60,6 +60,10 @@ export const EVENT_TYPES = Object.freeze({
   // four reviewers, writes one ledger verdict each, reads them back and announces each here
   // (same additive row widening as edit.completed). Never UI-emittable: a verdict is not intent.
   "wicked.interactive.review.completed":    { subdomain: "review",     owners: [AGENT, CREW],   uiEmittable: false },
+  // I-D2 (DES-PRESENTATION-EDITOR-001): a deck's review records — a slide decision, the audience set,
+  // proposed, kept or dropped. Service-announced after the write; requested over HTTP, never the bridge.
+  "wicked.interactive.slide.decided":       { subdomain: "review",     owners: [SERVICE],       uiEmittable: false },
+  "wicked.interactive.audience.changed":    { subdomain: "review",     owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.version.created":     { subdomain: "versions",   owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.export.requested":    { subdomain: "export",     owners: [SERVICE],       uiEmittable: false },
   // Export gate (ADR-0009 follow-up): the service announces a freshly-rendered artifact with its

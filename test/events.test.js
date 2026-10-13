@@ -102,7 +102,9 @@ test("UI may only originate the conversational/intent events", () => {
     "wicked.interactive.doc.retired",
     "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.export.generated",
     "wicked.interactive.export.reviewed", "wicked.interactive.error.raised", "wicked.interactive.theme.learned",
-    "wicked.interactive.review.completed"];
+    "wicked.interactive.review.completed",
+    // I-D2: a deck's review records are announced by the service after an HTTP write, never originated over the bridge.
+    "wicked.interactive.slide.decided", "wicked.interactive.audience.changed"];
   for (const t of uiYes) assert.ok(uiEmittable(t), `${t} should be UI-emittable`);
   for (const t of uiNo) assert.ok(!uiEmittable(t), `${t} should NOT be UI-emittable`);
   // Completeness: the two hand-maintained lists must together cover EVERY known
