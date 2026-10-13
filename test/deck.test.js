@@ -296,3 +296,104 @@ test("a reorder and notes round-trip through PPTX: slide order and the notes pag
       void a;
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+
+// ── codex r1 on I-D1 ──────────────────────────────────────────────────────────────────────────────
+
+test("codex r1: an existing id that is duplicated or cannot be named is minted again; valid ids are kept", () => {
+  const { slideIds } = instrument('<section data-slide-id="same"><h2>A</h2></section><section data-slide-id="same"><h2>B</h2></section><section data-slide-id=\'x"]\'><h2>C</h2></section>', { slideIds: true });
+  assert.equal(slideIds[0], "same");
+  assert.equal(new Set(slideIds).size, 3);
+  assert.ok(slideIds.every((id) => /^[A-Za-z0-9_-]+$/.test(id)));
+});
+
+test("codex r1: moving the only slide (or any slide) to where it already is touches nothing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-deck-one-"));
+  try {
+    initWorkspace(dir, "<!doctype html><html><body><main><section><h1>Only</h1></section></main></body></html>", { style: "ppt", theme: false });
+    const [a] = idsOf(headHtml(dir));
+    const r = await op(dir, { type: "slide-move", slide: a, after: null });
+    assert.equal(r.unchanged, true);
+    assert.equal(head(dir), 0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  const d2 = deck();
+  try {
+    const [a, b] = idsOf(headHtml(d2));
+    assert.equal((await op(d2, { type: "slide-move", slide: b, after: a })).unchanged, true);
+    assert.equal(head(d2), 0);
+  } finally { rmSync(d2, { recursive: true, force: true }); }
+});
+
+test("codex r1: a legacy deck (no ids on disk) answers to the ids a client reads from it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-deck-legacy2-"));
+  try {
+    initWorkspace(dir, DECK, { theme: false });
+    saveManifest(dir, { ...loadManifest(dir), style: "ppt" });
+    assert.doesNotMatch(readVersionHtml(dir, 0), /data-slide-id/);
+    const seen = instrument(readVersionHtml(dir, 0), { slideIds: true }).slideIds;
+    const r = await op(dir, { type: "slide-move", slide: seen[0], after: seen[2] });
+    assert.equal(r.version, 1);
+    assert.deepEqual(idsOf(headHtml(dir)), [seen[1], seen[2], seen[0]]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("codex r1: notes that hold review anchors are refused as an item (422), never an INV-2 abort", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "wi-deck-oldnotes-"));
+  try {
+    initWorkspace(dir, '<section><h1>A</h1><aside class="notes" data-notes-for="x" hidden><p data-wid="note-p">Old</p></aside></section>', { style: "ppt", theme: false });
+    const [a] = idsOf(headHtml(dir));
+    const r = await op(dir, { type: "notes-set", slide: a, text: "New" });
+    assert.equal(r.refused, "notes-hold-anchors");
+    assert.equal(head(dir), 0);
+    assert.ok(collectWids(headHtml(dir)).includes("note-p"));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("codex r1: PPTX keeps a blank inserted slide, and a nested section's notes stay with their top-level slide",
+  { skip: READY.ok ? false : "python-pptx not installed (set WI_PYTHON to an interpreter that has it)" }, async () => {
+    const dir = deck("<section><h1>A</h1><p>a body</p><section><h2>Inner</h2></section><p>after inner</p></section><section><h1>B</h1></section>");
+    try {
+      const [a, b] = idsOf(headHtml(dir));
+      await op(dir, { type: "notes-set", slide: a, text: "notes for A" });
+      await op(dir, { type: "slide-insert", slide: b, after: b });
+      const { path } = exportPptx(dir, head(dir), { ready: READY });
+      const read = join(dir, "read.py");
+      writeFileSync(read, [
+        "import json, sys", "from pptx import Presentation", "p = Presentation(sys.argv[1])",
+        "print(json.dumps([{'texts': [sh.text_frame.text for sh in s.shapes if sh.has_text_frame], 'notes': s.notes_slide.notes_text_frame.text if s.has_notes_slide else ''} for s in p.slides]))",
+      ].join("\n"));
+      const r = spawnSync(READY.python, [read, path], { encoding: "utf-8" });
+      assert.equal(r.status, 0, r.stderr);
+      const slides = JSON.parse(r.stdout);
+      assert.equal(slides.length, 3, "A (with its nested section), B, and the blank inserted slide");
+      assert.equal(slides[0].texts[0], "A");
+      assert.ok(slides[0].texts.join(" ").includes("Inner") && slides[0].texts.join(" ").includes("after inner"));
+      assert.equal(slides[0].notes, "notes for A");
+      assert.equal(slides[1].texts[0], "B");
+      assert.equal(slides[1].notes, "");
+      assert.equal(slides[2].texts.join("").trim(), "");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+test("codex r2: a void element marked as a slide is not a slide (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+  const html = '<section><h1>A</h1><img data-slide class="slide" src="x.png"></section><section><h1>B</h1></section>';
+  assert.equal(instrument(html, { slideIds: true }).slideIds.length, 2);
+  const dir = deck(html);
+  try {
+    const { path } = exportPptx(dir, 0, { ready: READY });
+    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), "2");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("codex r3: a notes aside is never a slide, whatever its class (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+  const html = '<aside class="slide notes" data-notes-for="x" hidden>n</aside><section><h1>B</h1></section>';
+  assert.equal(instrument(html, { slideIds: true }).slideIds.length, 1);
+  const dir = deck(html);
+  try {
+    const { path } = exportPptx(dir, 0, { ready: READY });
+    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), "1");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

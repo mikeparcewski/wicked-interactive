@@ -103,11 +103,14 @@ export async function applyFeedbackItems(dir, { version, parent, items }, opts =
   }
   const { deterministic, structural } = splitItems(items);
   const prevHtml = readVersionHtml(dir, parent);
-  const { html: regenerated, applied, rejected, stale } = await regenerate(prevHtml, { items: deterministic }, {});
+  // A deck's slides get their stable ids (I-D1) on every version it lands — and the ops run on the
+  // base WITH them, so a legacy deck (no ids on disk yet) answers to the ids a client read from it
+  // (codex r1). The ids are deterministic, so they are the same ids the client saw.
+  const slideIds = isDeckManifest(manifest);
+  const opBase = slideIds ? instrument(prevHtml, { slideIds }).html : prevHtml;
+  const { html: regenerated, applied, rejected, stale } = await regenerate(opBase, { items: deterministic }, {});
   // Re-instrument (adds wids to new blocks, INV-1 preserves existing) then re-theme
   // (idempotent), exactly as the legacy path — so a partial version stays clickable + themed.
-  // A deck's slides get their stable ids (I-D1) on every version it lands.
-  const slideIds = isDeckManifest(manifest);
   const html = themed(instrument(regenerated, { slideIds }).html, opts);
   const feedback_file = `_v${version}.md`;
   // Extract each structural item's CURRENT fragment so the agent edits real markup (the data-wid

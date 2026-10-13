@@ -45,8 +45,16 @@ export function isSafeSlideId(id) {
 }
 
 /** The deck's slides (top-level slide containers), in document order. */
+// Elements with no content are never slides, whatever their class (the PPTX builder agrees — codex r2),
+// and neither is a slide's speaker-notes aside (`aside[data-notes-for]`: the builder reads it as notes — codex r3).
+const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+const isContainer = (el) => {
+  const tag = String(el.tagName || el.name || "").toLowerCase();
+  return !VOID_TAGS.has(tag) && !(tag === "aside" && el.attribs && el.attribs["data-notes-for"] !== undefined);
+};
+
 export function topSlides($) {
-  return $(SLIDE_SELECTOR).toArray().filter((el) => $(el).parents(SLIDE_SELECTOR).length === 0);
+  return $(SLIDE_SELECTOR).toArray().filter((el) => isContainer(el) && $(el).parents(SLIDE_SELECTOR).filter((_, p) => isContainer(p)).length === 0);
 }
 
 /** A slide's identity-free shape: its tags and text, without anchors, ids, styles or notes. */
@@ -68,7 +76,15 @@ function slideShape($, el) {
  */
 export function assignSlideIds($) {
   const slides = topSlides($);
-  const taken = new Set(slides.map((el) => $(el).attr(SLIDE_ID_ATTR)).filter(Boolean));
+  // An id that cannot be named exactly, or that a slide before it already holds, is not an identity:
+  // it is minted again (codex r1 on I-D1). Every other assigned id is kept.
+  const taken = new Set();
+  for (const el of slides) {
+    const id = $(el).attr(SLIDE_ID_ATTR);
+    if (id === undefined) continue;
+    if (!isSafeSlideId(id) || taken.has(id)) $(el).removeAttr(SLIDE_ID_ATTR);
+    else taken.add(id);
+  }
   const occurrences = new Map();
   for (const el of slides) {
     if ($(el).attr(SLIDE_ID_ATTR)) continue;
@@ -153,6 +169,12 @@ export function applyDeckOp($, item) {
     }
     case "slide-move": {
       if (after === item.selector) return { ok: false, reason: "after-is-the-slide" };
+      // Already there: nothing is touched (codex r1 — removing the only slide, then placing it "first",
+      // used to re-parent it at the document root).
+      const order = topSlides($);
+      const at = order.indexOf(target);
+      const prev = at > 0 ? $(order[at - 1]).attr(SLIDE_ID_ATTR) : null;
+      if ((after === null || after === "") ? at === 0 : prev === after) return { ok: true };
       const $t = $(target);
       $t.remove();
       placeAfter($, $t, after);
@@ -163,6 +185,9 @@ export function applyDeckOp($, item) {
       const $t = $(target);
       // Only the slide's OWN notes (a nested slide's are its own).
       const own = $t.find(NOTES_SELECTOR).toArray().filter((n) => $(n).parents(SLIDE_SELECTOR).first()[0] === target);
+      // Notes that carry review anchors (written before I-D1) cannot be replaced without dropping them
+      // (INV-2): refused as an item, so the rest of a batch still lands (codex r1).
+      if (own.some((n) => $(n).is("[data-wid]") || $(n).find("[data-wid]").length > 0)) return { ok: false, reason: "notes-hold-anchors" };
       if (text.trim() === "") { for (const n of own) $(n).remove(); return { ok: true }; }
       let $n = own.length > 0 ? $(own[0]) : null;
       for (const extra of own.slice(1)) $(extra).remove();
