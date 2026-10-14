@@ -829,6 +829,22 @@ export function findChrome(override) {
   return candidates.find((c) => existsSync(c)) || null;
 }
 
+/** Playwright renderers share the PDF export's Chromium discovery and launch flags. */
+export async function launchRenderBrowser({ importPlaywright = () => import("playwright"), chromePath } = {}) {
+  const { chromium } = await importPlaywright();
+  const args = ["--disable-gpu", "--no-sandbox"];
+  // An explicit override wins. Otherwise Playwright's own headless browser (what `doctor --install` provisions),
+  // and a system Chrome only when that bundled executable is missing.
+  if (chromePath || process.env.WI_CHROME) return chromium.launch({ headless: true, args, executablePath: findChrome(chromePath) ?? undefined });
+  try {
+    return await chromium.launch({ headless: true, args });
+  } catch (e) {
+    const fallback = findChrome();
+    if (!fallback || !/Executable doesn't exist|executable doesn.t exist/i.test(String(e?.message))) throw e;
+    return chromium.launch({ headless: true, args, executablePath: fallback });
+  }
+}
+
 /**
  * Default PDF renderer: ASYNC headless Chrome --print-to-pdf over the self-contained HTML.
  * Uses `spawn` (not spawnSync) so a multi-second render never blocks the Node event loop /

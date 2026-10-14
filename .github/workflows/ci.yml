@@ -34,6 +34,8 @@ jobs:
       # A venv, so the runner's system python stays untouched (PEP 668).
       - name: python-pptx for the PowerPoint read-back tests
         run: python3 -m venv "$RUNNER_TEMP/pptx" && "$RUNNER_TEMP/pptx/bin/pip" install --quiet python-pptx
+      - name: ffmpeg for video re-cut tests
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Unit tests
         run: npm test
         env:
@@ -81,6 +83,11 @@ jobs:
         run: npm ci
       - name: Browser acceptance (bus loop in headless Chrome)
         run: node test/e2e.mjs
+      # The deck fit check measures real layout: required here, where a browser is pinned (WI_CHROME).
+      - name: Deck fit check in headless Chrome
+        run: node --test test/deck-fit.test.js
+        env:
+          WI_REQUIRE_BROWSER: '1'
 
   # The recorder's browser is NOT provisioned by `npm install` (F-RECON-012). This job proves the
   # provisioning path a fresh install relies on, end to end and against a REAL cache dir: doctor

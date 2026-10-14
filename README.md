@@ -68,6 +68,22 @@ document's `exports/` folder and answers with a `download` URL. What it embeds, 
 The receipt covers what the markup and CSS reference. It cannot see a URL that a script builds at
 runtime, a CSS `image-set()` string, or markup inside an `<iframe srcdoc>`.
 
+## Video chapters and re-cuts
+
+Demo chapters can keep multiple takes, be reordered or trimmed, and use styled captions with
+title and end cards. Each render creates a new version with MP4, WebVTT and ASS files, so
+version history preserves earlier cuts. These routes are under each document's `/d/:doc` mount:
+
+- `GET /api/demo/cut` — read chapters, takes, style, revision and ffmpeg capabilities.
+- `POST /api/demo/takes` — record and render; optional `{chapter}` replaces one chapter's take.
+- `POST /api/demo/recut` — send `{rev, chapters, style?}` to reorder, rename, select takes or trim.
+- `PUT /api/demo/style` — send `{rev, style}` to change cards and captions and render.
+- `POST /api/deck/fit` — send `{version?, stated?}` to check slide overflow and counts at 1920×1080.
+
+Re-cut and style requests require the current `rev`; stale edits return `409 rev_moved`.
+Recording takes and rendering require ffmpeg. Caption burn-in uses libass when available;
+WebVTT sidecars are always written.
+
 ## What Studio exposes
 
 Every engine capability is reachable over this API. Not every one has a Studio action yet.

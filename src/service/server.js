@@ -23,13 +23,16 @@ import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
-import { demoPlaceholder, exportGif, RECORDINGS_DIR } from "./demo.js";
+import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
+import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut } from "./demo-cut.js";
+import { deckFit } from "./deck-fit.js";
 import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
 import {
   recorderBrowserStatus, ensureRecorderBrowser, recorderAutoInstallEnabled, missingBrowserError,
   recorderErrorPayload, RecorderError, RECORDER_ERROR_CODES,
+  classifyRecorderError,
 } from "./recorder-preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
@@ -95,7 +98,7 @@ const COMMAND_TYPES = new Set([
  * @param {string} [opts.frontendDir]
  * @param {boolean} [opts.standalone]  serve the retired SPA shell (dev only, DES-MERGE-001 §7.13)
  */
-export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
+export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {}, demoCut = {}, deckFitOptions = {} } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
 
@@ -141,6 +144,52 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     queue = run.catch(() => {});
     return run;
   }
+
+  const cutOptions = () => ({ ...demoCut, documentId, emit, tokens: resolveLearnedTheme(dir) });
+  const cutFailure = (res, e) => res.status(e.status ?? 400).json(e.payload ?? { error: e.message });
+  app.get("/api/demo/cut", async (_req, res) => {
+    try { res.json({ ...loadCut(dir), ffmpeg: await ffmpegCapabilities(demoCut) }); }
+    catch (e) { cutFailure(res, e); }
+  });
+  app.post("/api/demo/takes", (req, res) => {
+    enqueue(async () => {
+      closed(req.body ?? {}, ["chapter"], "body");
+      const chapter = req.body?.chapter;
+      if (chapter !== undefined && !loadCut(dir).chapters.some((c) => c.id === chapter)) {
+        return { status: 400, payload: { error: "invalid_body", field: "chapter" } };
+      }
+      ffmpegContext(demoCut);
+      try {
+        const result = await (demoCut.record ?? recordDemo)(dir, { ...cutOptions(), takes: true,
+          ...(chapter === undefined ? {} : { chapter }) });
+        return { status: 200, payload: { rev: result.rev, version: result.version, takes: result.takes } };
+      } catch (e) {
+        if (e.payload) throw e;
+        return { status: 400, payload: recorderErrorPayload(classifyRecorderError(e, { headless: true })) };
+      }
+    }).then((r) => res.status(r.status).json(r.payload)).catch((e) => cutFailure(res, e));
+  });
+  app.post("/api/demo/recut", (req, res) => {
+    enqueue(async () => {
+      const cut = validateRecut(loadCut(dir), req.body);
+      const { rev, version } = await renderCut(dir, cut, cutOptions());
+      return { rev, version };
+    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+  });
+  app.put("/api/demo/style", (req, res) => {
+    enqueue(async () => {
+      closed(req.body, ["rev", "style"], "body");
+      const cut = loadCut(dir);
+      checkRev(cut, req.body.rev);
+      const style = validateStyle(req.body.style, "Demo", cut.style);
+      const { rev, version } = await renderCut(dir, { ...cut, style }, cutOptions());
+      return { rev, version };
+    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+  });
+  app.post("/api/deck/fit", (req, res) => {
+    enqueue(() => deckFit(dir, req.body ?? {}, deckFitOptions))
+      .then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+  });
 
   // Plugin install-gate (ADR-0016): which sibling tools are present (+ the recorder's browser).
   app.get("/api/preflight", async (_req, res) => res.json(await preflightWithCrew({ recorderStatus })));
@@ -344,6 +393,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       : lower.endsWith(".gif") ? "image/gif"
       : lower.endsWith(".png") ? "image/png"
       : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg"
+      : lower.endsWith(".vtt") ? "text/vtt"
       : "application/octet-stream";
     res.setHeader("Content-Type", type);
     res.sendFile(filePath);
