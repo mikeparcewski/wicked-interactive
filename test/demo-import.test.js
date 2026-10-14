@@ -107,6 +107,19 @@ test("the upload streams to disk under a cap, one at a time", async (t) => {
   assert.equal(big.status, 413);
   assert.ok(!existsSync(importStagePath(dir, "two")) && !existsSync(`${importStagePath(dir, "two")}.part`));
   assert.equal((await put("three", Buffer.alloc(0))).status, 400);
+  // A body that crosses the cap mid-stream (many chunks) still gets its 413, not a reset connection.
+  const { request } = await import("node:http");
+  const status = await new Promise((resolve, reject) => {
+    const req = request({ host: "localhost", port, method: "PUT", path: "/api/demo/import/four", headers: { "Content-Type": "video/mp4" } }, (res) => { res.resume(); resolve(res.statusCode); });
+    req.on("error", reject);
+    let i = 0;
+    const tick = () => { if (i++ < 20) { req.write(Buffer.alloc(8)); setTimeout(tick, 5); } else req.end(); };
+    tick();
+  });
+  assert.equal(status, 413);
+  assert.ok(!existsSync(importStagePath(dir, "four")) && !existsSync(`${importStagePath(dir, "four")}.part`));
+  // And the document takes the next upload.
+  assert.equal((await put("five", Buffer.alloc(4))).status, 200);
 });
 
 test("a duration ffmpeg cannot read is not a video", async () => {

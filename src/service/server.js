@@ -25,8 +25,6 @@ import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
 import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError } from "./demo-cut.js";
-import { Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 /** One staged chapter's upload cap. */
 const IMPORT_UPLOAD_LIMIT = 1024 * 1024 * 1024;
 import { deckFit } from "./deck-fit.js";
@@ -194,28 +192,38 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     if (uploading) return res.status(429).json({ error: "upload_in_flight" });
     uploading = true;
     const tmp = `${target}.part`;
-    let bytes = 0;
-    const counter = new Transform({
-      transform(chunk, _enc, done) {
-        bytes += chunk.length;
-        done(bytes > uploadLimit ? Object.assign(new Error("too_large"), { tooLarge: true }) : null, chunk);
-      },
-    });
     mkdirSync(join(dir, RECORDINGS_DIR), { recursive: true });
-    pipeline(req, counter, createWriteStream(tmp))
-      .then(() => enqueue(async () => {
+    const out = createWriteStream(tmp);
+    let bytes = 0;
+    let settled = false;
+    const finish = (fn) => { if (settled) return; settled = true; uploading = false; fn(); };
+    const fail = (e) => finish(() => { out.destroy(); rmSync(tmp, { force: true }); cutFailure(res, e); });
+    // Over the cap: stop writing, answer 413 on a connection that will close, and drain the rest of the body
+    // (destroying the request would reset the socket before the answer reached the caller).
+    req.on("data", (chunk) => {
+      if (settled) return;
+      bytes += chunk.length;
+      if (bytes <= uploadLimit) return;
+      finish(() => {
+        req.unpipe(out);
+        out.destroy();
+        rmSync(tmp, { force: true });
+        res.status(413).set("Connection", "close").json({ error: "too_large", limit: uploadLimit });
+        req.resume();
+      });
+    });
+    req.on("error", fail);
+    out.on("error", fail);
+    out.on("finish", () => {
+      if (settled) return;
+      enqueue(async () => {
         if (bytes === 0) throw new CutError("invalid_body", "body");
         if (existsSync(join(dir, "demo-cut.json"))) throw new CutError("cut_exists", null, 409);
         renameSync(tmp, target);
         return { chapter: req.params.chapter, bytes };
-      }))
-      .then((r) => res.json(r))
-      .catch((e) => {
-        rmSync(tmp, { force: true });
-        if (e?.tooLarge) return res.status(413).json({ error: "too_large", limit: uploadLimit });
-        return cutFailure(res, e);
-      })
-      .finally(() => { uploading = false; });
+      }).then((r) => finish(() => res.json(r)), fail);
+    });
+    req.pipe(out);
   });
   app.post("/api/demo/import", (req, res) => {
     enqueue(async () => {
