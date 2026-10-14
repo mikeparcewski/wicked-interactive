@@ -26,6 +26,7 @@ import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
 import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut } from "./demo-cut.js";
 import { deckFit } from "./deck-fit.js";
+import { effectiveTheme, fetchSkin } from "./video-skin.js";
 import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
 import { exportPptx } from "./pptx.js";
 import { preflightWithCrew } from "./preflight.js";
@@ -147,9 +148,17 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
 
   const cutOptions = () => ({ ...demoCut, documentId, emit, tokens: resolveLearnedTheme(dir) });
   const cutFailure = (res, e) => res.status(e.status ?? 400).json(e.payload ?? { error: e.message });
+  // The cut, what this ffmpeg can do, and the colours the next render will use: the studio skin's (with its
+  // source) unless the style chose custom colours.
   app.get("/api/demo/cut", async (_req, res) => {
-    try { res.json({ ...loadCut(dir), ffmpeg: await ffmpegCapabilities(demoCut) }); }
-    catch (e) { cutFailure(res, e); }
+    try {
+      const cut = loadCut(dir);
+      const style = validateStyle({}, "Demo", cut.style);
+      const skin = style.theme.palette === "custom" ? null : await (demoCut.fetchSkin ?? fetchSkin)();
+      res.json({ ...cut, style, ffmpeg: await ffmpegCapabilities(demoCut),
+        skin: skin && { source: skin.source, theme: skin.theme, palette: skin.palette },
+        resolvedTheme: effectiveTheme(style.theme, skin) });
+    } catch (e) { cutFailure(res, e); }
   });
   app.post("/api/demo/takes", (req, res) => {
     enqueue(async () => {

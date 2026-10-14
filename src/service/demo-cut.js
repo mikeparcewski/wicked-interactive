@@ -8,6 +8,7 @@ import { themeCss } from "../core/theme.js";
 import { nextVersionNumber, recordVersion } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
 import { highestVersionOnDisk } from "./workspace.js";
+import { effectiveTheme, fetchSkin, NEUTRAL_PALETTE } from "./video-skin.js";
 import { findFfmpeg, storyboard, RECORDINGS_DIR } from "./demo.js";
 import { themed, resolveThemeTokens } from "./theme-source.js";
 
@@ -36,7 +37,10 @@ export function defaultStyle(rawTitle = "Demo") {
     theme: {
       titleCard: { on: true, title, subtitle: "", seconds: 2.5 },
       endCard: { on: true, title: "Thanks for watching", subtitle: "", seconds: 2.5 },
-      background: "#0b1020", foreground: "#ffffff", accent: "#0891b2", font: "Inter",
+      // "skin" (the default): the studio skin's colours and face at every render (video-skin.js). "custom": the
+      // colours below, which start as the neutral fallback, not a brand palette.
+      palette: "skin",
+      background: NEUTRAL_PALETTE.canvas, foreground: NEUTRAL_PALETTE.ink, accent: NEUTRAL_PALETTE.accent, font: "system-ui",
     },
     captions: { on: true, burnIn: true, position: "bottom", size: 36, maxLines: 2, wrapChars: 42, style: "bar" },
   };
@@ -45,7 +49,13 @@ export function defaultStyle(rawTitle = "Demo") {
 /** Optional fields merge into the existing style; unknown keys fail at every depth. */
 export function validateStyle(value, title = "Demo", base = defaultStyle(title)) {
   closed(value, ["theme", "captions"], "style");
-  const result = structuredClone(base);
+  // A style stored before a key existed (palette) reads with that key's default.
+  const fresh = defaultStyle(title);
+  const result = structuredClone({ ...fresh, ...base, theme: { ...fresh.theme, ...base.theme }, captions: { ...fresh.captions, ...base.captions } });
+  // Choosing a colour or face is choosing custom colours, unless the body says which palette it means.
+  if (value.theme && value.theme.palette === undefined && ["background", "foreground", "accent", "font"].some((k) => value.theme[k] !== undefined)) {
+    result.theme.palette = "custom";
+  }
   if (value.theme !== undefined) {
     closed(value.theme, Object.keys(result.theme), "style.theme");
     for (const [key, v] of Object.entries(value.theme)) {
@@ -60,8 +70,10 @@ export function validateStyle(value, title = "Demo", base = defaultStyle(title))
         }
         Object.assign(result.theme[key], v);
       } else {
-        if (key === "font") {
-          if (!["Inter", "Roboto", "Source Sans 3", "IBM Plex Sans", "system-ui"].includes(v)) bad(field);
+        if (key === "palette") {
+          if (v !== "skin" && v !== "custom") bad(field);
+        } else if (key === "font") {
+          if (!["Archivo", "Inter", "Roboto", "Source Sans 3", "IBM Plex Sans", "system-ui"].includes(v)) bad(field);
         } else { text(v, field); if (!isColor(v)) bad(field); }
         result.theme[key] = v;
       }
@@ -294,6 +306,11 @@ export async function renderCut(dir, cut, opts = {}) {
   mkdirSync(rec, { recursive: true });
   const tokens = opts.tokens ?? resolveThemeTokens(opts.theme);
   const vars = { ...Object.fromEntries([...themeCss(tokens).matchAll(/(--wi-[a-z-]+):([^;{}]+);/g)].map((m) => [m[1], m[2]])), ...opts.colorVars };
+  // The colours this render uses: the studio skin's by default (fetched now, so a changed skin is followed), the
+  // style's own when it chose custom. The stored cut keeps the choice, not the resolved colours.
+  const skin = cut.style.theme.palette === "custom" ? null : (opts.skin ?? await (opts.fetchSkin ?? fetchSkin)());
+  const stored = cut;
+  cut = { ...cut, style: { ...cut.style, theme: effectiveTheme(cut.style.theme, skin) } };
   const { titleCard, endCard } = cut.style.theme;
   const cardText = [titleCard, endCard].some((c) => c.on && (c.title || c.subtitle));
   atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
@@ -310,9 +327,11 @@ export async function renderCut(dir, cut, opts = {}) {
   const landed = recordVersion(manifest, { version, parent }).manifest;
   landed.versions.at(-1).render = { mp4: `_v${version}.mp4`, vtt: `_v${version}.vtt`, ass: `_v${version}.ass`,
     burnIn: cut.style.captions.burnIn && !capabilities.burnIn ? "unavailable" : burnIn,
-    cardText: cardText && !capabilities.burnIn ? "unavailable" : cardText };
+    cardText: cardText && !capabilities.burnIn ? "unavailable" : cardText,
+    palette: { source: skin === null ? "custom" : skin.source, theme: skin?.theme ?? null, background: cut.style.theme.background,
+      foreground: cut.style.theme.foreground, accent: cut.style.theme.accent, font: cut.style.theme.font } };
   saveManifest(dir, landed);
-  const saved = { ...cut, rev: cut.rev + 1, version };
+  const saved = { ...stored, rev: stored.rev + 1, version };
   atomicWrite(join(dir, CUT_FILE), JSON.stringify(saved, null, 2));
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
   opts.emit?.("wicked.interactive.version.created", { version, parent, kind: "demo", html_file: `_v${version}.html` });

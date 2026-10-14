@@ -19,6 +19,7 @@ import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
 import { RecorderError, RECORDER_ERROR_CODES } from "./recorder-preflight.js";
+import { fetchSkin, NEUTRAL_PALETTE } from "./video-skin.js";
 
 export const RECORDINGS_DIR = "recordings";
 // The agent authors this file: a plain ES module exporting `meta` (url, title, steps[])
@@ -294,6 +295,8 @@ export async function recordDemo(dir, opts = {}) {
     const clampHold = (ms) => Math.min(CAPTION_HOLD_CAP_MS, Math.max(0, ms));
     const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? clampHold(meta.captionHoldMs) : DEFAULT_HOLD_MS;
     const captionPosition = meta.captionPosition === "top" ? "top" : "bottom";
+    // The narration band takes the studio skin's colours (neutral when crew has none to give).
+    const captionPalette = captionsOn ? (opts.skin ?? await (opts.fetchSkin ?? fetchSkin)()).palette : NEUTRAL_PALETTE;
 
     // `step` annotates a labelled segment so the storyboard can show ordered, timed steps
     // and so a failure points at the exact step. The agent wraps each action in step().
@@ -311,7 +314,7 @@ export async function recordDemo(dir, opts = {}) {
       const showCap = captionsOn && say.length > 0;
       const hold = Number.isFinite(sopts.holdMs) ? clampHold(sopts.holdMs) : defaultHoldMs;
 
-      if (showCap) await showCaption(page, say, captionPosition);          // before the action (same-page steps)
+      if (showCap) await showCaption(page, say, captionPosition, captionPalette);          // before the action (same-page steps)
 
       // Tag a failing step so the typed error (recorder-preflight.classifyRecorderError) can
       // say WHICH step broke — the storyboard highlight the user refines. A blocked write is the
@@ -329,7 +332,7 @@ export async function recordDemo(dir, opts = {}) {
       // Re-assert after the action (fn may have navigated and wiped the node), then pause so
       // the viewer reads it against the settled, resulting view.
       if (showCap) {
-        await showCaption(page, say, captionPosition);
+        await showCaption(page, say, captionPosition, captionPalette);
         if (hold > 0) await page.waitForTimeout(hold);
       }
       // Keep the reading pause while suppressing DOM overlays in chapter recordings.
@@ -487,9 +490,11 @@ export const CAPTION_HOLD_CAP_MS = 3000;
 // slimmer, so the UI the narration describes stays readable underneath — the opaque 70 px bar
 // covered the dashboard's bottom row and a form's submit button for the whole clip (#211).
 // `position` is "bottom" (default) or "top" for pages whose narrated UI lives at the bottom.
-async function showCaption(page, text, position = "bottom") {
+async function showCaption(page, text, position = "bottom", palette = NEUTRAL_PALETTE) {
   try {
-    await page.evaluate(({ id, text, position }) => {
+    await page.evaluate(({ id, text, position, palette }) => {
+      // The band in the studio skin's colours (its canvas, translucent; its ink; an accent rule).
+      const rgba = (hex, a) => `rgba(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(",")},${a})`;
       let bar = document.getElementById(id);
       const top = position === "top";
       if (!bar) {
@@ -499,16 +504,16 @@ async function showCaption(page, text, position = "bottom") {
         bar.style.cssText =
           "position:fixed;left:0;right:0;" + (top ? "top:0;" : "bottom:0;") + "z-index:2147483647;" +
           "padding:12px 32px;box-sizing:border-box;text-align:center;pointer-events:none;" +
-          "background:rgba(15,23,42,.62);" +
-          "color:#fff;font:600 20px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
-          "letter-spacing:.01em;text-shadow:0 1px 2px rgba(0,0,0,.6);" +
-          (top ? "border-bottom" : "border-top") + ":1px solid rgba(255,255,255,.18);" +
+          "background:" + rgba(palette.canvas, 0.78) + ";" +
+          "color:" + palette.ink + ";font:600 20px/1.35 '" + palette.font + "',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;" +
+          "letter-spacing:.01em;text-shadow:0 1px 2px " + rgba(palette.canvas, 0.6) + ";" +
+          (top ? "border-bottom" : "border-top") + ":2px solid " + palette.accent + ";" +
           "opacity:0;transform:translateY(" + (top ? "-8px" : "8px") + ");transition:opacity .28s ease,transform .28s ease;";
         (document.body || document.documentElement).appendChild(bar);
       }
       bar.textContent = text;
       requestAnimationFrame(() => { bar.style.opacity = "1"; bar.style.transform = "translateY(0)"; });
-    }, { id: CAPTION_ID, text, position });
+    }, { id: CAPTION_ID, text, position, palette });
   } catch { /* page navigating / no document yet — skip the caption for this beat */ }
 }
 
