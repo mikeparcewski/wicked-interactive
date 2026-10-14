@@ -70,8 +70,12 @@ test("fit validates version and stated count and closes the browser on measureme
   await assert.rejects(deckFit(dir, {}, fake), /measure failed/);
   assert.equal(fake.state.closed, 1);
 });
-test("the render browser: an override wins; else Playwright's own; a system Chrome only when the bundled one is missing", async () => {
+test("the render browser: an override wins; else Playwright's own; a system Chrome only when the bundled one is missing", async (t) => {
   const { launchRenderBrowser } = await import("../src/service/export.js");
+  // The acceptance job pins WI_CHROME: this test sets the environment it asserts on, and restores it.
+  const pinned = process.env.WI_CHROME;
+  delete process.env.WI_CHROME;
+  t.after(() => { if (pinned === undefined) delete process.env.WI_CHROME; else process.env.WI_CHROME = pinned; });
   const seen = [];
   const playwright = (failWith) => async () => ({ chromium: { launch: async (o) => {
     seen.push(o.executablePath ?? "bundled");
@@ -83,6 +87,9 @@ test("the render browser: an override wins; else Playwright's own; a system Chro
   await launchRenderBrowser({ importPlaywright: playwright(null), chromePath: process.execPath });
   assert.equal(seen.at(-1), process.execPath);
   await assert.rejects(launchRenderBrowser({ importPlaywright: playwright("some other launch failure") }), /other launch failure/);
+  process.env.WI_CHROME = process.execPath;
+  await launchRenderBrowser({ importPlaywright: playwright(null) });
+  assert.equal(seen.at(-1), process.execPath);
 });
 test("a measurement that never returns times out, and the browser is closed", async (t) => {
   const dir = fixture(t), fake = fakePlaywright();
