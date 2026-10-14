@@ -1,5 +1,5 @@
 // Chapter takes and write-once renders of the current edit decision list.
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { isColor } from "../core/theme-grammar.js";
@@ -381,4 +381,86 @@ export async function extractTakes(dir, recording, steps, duration, meta, opts =
   }
   const result = await renderCut(dir, cut, opts);
   return { ...result, takes: added };
+}
+
+// ── Import: a cut from takes recorded elsewhere (a crew demo run's segments) ────────────────────────────────
+// The caller stages each chapter's video (PUT /api/demo/import/:chapter, the bytes), then names the chapters
+// (POST /api/demo/import): each staged file becomes that chapter's first take, whole, and the cut renders once.
+const IMPORT_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
+const MAX_IMPORT_CHAPTERS = 60;
+
+/** Where a chapter's staged video waits for the import (a plain basename under recordings/). */
+export function importStagePath(dir, chapter) {
+  if (typeof chapter !== "string" || !IMPORT_ID.test(chapter)) bad("chapter");
+  return join(dir, RECORDINGS_DIR, `_import-${chapter}.mp4`);
+}
+
+/** Stage one chapter's video bytes (atomic: a temp file, then a rename). The HTTP route streams to disk instead
+ *  (server.js); this in-memory form is for callers inside the process. */
+export function stageImport(dir, chapter, bytes) {
+  const target = importStagePath(dir, chapter);
+  if (!Buffer.isBuffer(bytes) || bytes.length === 0) bad("body");
+  if (existsSync(join(dir, CUT_FILE))) throw new CutError("cut_exists", null, 409, { rev: loadCut(dir).rev });
+  mkdirSync(join(dir, RECORDINGS_DIR), { recursive: true });
+  const tmp = `${target}.part`;
+  writeFileSync(tmp, bytes);
+  renameSync(tmp, target);
+  return { chapter, bytes: bytes.length };
+}
+
+/** A file's duration in seconds, from ffmpeg's own header read (`-i` with no output exits non-zero; that is fine).
+ *  Only the input's duration line counts (two spaces, `Duration: …, start|bitrate`), never a metadata value that
+ *  merely contains the word, and the file must carry a video stream. */
+export async function probeDuration(runner, file) {
+  const r = await runner(["-hide_banner", "-i", file]);
+  const err = String(r.stderr);
+  const m = /^ {2}Duration: (\d+):(\d{2}):(\d{2}(?:\.\d+)?), (?:start|bitrate):/m.exec(err);
+  if (!m || !/^ {2}Stream #\d+:\d+.*: Video: /m.test(err)) throw new CutError("not_a_video", null, 400, { detail: err.slice(-300) });
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+/** Build the first cut from the staged chapters and render it. Refused once the document has a cut. */
+export async function importCut(dir, body, opts = {}) {
+  closed(body, ["title", "url", "chapters"], "body");
+  if (existsSync(join(dir, CUT_FILE))) throw new CutError("cut_exists", null, 409, { rev: loadCut(dir).rev });
+  const title = body.title ?? "Demo";
+  text(title, "title");
+  if (body.url !== undefined && (typeof body.url !== "string" || body.url.length > 2000 || /[\r\n]/.test(body.url))) bad("url");
+  if (!Array.isArray(body.chapters) || body.chapters.length < 1 || body.chapters.length > MAX_IMPORT_CHAPTERS) bad("chapters");
+  const seen = new Set();
+  const named = body.chapters.map((c, i) => {
+    const field = `chapters.${i}`;
+    closed(c, ["id", "title", "say"], field);
+    importStagePath(dir, c.id);
+    if (seen.has(c.id)) bad(`${field}.id`);
+    seen.add(c.id);
+    text(c.title, `${field}.title`);
+    if (c.say !== undefined && (typeof c.say !== "string" || c.say.length > 2000)) bad(`${field}.say`);
+    if (!existsSync(importStagePath(dir, c.id))) throw new CutError("not_staged", `${field}.id`, 409);
+    return c;
+  });
+  const ctx = ffmpegContext(opts);
+  // Every chapter is probed BEFORE any file moves, and the staged files come back if the render fails: a refused
+  // or failed import can be retried as it is, without uploading again.
+  const durations = [];
+  for (const [i, c] of named.entries()) {
+    const seconds = await probeDuration(ctx.runner, importStagePath(dir, c.id));
+    if (!(seconds >= 0.5)) throw new CutError("too_short", `chapters.${i}.id`, 400);
+    durations.push(seconds);
+  }
+  const cut = { rev: 0, version: null, chapters: [], takes: {}, style: defaultStyle(title), url: body.url ?? "" };
+  const moved = [];
+  try {
+    for (const [i, c] of named.entries()) {
+      const file = `_take-${c.id}-1.mp4`;
+      renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
+      moved.push([c.id, file]);
+      cut.takes[c.id] = [{ file, durationSec: durations[i], at: new Date().toISOString() }];
+      cut.chapters.push({ id: c.id, title: c.title, say: (c.say ?? "").replace(/[\r\n]+/g, " "), take: file, inSec: 0, outSec: durations[i] });
+    }
+    return await renderCut(dir, cut, opts);
+  } catch (e) {
+    for (const [id, file] of moved) renameSync(join(dir, RECORDINGS_DIR, file), importStagePath(dir, id));
+    throw e;
+  }
 }

@@ -12,7 +12,7 @@ import express from "express";
 import { basename, dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
@@ -24,7 +24,9 @@ import { isRetired as manifestRetired, retireManifest } from "../core/versions.j
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
-import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut } from "./demo-cut.js";
+import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError } from "./demo-cut.js";
+/** One staged chapter's upload cap. */
+const IMPORT_UPLOAD_LIMIT = 1024 * 1024 * 1024;
 import { deckFit } from "./deck-fit.js";
 import { effectiveTheme, fetchSkin } from "./video-skin.js";
 import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
@@ -177,6 +179,57 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         return { status: 400, payload: recorderErrorPayload(classifyRecorderError(e, { headless: true })) };
       }
     }).then((r) => res.status(r.status).json(r.payload)).catch((e) => cutFailure(res, e));
+  });
+  // Import a cut from takes recorded elsewhere: stage each chapter's bytes, then name the chapters (one render).
+  // The upload streams to a temp file (never buffered whole), at most IMPORT_UPLOAD_LIMIT bytes, one upload at a
+  // time per document; the rename into place runs in the document's queue, after the cut-exists check.
+  let uploading = false;
+  const uploadLimit = demoCut.uploadLimit ?? IMPORT_UPLOAD_LIMIT;
+  app.put("/api/demo/import/:chapter", (req, res) => {
+    let target;
+    try { target = importStagePath(dir, req.params.chapter); } catch (e) { return cutFailure(res, e); }
+    if (existsSync(join(dir, "demo-cut.json"))) return res.status(409).json({ error: "cut_exists" });
+    if (uploading) return res.status(429).json({ error: "upload_in_flight" });
+    uploading = true;
+    const tmp = `${target}.part`;
+    mkdirSync(join(dir, RECORDINGS_DIR), { recursive: true });
+    const out = createWriteStream(tmp);
+    let bytes = 0;
+    let settled = false;
+    const finish = (fn) => { if (settled) return; settled = true; uploading = false; fn(); };
+    const fail = (e) => finish(() => { out.destroy(); rmSync(tmp, { force: true }); cutFailure(res, e); });
+    // Over the cap: stop writing, answer 413 on a connection that will close, and drain the rest of the body
+    // (destroying the request would reset the socket before the answer reached the caller).
+    req.on("data", (chunk) => {
+      if (settled) return;
+      bytes += chunk.length;
+      if (bytes <= uploadLimit) return;
+      finish(() => {
+        req.unpipe(out);
+        out.destroy();
+        rmSync(tmp, { force: true });
+        res.status(413).set("Connection", "close").json({ error: "too_large", limit: uploadLimit });
+        req.resume();
+      });
+    });
+    req.on("error", fail);
+    out.on("error", fail);
+    out.on("finish", () => {
+      if (settled) return;
+      enqueue(async () => {
+        if (bytes === 0) throw new CutError("invalid_body", "body");
+        if (existsSync(join(dir, "demo-cut.json"))) throw new CutError("cut_exists", null, 409);
+        renameSync(tmp, target);
+        return { chapter: req.params.chapter, bytes };
+      }).then((r) => finish(() => res.json(r)), fail);
+    });
+    req.pipe(out);
+  });
+  app.post("/api/demo/import", (req, res) => {
+    enqueue(async () => {
+      const { rev, version } = await importCut(dir, req.body, cutOptions());
+      return { rev, version };
+    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
   app.post("/api/demo/recut", (req, res) => {
     enqueue(async () => {

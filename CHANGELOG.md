@@ -4,6 +4,9 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **Import a cut from takes recorded elsewhere (`PUT /api/demo/import/:chapter`, `POST /api/demo/import`).** A caller (wicked-crew, for a demo run's segments) stages each chapter's video bytes, then names the chapters: `{title?, url?, chapters: [{id, title, say?}]}`. Each staged file becomes that chapter's first take, whole (its duration read by ffmpeg), and the cut renders once, following the studio skin. Only a document without a cut accepts an import (`409 cut_exists` otherwise), and a chapter that was never staged gets `409 not_staged`.
+
 ### Changed
 - **The demo video follows the studio skin by default.** Video style gains `theme.palette`: `"skin"` (the default) or `"custom"`. With `"skin"`, each render reads wicked-crew's `GET /api/v1/appearance/video-palette` (the operator's Workspace → Theme) and uses its canvas, ink, accent and typeface for the title and end cards, captions and accent, instead of a fixed palette. The recorder's narration band does the same. When crew gives no answer, a neutral graphite fallback is used. `GET /api/demo/cut` reports the skin and the resolved colours. Choosing a colour or font switches the style to `"custom"`. `Archivo` joins the font list.
 
