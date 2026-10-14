@@ -24,7 +24,7 @@ import { isRetired as manifestRetired, retireManifest } from "../core/versions.j
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
-import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut } from "./demo-cut.js";
+import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, stageImport, importCut } from "./demo-cut.js";
 import { deckFit } from "./deck-fit.js";
 import { effectiveTheme, fetchSkin } from "./video-skin.js";
 import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
@@ -177,6 +177,17 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         return { status: 400, payload: recorderErrorPayload(classifyRecorderError(e, { headless: true })) };
       }
     }).then((r) => res.status(r.status).json(r.payload)).catch((e) => cutFailure(res, e));
+  });
+  // Import a cut from takes recorded elsewhere: stage each chapter's bytes, then name the chapters (one render).
+  app.put("/api/demo/import/:chapter", express.raw({ type: () => true, limit: "1gb" }), (req, res) => {
+    enqueue(async () => stageImport(dir, req.params.chapter, req.body))
+      .then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+  });
+  app.post("/api/demo/import", (req, res) => {
+    enqueue(async () => {
+      const { rev, version } = await importCut(dir, req.body, cutOptions());
+      return { rev, version };
+    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
   app.post("/api/demo/recut", (req, res) => {
     enqueue(async () => {
