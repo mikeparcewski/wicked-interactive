@@ -26,7 +26,7 @@ function encoder() {
   const runner = (args) => {
     calls.push(args);
     if (args.includes("-filters")) return { status: 0, stderr: " ... ass V->V Render ASS subtitles\n" };
-    if (args.length === 3 && args[1] === "-i") return { status: 1, stderr: "Input #0\n  Duration: 00:00:03.50, start: 0.000000\n" };
+    if (args.length === 3 && args[1] === "-i") return { status: 1, stderr: "Input #0, mov,mp4:\n  Duration: 00:00:03.50, start: 0.000000, bitrate: 5 kb/s\n  Stream #0:0(und): Video: h264, yuv420p\n" };
     writeFileSync(args.at(-1), "encoded");
     return { status: 0, stderr: "" };
   };
@@ -70,6 +70,43 @@ test("the import refuses unknown fields, duplicates, unstaged chapters and a bad
   ]) await assert.rejects(importCut(dir, body, { runner: fake.runner }), (e) => e.payload.field === field, JSON.stringify(body));
   await assert.rejects(importCut(dir, { chapters: [{ id: "two", title: "x" }] }, { runner: fake.runner }), (e) => e.status === 409 && e.payload.error === "not_staged");
   assert.ok(existsSync(importStagePath(dir, "one")), "a refused import leaves the staged files");
+});
+
+test("a refused or failed import leaves the staged files, so the same POST can be retried", async (t) => {
+  const dir = fixture(t);
+  stageImport(dir, "open", Buffer.from("a"));
+  stageImport(dir, "close", Buffer.from("b"));
+  const body = { chapters: [{ id: "open", title: "Open" }, { id: "close", title: "Close" }] };
+  // The second chapter is too short: nothing moves.
+  const short = (args) => (args[1] === "-i" && args[2].endsWith("_import-close.mp4")
+    ? { status: 1, stderr: "  Duration: 00:00:00.20, start: 0.000000, bitrate: 1 kb/s\n  Stream #0:0: Video: h264\n" } : encoder().runner(args));
+  await assert.rejects(importCut(dir, body, { runner: short, skin: NEUTRAL }), (e) => e.payload.error === "too_short");
+  assert.ok(existsSync(importStagePath(dir, "open")) && existsSync(importStagePath(dir, "close")));
+  // The encoder fails mid-render: the takes go back to staging, no cut is written.
+  const failing = (args) => (args.includes("-filter_complex") ? { status: 1, stderr: "boom" } : encoder().runner(args));
+  await assert.rejects(importCut(dir, body, { runner: failing, skin: NEUTRAL }), (e) => e.payload.error === "ffmpeg_failed");
+  assert.ok(existsSync(importStagePath(dir, "open")) && existsSync(importStagePath(dir, "close")) && !existsSync(join(dir, "demo-cut.json")));
+  // The retry succeeds as it is.
+  assert.equal((await importCut(dir, body, { runner: encoder().runner, skin: NEUTRAL })).version, 1);
+});
+
+test("only ffmpeg's own duration line counts, never metadata that contains the word; a file with no video stream is not a video", async () => {
+  const stderr = "Input #0, mov:\n  Metadata:\n    title           : Duration: 00:00:00.50, start: 0\n  Duration: 00:01:05.25, start: 0.000000, bitrate: 9 kb/s\n  Stream #0:0(und): Video: h264\n";
+  assert.equal(await probeDuration(() => ({ status: 1, stderr }), "/x"), 65.25);
+  await assert.rejects(probeDuration(() => ({ status: 1, stderr: "  Duration: 00:00:05.00, start: 0.000000, bitrate: 1 kb/s\n  Stream #0:0: Audio: aac\n" }), "/x"), (e) => e.payload.error === "not_a_video");
+});
+
+test("the upload streams to disk under a cap, one at a time", async (t) => {
+  const dir = fixture(t);
+  const svc = createServer({ dir, demoCut: { runner: encoder().runner, fetchSkin: async () => NEUTRAL, uploadLimit: 16 } });
+  const port = await svc.start(0);
+  t.after(() => svc.stop());
+  const put = (id, body) => fetch(`http://localhost:${port}/api/demo/import/${id}`, { method: "PUT", headers: { "Content-Type": "video/mp4" }, body });
+  assert.equal((await put("one", Buffer.alloc(10))).status, 200);
+  const big = await put("two", Buffer.alloc(64));
+  assert.equal(big.status, 413);
+  assert.ok(!existsSync(importStagePath(dir, "two")) && !existsSync(`${importStagePath(dir, "two")}.part`));
+  assert.equal((await put("three", Buffer.alloc(0))).status, 400);
 });
 
 test("a duration ffmpeg cannot read is not a video", async () => {

@@ -395,7 +395,8 @@ export function importStagePath(dir, chapter) {
   return join(dir, RECORDINGS_DIR, `_import-${chapter}.mp4`);
 }
 
-/** Stage one chapter's video bytes (atomic: a temp file, then a rename). */
+/** Stage one chapter's video bytes (atomic: a temp file, then a rename). The HTTP route streams to disk instead
+ *  (server.js); this in-memory form is for callers inside the process. */
 export function stageImport(dir, chapter, bytes) {
   const target = importStagePath(dir, chapter);
   if (!Buffer.isBuffer(bytes) || bytes.length === 0) bad("body");
@@ -407,11 +408,14 @@ export function stageImport(dir, chapter, bytes) {
   return { chapter, bytes: bytes.length };
 }
 
-/** A file's duration in seconds, from ffmpeg's own header read (`-i` with no output exits non-zero; that is fine). */
+/** A file's duration in seconds, from ffmpeg's own header read (`-i` with no output exits non-zero; that is fine).
+ *  Only the input's duration line counts (two spaces, `Duration: …, start|bitrate`), never a metadata value that
+ *  merely contains the word, and the file must carry a video stream. */
 export async function probeDuration(runner, file) {
   const r = await runner(["-hide_banner", "-i", file]);
-  const m = /Duration: (\d+):(\d{2}):(\d{2}(?:\.\d+)?)/.exec(String(r.stderr));
-  if (!m) throw new CutError("not_a_video", null, 400, { detail: String(r.stderr).slice(-300) });
+  const err = String(r.stderr);
+  const m = /^ {2}Duration: (\d+):(\d{2}):(\d{2}(?:\.\d+)?), (?:start|bitrate):/m.exec(err);
+  if (!m || !/^ {2}Stream #\d+:\d+.*: Video: /m.test(err)) throw new CutError("not_a_video", null, 400, { detail: err.slice(-300) });
   return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
 }
 
@@ -436,15 +440,27 @@ export async function importCut(dir, body, opts = {}) {
     return c;
   });
   const ctx = ffmpegContext(opts);
-  const cut = { rev: 0, version: null, chapters: [], takes: {}, style: defaultStyle(title), url: body.url ?? "" };
-  for (const c of named) {
-    const staged = importStagePath(dir, c.id);
-    const seconds = await probeDuration(ctx.runner, staged);
-    if (!(seconds >= 0.5)) throw new CutError("too_short", `chapters.${named.indexOf(c)}.id`, 400);
-    const file = `_take-${c.id}-1.mp4`;
-    renameSync(staged, join(dir, RECORDINGS_DIR, file));
-    cut.takes[c.id] = [{ file, durationSec: seconds, at: new Date().toISOString() }];
-    cut.chapters.push({ id: c.id, title: c.title, say: (c.say ?? "").replace(/[\r\n]+/g, " "), take: file, inSec: 0, outSec: seconds });
+  // Every chapter is probed BEFORE any file moves, and the staged files come back if the render fails: a refused
+  // or failed import can be retried as it is, without uploading again.
+  const durations = [];
+  for (const [i, c] of named.entries()) {
+    const seconds = await probeDuration(ctx.runner, importStagePath(dir, c.id));
+    if (!(seconds >= 0.5)) throw new CutError("too_short", `chapters.${i}.id`, 400);
+    durations.push(seconds);
   }
-  return renderCut(dir, cut, opts);
+  const cut = { rev: 0, version: null, chapters: [], takes: {}, style: defaultStyle(title), url: body.url ?? "" };
+  const moved = [];
+  try {
+    for (const [i, c] of named.entries()) {
+      const file = `_take-${c.id}-1.mp4`;
+      renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
+      moved.push([c.id, file]);
+      cut.takes[c.id] = [{ file, durationSec: durations[i], at: new Date().toISOString() }];
+      cut.chapters.push({ id: c.id, title: c.title, say: (c.say ?? "").replace(/[\r\n]+/g, " "), take: file, inSec: 0, outSec: durations[i] });
+    }
+    return await renderCut(dir, cut, opts);
+  } catch (e) {
+    for (const [id, file] of moved) renameSync(join(dir, RECORDINGS_DIR, file), importStagePath(dir, id));
+    throw e;
+  }
 }
