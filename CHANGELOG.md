@@ -4,6 +4,9 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Changed
+- **The demo video follows the studio skin by default.** Video style gains `theme.palette`: `"skin"` (the default) or `"custom"`. With `"skin"`, each render reads wicked-crew's `GET /api/v1/appearance/video-palette` (the operator's Workspace → Theme) and uses its canvas, ink, accent and typeface for the title and end cards, captions and accent, instead of a fixed palette. The recorder's narration band does the same. When crew gives no answer, a neutral graphite fallback is used. `GET /api/demo/cut` reports the skin and the resolved colours. Choosing a colour or font switches the style to `"custom"`. `Archivo` joins the font list.
+
 ### Added
 - Video chapter takes, reordering and trimming, caption styles and sidecars, and a deck slide fit check.
 - **Deck operations and stable slide ids (DES-PRESENTATION-EDITOR-001 I-D1).** A deck's top-level slides

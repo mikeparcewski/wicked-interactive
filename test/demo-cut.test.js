@@ -112,7 +112,7 @@ test("ASS and VTT split wrapped overflow into consecutive events in the stitched
   }
   const ass = writeAss(cut), vtt = writeVtt(cut);
   assert.match(ass, /PlayResX: 1920/);
-  assert.match(ass, /Style: Caption,Inter,48,&H00FFFFFF,&H00B29108/);
+  assert.match(ass, /Style: Caption,system-ui,48,&H00F8F6F5,&H00C9BEB8/);
   assert.match(ass, /,3,12,0,8,64,64,48,1/);
   assert.match(ass, /Dialogue: 0,0:00:00.00,0:00:02.50,Card/);
   assert.match(ass, /Dialogue: 0,0:00:08.50,0:00:11.00,Card/);
@@ -142,7 +142,7 @@ for (const ass of [true, false]) test(`render args, sidecars, lineage and burn-i
   assert.equal(filter.includes("ass=_v"), ass);
   assert.match(filter, /scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080/);
   assert.match(filter, /concat=n=4:v=1:a=0/);
-  assert.ok(args.includes("color=c=0x0B1020:s=1920x1080:d=2.5:r=30"));
+  assert.ok(args.includes("color=c=0x16181D:s=1920x1080:d=2.5:r=30"), "no skin to follow: the neutral fallback, not a brand colour");
   assert.ok(args.includes("-ss") && args.includes("-to"));
   assert.ok(args.includes("libx264") && args.includes("yuv420p") && args.includes("+faststart"));
   for (const suffix of ["mp4", "ass", "vtt", "html"]) assert.ok(existsSync(join(suffix === "html" ? dir : join(dir, "recordings"), `_v1.${suffix}`)));
