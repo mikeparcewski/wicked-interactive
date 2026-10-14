@@ -5,6 +5,7 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ## [Unreleased]
 
 ### Added
+- Video chapter takes, reordering and trimming, caption styles and sidecars, and a deck slide fit check.
 - **Deck operations and stable slide ids (DES-PRESENTATION-EDITOR-001 I-D1).** A deck's top-level slides
   now carry a `data-slide-id`. It is assigned once and kept: an id derived from the slide's content when
   the slide is first seen, so the same HTML always gets the same ids. A deck's slide order is its

@@ -27,7 +27,7 @@ export { loadManifest, readVersionHtml } from "./fsstore.js";
 
 // Highest _v{n}.{md,html} on disk — so rapid writes reserve distinct numbers even before
 // the manifest is updated (two quick UPDATEs must not both grab _v1.md).
-function highestVersionOnDisk(dir) {
+export function highestVersionOnDisk(dir) {
   let max = -1;
   for (const f of readdirSync(dir)) {
     const m = /^_v(\d+)\.(md|html)$/.exec(f);

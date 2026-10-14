@@ -78,7 +78,7 @@ export function storyboard({ documentId, title, url, videoFile, mp4File = null, 
   const rec = (file) => `/d/${documentId}/api/demo/recording/${encodeURIComponent(file)}`;
   const sources =
     (mp4File ? `<source src="${rec(mp4File)}" type="video/mp4">` : "") +
-    `<source src="${rec(videoFile)}" type="video/webm">`;
+    (videoFile ? `<source src="${rec(videoFile)}" type="video/webm">` : "");
   const posterAttr = posterFile ? ` poster="${rec(posterFile)}"` : "";
   // YouTube-style chapters: a clickable thumbnail per step that seeks the video to that
   // step's start time (data-seek, wired by the inline script below). The thumbnail is the
@@ -189,6 +189,13 @@ function fmtTime(seconds) {
 export async function recordDemo(dir, opts = {}) {
   const documentId = opts.documentId ?? dir;
   const dryRun = opts.dryRun === true;
+  const takes = opts.takes === true && !dryRun;
+  // Require the encoder before launching a browser, and use this same runner for all takes.
+  const cutModule = takes ? await import("./demo-cut.js") : null;
+  if (takes) {
+    const encoder = cutModule.ffmpegContext(opts);
+    opts = { ...opts, ffmpegPath: encoder.path, runner: encoder.runner };
+  }
   const specPath = opts.specPath ?? join(dir, DEMO_SPEC);
   if (!existsSync(specPath)) throw new Error(`no ${DEMO_SPEC} authored yet — the agent must write the spec before recording`);
 
@@ -220,13 +227,16 @@ export async function recordDemo(dir, opts = {}) {
   if (!dryRun) {
     mkdirSync(recDir, { recursive: true });
     version = nextVersionNumber(loadManifest(dir));
-    videoFile = `_v${version}.webm`;
-    traceFile = `_v${version}.trace.zip`;
+    const prefix = takes ? `_takes-${Date.now()}` : `_v${version}`;
+    videoFile = `${prefix}.webm`;
+    traceFile = `${prefix}.trace.zip`;
   }
 
   const browser = await chromium.launch({ headless: opts.headless !== false });
   const stepTimings = [];
   const startedAt = Date.now();
+  let recordingStartedAt = startedAt;
+  let recordingDuration = 0;
   let context;
   let page = null;
   let produced = null;   // the clip Playwright wrote (page@<hash>.webm) until it is renamed to ours
@@ -265,6 +275,7 @@ export async function recordDemo(dir, opts = {}) {
     };
 
     if (!dryRun) await context.tracing.start({ screenshots: true, snapshots: true });
+    if (takes) recordingStartedAt = Date.now();
     page = await context.newPage();
 
     // On-screen narration: the caption is the curated `say` — describe what's HAPPENING and
@@ -279,7 +290,7 @@ export async function recordDemo(dir, opts = {}) {
     // and uncapped holds made half a clip one frozen dashboard (wicked-interactive#211). The
     // band sits at the bottom unless meta.captionPosition is "top" (when the narrated UI lives
     // at the bottom). A dry run shows no captions and holds nothing — it only proves the steps work.
-    const captionsOn = !dryRun && meta.captions !== false;
+    const captionsOn = !dryRun && !takes && meta.captions !== false;
     const clampHold = (ms) => Math.min(CAPTION_HOLD_CAP_MS, Math.max(0, ms));
     const defaultHoldMs = Number.isFinite(meta.captionHoldMs) ? clampHold(meta.captionHoldMs) : DEFAULT_HOLD_MS;
     const captionPosition = meta.captionPosition === "top" ? "top" : "bottom";
@@ -290,12 +301,13 @@ export async function recordDemo(dir, opts = {}) {
       throwIfBlocked({ index, label: null }); // a write blocked between steps belongs to the previous one
       index += 1;
       const stepInfo = { index, label: String(label) };
-      const at = (Date.now() - startedAt) / 1000; // chapter start
+      const at = (Date.now() - (takes ? recordingStartedAt : startedAt)) / 1000; // chapter start
       const entry = { label: String(label), at };
       stepTimings.push(entry);
       opts.onStep?.({ index, label: String(label), at });
 
       const say = sopts.say != null ? String(sopts.say).trim() : "";
+      if (takes) entry.say = say;
       const showCap = captionsOn && say.length > 0;
       const hold = Number.isFinite(sopts.holdMs) ? clampHold(sopts.holdMs) : defaultHoldMs;
 
@@ -320,13 +332,20 @@ export async function recordDemo(dir, opts = {}) {
         await showCaption(page, say, captionPosition);
         if (hold > 0) await page.waitForTimeout(hold);
       }
+      // Keep the reading pause while suppressing DOM overlays in chapter recordings.
+      // Every take must retain at least half a second, even for a very quick action.
+      if (takes) {
+        const elapsed = (Date.now() - recordingStartedAt) - at * 1000;
+        const pause = Math.max(say ? hold : 0, 550 - elapsed);
+        if (pause > 0) await page.waitForTimeout(pause);
+      }
 
       // Chapter thumbnail (YouTube-style): capture the step's resulting view after its action.
       // The seek target stays `at` (chapter start); the frame is the post-action state, which
       // reads best as a thumbnail. Clear the caption first so the still is clean. A thumbnail
       // is nice-to-have — never fail over it.
       if (showCap) await clearCaption(page);
-      const thumb = `_v${version}.step${String(index).padStart(2, "0")}.png`;
+      const thumb = `${takes ? videoFile.replace(/\.webm$/, "") : `_v${version}`}.step${String(index).padStart(2, "0")}.png`;
       try {
         await page.screenshot({ path: join(recDir, thumb) });
         entry.thumb = thumb;
@@ -344,6 +363,7 @@ export async function recordDemo(dir, opts = {}) {
     // the context closes, so a dry run cannot pass a spec whose last step writes late.
     await page.waitForTimeout(SETTLE_MS).catch(() => {});
     throwIfBlocked({ index, label: null });
+    if (takes) recordingDuration = (Date.now() - recordingStartedAt) / 1000;
 
     if (dryRun) {
       await context.close();
@@ -380,6 +400,10 @@ export async function recordDemo(dir, opts = {}) {
   } finally {
     if (context) { try { await context.close(); } catch { /* already closing */ } }
     await browser.close();
+  }
+
+  if (takes) {
+    return cutModule.extractTakes(dir, videoFile, stepTimings, recordingDuration, meta, { ...opts, documentId });
   }
 
   // Auto-convert to H.264 mp4 so Safari and mobile browsers can play the recording inline.
@@ -574,8 +598,9 @@ export function ffmpegGifEncoder(webmPath, gifPath, { ffmpegPath, fps = 10, widt
  */
 export function exportGif(dir, version, { encoder = ffmpegGifEncoder, ffmpegPath, fps, width } = {}) {
   const recDir = join(dir, RECORDINGS_DIR);
-  const webmPath = join(recDir, `_v${version}.webm`);
-  if (!existsSync(webmPath)) throw new Error(`no recording for v${version} — record the demo first`);
+  // A recording's own WebM, or a rendered cut's MP4 (a re-cut lands only an MP4).
+  const webmPath = [`_v${version}.webm`, `_v${version}.mp4`].map((f) => join(recDir, f)).find((f) => existsSync(f));
+  if (!webmPath) throw new Error(`no recording for v${version} — record the demo first`);
   const gifPath = join(recDir, `_v${version}.gif`);
   if (existsSync(gifPath) && statSync(gifPath).mtimeMs >= statSync(webmPath).mtimeMs) {
     return { path: gifPath, bytes: statSync(gifPath).size, cached: true };
