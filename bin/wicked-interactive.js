@@ -246,7 +246,7 @@ async function runDoctor(args) {
 
   say(`wicked-interactive ${report.version ?? "?"} · node ${process.version} · playwright ${recorder.playwright_version ?? "?"}`);
   say(`recorder browser (${recorder.browser}${headless ? "" : ", headed"}): ${recorder.ok ? "READY" : "MISSING"}`);
-  // (#302) What a recording launches: the installed browser WI_RECORDER_CHROME / WI_RECORDER_CHANNEL names, or the bundled one.
+  // (#302) What a recording launches: the installed browser WI_RECORDER_CHROME names, or the bundled one.
   say(`  records with: ${recorder.launches}${recorder.override ? " (Playwright still provides ffmpeg)" : ""}`);
   for (const c of recorder.components || []) say(`  ${c.present ? "✓" : "✗"} ${c.name}${c.revision ? ` v${c.revision}` : ""} — ${c.dir}`);
   if (recorder.probe_error) say(`  ! ${recorder.probe_error}`);

@@ -233,9 +233,9 @@ export async function recordDemo(dir, opts = {}) {
     traceFile = `${prefix}.trace.zip`;
   }
 
-  // (#302) An installed browser when one is configured (WI_RECORDER_CHROME / WI_RECORDER_CHANNEL, or
-  // opts.executablePath / opts.channel); nothing set launches the bundled browser, as before.
-  const browser = await chromium.launch({ headless: opts.headless !== false, ...(recorderBrowserOverride(process.env, opts) ?? {}) });
+  // (#302) The installed browser WI_RECORDER_CHROME names, when set — the one the preflight checked;
+  // unset launches the bundled browser, as before.
+  const browser = await chromium.launch({ headless: opts.headless !== false, ...(recorderBrowserOverride() ?? {}) });
   const stepTimings = [];
   const startedAt = Date.now();
   let recordingStartedAt = startedAt;

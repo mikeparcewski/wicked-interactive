@@ -1,5 +1,5 @@
-// #302 — the demo recorder can launch an installed browser (WI_RECORDER_CHROME / WI_RECORDER_CHANNEL,
-// or opts.executablePath / opts.channel). With nothing set it launches the bundled browser, as before.
+// #302 — the demo recorder can launch an installed browser (WI_RECORDER_CHROME, its executable).
+// With nothing set it launches the bundled browser, as before.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -7,39 +7,47 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   recorderBrowserOverride, recorderLaunchLabel, recorderBrowserStatus, ensureRecorderBrowser,
-  invalidateRecorderStatusCache, RECORDER_ERROR_CODES,
+  invalidateRecorderStatusCache, classifyRecorderError, RECORDER_ERROR_CODES,
 } from "../src/service/recorder-preflight.js";
+
+function installedBrowser() {
+  const dir = mkdtempSync(join(tmpdir(), "wi-302-"));
+  const exe = join(dir, "Google Chrome");
+  writeFileSync(exe, "");
+  return exe;
+}
 
 test("nothing set: no override, the bundled browser", () => {
   assert.equal(recorderBrowserOverride({}), null);
-  assert.equal(recorderBrowserOverride({ WI_RECORDER_CHROME: "  ", WI_RECORDER_CHANNEL: "" }), null);
+  assert.equal(recorderBrowserOverride({ WI_RECORDER_CHROME: "  " }), null);
   assert.equal(recorderLaunchLabel(null), "bundled chromium-headless-shell");
   assert.equal(recorderLaunchLabel(null, { headless: false }), "bundled chromium");
 });
 
-test("env: the executable path wins over the channel; opts win over the env", () => {
-  assert.deepEqual(recorderBrowserOverride({ WI_RECORDER_CHANNEL: "chrome" }), { channel: "chrome" });
-  assert.deepEqual(recorderBrowserOverride({ WI_RECORDER_CHROME: "/opt/chrome", WI_RECORDER_CHANNEL: "chrome" }), { executablePath: "/opt/chrome" });
-  assert.deepEqual(recorderBrowserOverride({ WI_RECORDER_CHROME: "/opt/chrome" }, { channel: "msedge" }), { channel: "msedge" });
-  assert.deepEqual(recorderBrowserOverride({ WI_RECORDER_CHANNEL: "chrome" }, { executablePath: "/x/chrome" }), { executablePath: "/x/chrome" });
+test("WI_RECORDER_CHROME names the executable", () => {
+  assert.deepEqual(recorderBrowserOverride({ WI_RECORDER_CHROME: " /opt/chrome " }), { executablePath: "/opt/chrome" });
+  assert.equal(recorderLaunchLabel({ executablePath: "/opt/chrome" }), "installed browser /opt/chrome");
 });
 
-test("with an override, the preflight probes Playwright's ffmpeg alone, never the bundled browser", async () => {
+test("with an override, the preflight probes Playwright's ffmpeg alone, never the bundled browser; the mode is kept", async () => {
   invalidateRecorderStatusCache();
+  const exe = installedBrowser();
   const asked = [];
   const probe = async (browser) => { asked.push(browser); return [{ name: "ffmpeg", present: true, dir: "/c/ffmpeg-1013" }]; };
-  const st = await recorderBrowserStatus({ probe, env: {}, ttlMs: 0, override: { channel: "chrome" } });
+  const env = { WI_RECORDER_CHROME: exe };
+  const st = await recorderBrowserStatus({ probe, env });
   assert.deepEqual(asked, ["ffmpeg"]);
   assert.equal(st.ok, true);
   assert.equal(st.browser, "ffmpeg");
-  assert.equal(st.launches, 'installed browser (Playwright channel "chrome")');
+  assert.equal(st.headless, true);
+  assert.equal(st.launches, `installed browser ${exe}`);
+  const headed = await recorderBrowserStatus({ probe, env, headless: false });
+  assert.equal(headed.headless, false, "a headed status is not the cached headless one");
 });
 
-test("an existing executable: ok once ffmpeg is present; a missing ffmpeg is installed alone", async () => {
+test("an existing executable: a missing ffmpeg is installed alone, then the recorder is ready", async () => {
   invalidateRecorderStatusCache();
-  const dir = mkdtempSync(join(tmpdir(), "wi-302-"));
-  const exe = join(dir, "Google Chrome");
-  writeFileSync(exe, "");
+  const exe = installedBrowser();
   const env = { WI_RECORDER_CHROME: exe };
   let present = false;
   const installed = [];
@@ -50,7 +58,6 @@ test("an existing executable: ok once ffmpeg is present; a missing ffmpeg is ins
   });
   assert.deepEqual(installed, ["ffmpeg"]);
   assert.equal(st.ok, true);
-  assert.equal(st.launches, `installed browser ${exe}`);
 });
 
 test("a configured executable that does not exist is refused, and nothing is downloaded", async () => {
@@ -74,4 +81,18 @@ test("nothing set: the preflight still probes the bundled browser", async () => 
   const st = await recorderBrowserStatus({ probe, env: {}, ttlMs: 0 });
   assert.deepEqual(asked, ["chromium-headless-shell"]);
   assert.equal(st.override, null);
+  assert.equal(st.launches, "bundled chromium-headless-shell");
+});
+
+test("a launch that finds no configured executable is the setting's to fix, never a download", () => {
+  const prev = process.env.WI_RECORDER_CHROME;
+  process.env.WI_RECORDER_CHROME = "/gone/Google Chrome";
+  try {
+    const e = classifyRecorderError(new Error("browserType.launch: Executable doesn't exist at /gone/Google Chrome\n"));
+    assert.equal(e.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+    assert.match(e.message, /WI_RECORDER_CHROME names \/gone\/Google Chrome/);
+    assert.doesNotMatch(e.message, /doctor --install/);
+  } finally {
+    if (prev === undefined) delete process.env.WI_RECORDER_CHROME; else process.env.WI_RECORDER_CHROME = prev;
+  }
 });
