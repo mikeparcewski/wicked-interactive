@@ -4,6 +4,15 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **The demo recorder can record with an installed browser (#302).** `WI_RECORDER_CHROME` (the
+  browser's executable) or `WI_RECORDER_CHANNEL` (a Playwright channel such as `chrome` or `msedge`),
+  or `executablePath` / `channel` in `recordDemo`'s options, launch that browser instead of
+  Playwright's bundled one; the theme grab honours the same setting. The preflight then checks (and,
+  with auto-install on, provisions) only Playwright's ffmpeg, which still encodes the video. A
+  configured executable that does not exist is refused, and nothing is downloaded. `doctor` reports
+  what a recording launches. With nothing set, the recorder behaves as before.
+
 ## [0.13.0] — 2026-10-14
 
 ### Added
