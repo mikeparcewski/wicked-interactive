@@ -139,6 +139,9 @@ export function recorderBrowserOverride(env = process.env) {
   return exe ? { executablePath: exe } : null;
 }
 
+/** (#302) The remedy for a configured browser that is not there — the operator's setting, never a download. */
+export const RECORDER_CHROME_REMEDY = "fix or unset WI_RECORDER_CHROME, then Re-record";
+
 /** What a recording launches, in words: the installed browser it was pointed at, or the bundled one. */
 export function recorderLaunchLabel(override, { headless = true } = {}) {
   return override?.executablePath ? `installed browser ${override.executablePath}` : `bundled ${recorderBrowserName({ headless })}`;
@@ -272,7 +275,8 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
   if (override && !existsSync(override.executablePath)) {
     // A configured browser that is not there is the operator's to fix: never fall back to (or
     // download) the bundled one behind their back. `probe_error` makes ensureRecorderBrowser refuse.
-    status = { ok: false, ...base, components: [], missing: [override.executablePath],
+    // (codex r2) Its remedy is the setting: no install command can repair it.
+    status = { ok: false, ...base, remedy: RECORDER_CHROME_REMEDY, install_command: null, components: [], missing: [override.executablePath],
       probe_error: `WI_RECORDER_CHROME names ${override.executablePath}, which does not exist — point it at the installed browser's executable, or unset it to use the bundled browser` };
     status.message = `the recorder's browser could not be verified: ${status.probe_error}`;
     statusCache.set(cacheKey, { at: Date.now(), status });
@@ -401,11 +405,14 @@ function classifyRecorderErrorInner(err, { headless = true } = {}) {
   const C = RECORDER_ERROR_CODES;
   const exe = /Executable doesn't exist at (.+?)(?:\r?\n|$)/.exec(msg);
   const configured = recorderBrowserOverride();
-  if (exe && configured && exe[1].trim() === configured.executablePath) {
+  // (codex r2) A custom executablePath fails as "Failed to launch chromium because executable
+  // doesn't exist at <path>" (lower case), the bundled one as "Executable doesn't exist at …".
+  const configuredMissing = configured && /executable doesn't exist at (.+?)(?:\r?\n|$)/i.exec(msg);
+  if (configuredMissing && configuredMissing[1].trim() === configured.executablePath) {
     // (#302) The browser the operator configured is not there: theirs to fix, never a download.
     return new RecorderError(C.BROWSER_MISSING,
       `the recorder's configured browser is not there: WI_RECORDER_CHROME names ${configured.executablePath}, which does not exist — point it at the installed browser's executable, or unset it to use the bundled browser, then Re-record.`,
-      { remedy: "fix or unset WI_RECORDER_CHROME, then Re-record", browser, executable_path: exe[1], cause: firstLine(msg) });
+      { remedy: RECORDER_CHROME_REMEDY, browser, executable_path: configured.executablePath, cause: firstLine(msg) });
   }
   if (exe) {
     return new RecorderError(C.BROWSER_MISSING,

@@ -7,8 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   recorderBrowserOverride, recorderLaunchLabel, recorderBrowserStatus, ensureRecorderBrowser,
-  invalidateRecorderStatusCache, classifyRecorderError, RECORDER_ERROR_CODES,
+  invalidateRecorderStatusCache, classifyRecorderError, RECORDER_ERROR_CODES, RECORDER_CHROME_REMEDY,
 } from "../src/service/recorder-preflight.js";
+import { themeBrowserError } from "../src/service/theme-grab.js";
 
 function installedBrowser() {
   const dir = mkdtempSync(join(tmpdir(), "wi-302-"));
@@ -72,6 +73,9 @@ test("a configured executable that does not exist is refused, and nothing is dow
   );
   assert.equal(probed, false);
   assert.equal(installed, false);
+  const st = await status({ env });
+  assert.equal(st.remedy, RECORDER_CHROME_REMEDY, "the remedy is the setting, not doctor --install");
+  assert.equal(st.install_command, null);
 });
 
 test("nothing set: the preflight still probes the bundled browser", async () => {
@@ -88,10 +92,17 @@ test("a launch that finds no configured executable is the setting's to fix, neve
   const prev = process.env.WI_RECORDER_CHROME;
   process.env.WI_RECORDER_CHROME = "/gone/Google Chrome";
   try {
-    const e = classifyRecorderError(new Error("browserType.launch: Executable doesn't exist at /gone/Google Chrome\n"));
+    // Playwright's own wording for a custom executablePath (browserType.ts).
+    const e = classifyRecorderError(new Error("browserType.launch: Failed to launch chromium because executable doesn't exist at /gone/Google Chrome\n"));
     assert.equal(e.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
     assert.match(e.message, /WI_RECORDER_CHROME names \/gone\/Google Chrome/);
     assert.doesNotMatch(e.message, /doctor --install/);
+    assert.equal(e.remedy, RECORDER_CHROME_REMEDY);
+    const themed = themeBrowserError(new Error("browserType.launch: Failed to launch chromium because executable doesn't exist at /gone/Google Chrome\n"));
+    assert.match(themed.message, /WI_RECORDER_CHROME names \/gone\/Google Chrome/);
+    assert.match(themed.message, /then Learn again\.$/);
+    assert.doesNotMatch(themed.message, /doctor --install/);
+    assert.equal(themed.remedy, RECORDER_CHROME_REMEDY);
   } finally {
     if (prev === undefined) delete process.env.WI_RECORDER_CHROME; else process.env.WI_RECORDER_CHROME = prev;
   }
