@@ -123,6 +123,30 @@ export function recorderBrowserName({ headless = true } = {}) {
   return headless ? "chromium-headless-shell" : "chromium";
 }
 
+/**
+ * (#302) An INSTALLED browser the recorder launches instead of Playwright's bundled one — for a host
+ * where the Playwright browser download is refused or must not be used: `WI_RECORDER_CHROME`, the
+ * browser's executable (Playwright's `executablePath`; a Chromium-family browser such as the installed
+ * Google Chrome). ONE setting, and one the preflight can check: the path must exist (codex r1 on #302
+ * dropped a channel form — a channel's executable is Playwright's to resolve, so the preflight could
+ * not tell a missing one from a present one). `null` when unset: the bundled browser, as before.
+ * The recording still needs Playwright's own ffmpeg (it encodes the video), so the preflight then
+ * checks — and provisions — `ffmpeg` alone, never the bundled browser.
+ * @returns {{executablePath: string}|null}
+ */
+export function recorderBrowserOverride(env = process.env) {
+  const exe = String(env.WI_RECORDER_CHROME ?? "").trim();
+  return exe ? { executablePath: exe } : null;
+}
+
+/** (#302) The remedy for a configured browser that is not there — the operator's setting, never a download. */
+export const RECORDER_CHROME_REMEDY = "fix or unset WI_RECORDER_CHROME, then Re-record";
+
+/** What a recording launches, in words: the installed browser it was pointed at, or the bundled one. */
+export function recorderLaunchLabel(override, { headless = true } = {}) {
+  return override?.executablePath ? `installed browser ${override.executablePath}` : `bundled ${recorderBrowserName({ headless })}`;
+}
+
 /** Absolute path of the BUNDLED Playwright CLI (the version this bridge launches), or null. */
 export function playwrightCliPath() {
   try {
@@ -226,13 +250,19 @@ function describeMissing(status) {
  * @returns {Promise<object>} `{ ok, browser, headless, playwright_version, cli, components[], missing[],
  *   browsers_path, install_command, remedy, auto_install, checked_at, probe_error? }`
  */
-export async function recorderBrowserStatus({ headless = true, probe = dryRunProbe, env = process.env, ttlMs = STATUS_TTL_MS } = {}) {
-  const browser = recorderBrowserName({ headless });
-  const cached = statusCache.get(browser);
+export async function recorderBrowserStatus({ headless = true, probe = dryRunProbe, env = process.env, ttlMs = STATUS_TTL_MS, override = recorderBrowserOverride(env) } = {}) {
+  // (#302) With an installed browser configured, only Playwright's ffmpeg is still Playwright's to
+  // provide: probe (and, below, install) that alone — never the bundled browser.
+  const browser = override ? "ffmpeg" : recorderBrowserName({ headless });
+  // The mode is part of the key: a headed and a headless status differ in more than the browser (codex r1).
+  const cacheKey = `${browser}|${headless}|${JSON.stringify(override)}`;
+  const cached = statusCache.get(cacheKey);
   if (cached && Date.now() - cached.at < ttlMs) return cached.status;
   const cli = playwrightCliPath();
   const base = {
     browser, headless,
+    launches: recorderLaunchLabel(override, { headless }),
+    override,
     playwright_version: playwrightVersion(),
     cli,
     browsers_path: env.PLAYWRIGHT_BROWSERS_PATH || null,
@@ -242,6 +272,16 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
     checked_at: new Date().toISOString(),
   };
   let status;
+  if (override && !existsSync(override.executablePath)) {
+    // A configured browser that is not there is the operator's to fix: never fall back to (or
+    // download) the bundled one behind their back. `probe_error` makes ensureRecorderBrowser refuse.
+    // (codex r2) Its remedy is the setting: no install command can repair it.
+    status = { ok: false, ...base, remedy: RECORDER_CHROME_REMEDY, install_command: null, components: [], missing: [override.executablePath],
+      probe_error: `WI_RECORDER_CHROME names ${override.executablePath}, which does not exist — point it at the installed browser's executable, or unset it to use the bundled browser` };
+    status.message = `the recorder's browser could not be verified: ${status.probe_error}`;
+    statusCache.set(cacheKey, { at: Date.now(), status });
+    return status;
+  }
   try {
     const components = await probe(browser, { cli, env });
     const missing = components.filter((c) => !c.present).map((c) => c.name);
@@ -254,7 +294,7 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
   if (!status.ok) status.message = status.probe_error
     ? `the recorder's browser could not be verified: ${status.probe_error}`
     : describeMissing(status);
-  statusCache.set(browser, { at: Date.now(), status });
+  statusCache.set(cacheKey, { at: Date.now(), status });
   return status;
 }
 
@@ -322,7 +362,9 @@ export async function ensureRecorderBrowser({
   if (st.probe_error || !auto) throw missingBrowserError(st);
   onProgress?.({
     phase: "installing",
-    message: `Installing the recorder's browser (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}) — a one-time download, then the recording starts…`,
+    message: st.override
+      ? `Installing the recorder's video encoder (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}; it records with the ${st.launches}) — a one-time download, then the recording starts…`
+      : `Installing the recorder's browser (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}) — a one-time download, then the recording starts…`,
   });
   try {
     await install({ browser: st.browser, cli: st.cli, onProgress, timeoutMs: timeoutMs ?? recorderInstallTimeoutMs(env), env });
@@ -362,6 +404,23 @@ function classifyRecorderErrorInner(err, { headless = true } = {}) {
   const step = err?.recorderStep;
   const C = RECORDER_ERROR_CODES;
   const exe = /Executable doesn't exist at (.+?)(?:\r?\n|$)/.exec(msg);
+  const configured = recorderBrowserOverride();
+  // (codex r2) A custom executablePath fails as "Failed to launch chromium because executable
+  // doesn't exist at <path>" (lower case), the bundled one as "Executable doesn't exist at …".
+  const configuredMissing = configured && /executable doesn't exist at (.+?)(?:\r?\n|$)/i.exec(msg);
+  if (configured && exe && /ffmpeg/i.test(exe[1])) {
+    // (codex r3) With an installed browser configured, the only Playwright executable a recording
+    // still needs is ffmpeg: name it, and its own install — never the bundled browser.
+    return new RecorderError(C.BROWSER_MISSING,
+      `the recorder's video encoder is not installed (Playwright expected ${exe[1]}). Run \`${doctorRemedy()}\` (or \`${recorderInstallCommand("ffmpeg")}\`), then Re-record.`,
+      { remedy: doctorRemedy(), browser: "ffmpeg", executable_path: exe[1], install_command: recorderInstallCommand("ffmpeg"), playwright_version: playwrightVersion(), cause: firstLine(msg) });
+  }
+  if (configuredMissing && configuredMissing[1].trim() === configured.executablePath) {
+    // (#302) The browser the operator configured is not there: theirs to fix, never a download.
+    return new RecorderError(C.BROWSER_MISSING,
+      `the recorder's configured browser is not there: WI_RECORDER_CHROME names ${configured.executablePath}, which does not exist — point it at the installed browser's executable, or unset it to use the bundled browser, then Re-record.`,
+      { remedy: RECORDER_CHROME_REMEDY, browser, executable_path: configured.executablePath, cause: firstLine(msg) });
+  }
   if (exe) {
     return new RecorderError(C.BROWSER_MISSING,
       `the recorder's browser is not installed (Playwright expected ${exe[1]}). Run \`${doctorRemedy()}\` (or \`${recorderInstallCommand(browser)}\`), then Re-record.`,

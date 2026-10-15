@@ -36,7 +36,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { findChrome as defaultFindChrome } from "./export.js";
 import {
-  ensureRecorderBrowser, classifyRecorderError, doctorRemedy, RecorderError, RECORDER_ERROR_CODES,
+  ensureRecorderBrowser, classifyRecorderError, doctorRemedy, RecorderError, RECORDER_ERROR_CODES, recorderBrowserOverride, RECORDER_CHROME_REMEDY,
 } from "./recorder-preflight.js";
 
 // Hostnames that must never be fetched server-side regardless of how they resolve.
@@ -207,7 +207,12 @@ export function themeBrowserError(err, { headless = true, env = process.env } = 
   const remedy = doctorRemedy(env);
   const cause = typed.cause ?? null;
   let message;
-  if (typed.code === C.BROWSER_MISSING && /Playwright is not installed/i.test(cause ?? "")) {
+  let remedyOut = remedy;
+  if (typed.code === C.BROWSER_MISSING && typed.remedy === RECORDER_CHROME_REMEDY) {
+    // (#302, codex r2) The configured browser is not there: the setting is the fix, not a download.
+    message = `${typed.message.replace(/,? then Re-record\.?$/, "")}, then Learn again.`;
+    remedyOut = typed.remedy;
+  } else if (typed.code === C.BROWSER_MISSING && /Playwright is not installed/i.test(cause ?? "")) {
     message = `Playwright is not installed in this bridge — run \`${remedy}\` (or reinstall wicked-interactive), then Learn again.`;
   } else if (typed.code === C.BROWSER_MISSING) {
     const what = typed.missing?.length ? typed.missing.join(" + ") : (typed.browser || "chromium-headless-shell");
@@ -222,7 +227,7 @@ export function themeBrowserError(err, { headless = true, env = process.env } = 
     return null;
   }
   const out = new RecorderError(typed.code, message, {
-    remedy,
+    remedy: remedyOut,
     browser: typed.browser,
     missing: typed.missing,
     executable_path: typed.executable_path,
@@ -297,7 +302,9 @@ export async function playwrightUrlRenderer(url, pdfPath, opts = {}) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let browser = null;
     try {
-      browser = await chromium.launch({ headless, args: launchArgs });
+      // (#302) The same installed-browser override the recorder honours: its preflight checks only
+      // ffmpeg when one is configured, so the bundled browser may not be there to launch.
+      browser = await chromium.launch({ headless, args: launchArgs, ...(recorderBrowserOverride() ?? {}) });
       const ctx = await browser.newContext({
         viewport: { width: 1280, height: 1600 },
         userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
