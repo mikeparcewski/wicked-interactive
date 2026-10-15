@@ -123,6 +123,32 @@ export function recorderBrowserName({ headless = true } = {}) {
   return headless ? "chromium-headless-shell" : "chromium";
 }
 
+/**
+ * (#302) An INSTALLED browser the recorder launches instead of Playwright's bundled one — for a host
+ * where the Playwright browser download is refused or must not be used:
+ *   - `WI_RECORDER_CHROME`  — the browser's executable path (Playwright `executablePath`);
+ *   - `WI_RECORDER_CHANNEL` — a Playwright channel: `chrome`, `chrome-beta`, `msedge`, … (`channel`).
+ * The executable wins when both are set. `opts.executablePath` / `opts.channel` (a caller's config)
+ * win over the env. `null` when nothing is set: the bundled browser, exactly as before.
+ * The recording still needs Playwright's own ffmpeg (it encodes the video), so the preflight then
+ * checks — and provisions — `ffmpeg` alone, never the bundled browser.
+ * @returns {{executablePath: string}|{channel: string}|null}
+ */
+export function recorderBrowserOverride(env = process.env, opts = {}) {
+  const pick = (v) => String(v ?? "").trim();
+  const exe = pick(opts.executablePath) || (pick(opts.channel) ? "" : pick(env.WI_RECORDER_CHROME));
+  if (exe) return { executablePath: exe };
+  const channel = pick(opts.channel) || pick(env.WI_RECORDER_CHANNEL);
+  return channel ? { channel } : null;
+}
+
+/** What a recording launches, in words: the installed browser it was pointed at, or the bundled one. */
+export function recorderLaunchLabel(override, { headless = true } = {}) {
+  if (override?.executablePath) return `installed browser ${override.executablePath}`;
+  if (override?.channel) return `installed browser (Playwright channel "${override.channel}")`;
+  return `bundled ${recorderBrowserName({ headless })}`;
+}
+
 /** Absolute path of the BUNDLED Playwright CLI (the version this bridge launches), or null. */
 export function playwrightCliPath() {
   try {
@@ -226,13 +252,18 @@ function describeMissing(status) {
  * @returns {Promise<object>} `{ ok, browser, headless, playwright_version, cli, components[], missing[],
  *   browsers_path, install_command, remedy, auto_install, checked_at, probe_error? }`
  */
-export async function recorderBrowserStatus({ headless = true, probe = dryRunProbe, env = process.env, ttlMs = STATUS_TTL_MS } = {}) {
-  const browser = recorderBrowserName({ headless });
-  const cached = statusCache.get(browser);
+export async function recorderBrowserStatus({ headless = true, probe = dryRunProbe, env = process.env, ttlMs = STATUS_TTL_MS, override = recorderBrowserOverride(env) } = {}) {
+  // (#302) With an installed browser configured, only Playwright's ffmpeg is still Playwright's to
+  // provide: probe (and, below, install) that alone — never the bundled browser.
+  const browser = override ? "ffmpeg" : recorderBrowserName({ headless });
+  const cacheKey = `${browser}|${JSON.stringify(override)}`;
+  const cached = statusCache.get(cacheKey);
   if (cached && Date.now() - cached.at < ttlMs) return cached.status;
   const cli = playwrightCliPath();
   const base = {
     browser, headless,
+    launches: recorderLaunchLabel(override, { headless }),
+    override,
     playwright_version: playwrightVersion(),
     cli,
     browsers_path: env.PLAYWRIGHT_BROWSERS_PATH || null,
@@ -242,6 +273,15 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
     checked_at: new Date().toISOString(),
   };
   let status;
+  if (override?.executablePath && !existsSync(override.executablePath)) {
+    // A configured browser that is not there is the operator's to fix: never fall back to (or
+    // download) the bundled one behind their back. `probe_error` makes ensureRecorderBrowser refuse.
+    status = { ok: false, ...base, components: [], missing: [override.executablePath],
+      probe_error: `WI_RECORDER_CHROME names ${override.executablePath}, which does not exist — point it at the installed browser's executable, or unset it to use the bundled browser` };
+    status.message = `the recorder's browser could not be verified: ${status.probe_error}`;
+    statusCache.set(cacheKey, { at: Date.now(), status });
+    return status;
+  }
   try {
     const components = await probe(browser, { cli, env });
     const missing = components.filter((c) => !c.present).map((c) => c.name);
@@ -254,7 +294,7 @@ export async function recorderBrowserStatus({ headless = true, probe = dryRunPro
   if (!status.ok) status.message = status.probe_error
     ? `the recorder's browser could not be verified: ${status.probe_error}`
     : describeMissing(status);
-  statusCache.set(browser, { at: Date.now(), status });
+  statusCache.set(cacheKey, { at: Date.now(), status });
   return status;
 }
 
@@ -322,7 +362,9 @@ export async function ensureRecorderBrowser({
   if (st.probe_error || !auto) throw missingBrowserError(st);
   onProgress?.({
     phase: "installing",
-    message: `Installing the recorder's browser (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}) — a one-time download, then the recording starts…`,
+    message: st.override
+      ? `Installing the recorder's video encoder (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}; it records with the ${st.launches}) — a one-time download, then the recording starts…`
+      : `Installing the recorder's browser (${st.missing.join(" + ")} for Playwright ${st.playwright_version ?? "?"}) — a one-time download, then the recording starts…`,
   });
   try {
     await install({ browser: st.browser, cli: st.cli, onProgress, timeoutMs: timeoutMs ?? recorderInstallTimeoutMs(env), env });

@@ -18,7 +18,7 @@ import { instrument } from "../core/instrument.js";
 import { themed } from "./theme-source.js";
 import { recordVersion, nextVersionNumber } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
-import { RecorderError, RECORDER_ERROR_CODES } from "./recorder-preflight.js";
+import { RecorderError, RECORDER_ERROR_CODES, recorderBrowserOverride } from "./recorder-preflight.js";
 import { fetchSkin, NEUTRAL_PALETTE } from "./video-skin.js";
 
 export const RECORDINGS_DIR = "recordings";
@@ -233,7 +233,9 @@ export async function recordDemo(dir, opts = {}) {
     traceFile = `${prefix}.trace.zip`;
   }
 
-  const browser = await chromium.launch({ headless: opts.headless !== false });
+  // (#302) An installed browser when one is configured (WI_RECORDER_CHROME / WI_RECORDER_CHANNEL, or
+  // opts.executablePath / opts.channel); nothing set launches the bundled browser, as before.
+  const browser = await chromium.launch({ headless: opts.headless !== false, ...(recorderBrowserOverride(process.env, opts) ?? {}) });
   const stepTimings = [];
   const startedAt = Date.now();
   let recordingStartedAt = startedAt;
