@@ -107,3 +107,17 @@ test("a launch that finds no configured executable is the setting's to fix, neve
     if (prev === undefined) delete process.env.WI_RECORDER_CHROME; else process.env.WI_RECORDER_CHROME = prev;
   }
 });
+
+test("with an installed browser configured, a missing ffmpeg at launch names ffmpeg's install, never the bundled browser (codex r3)", () => {
+  const prev = process.env.WI_RECORDER_CHROME;
+  process.env.WI_RECORDER_CHROME = "/opt/Google Chrome";
+  try {
+    const e = classifyRecorderError(new Error("Executable doesn't exist at /pw/ffmpeg-1013/ffmpeg-mac\n"));
+    assert.equal(e.code, RECORDER_ERROR_CODES.BROWSER_MISSING);
+    assert.equal(e.browser, "ffmpeg");
+    assert.match(e.install_command, / install ffmpeg$/);
+    assert.doesNotMatch(e.message, /headless-shell/);
+  } finally {
+    if (prev === undefined) delete process.env.WI_RECORDER_CHROME; else process.env.WI_RECORDER_CHROME = prev;
+  }
+});

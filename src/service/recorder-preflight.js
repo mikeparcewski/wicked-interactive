@@ -408,6 +408,13 @@ function classifyRecorderErrorInner(err, { headless = true } = {}) {
   // (codex r2) A custom executablePath fails as "Failed to launch chromium because executable
   // doesn't exist at <path>" (lower case), the bundled one as "Executable doesn't exist at …".
   const configuredMissing = configured && /executable doesn't exist at (.+?)(?:\r?\n|$)/i.exec(msg);
+  if (configured && exe && /ffmpeg/i.test(exe[1])) {
+    // (codex r3) With an installed browser configured, the only Playwright executable a recording
+    // still needs is ffmpeg: name it, and its own install — never the bundled browser.
+    return new RecorderError(C.BROWSER_MISSING,
+      `the recorder's video encoder is not installed (Playwright expected ${exe[1]}). Run \`${doctorRemedy()}\` (or \`${recorderInstallCommand("ffmpeg")}\`), then Re-record.`,
+      { remedy: doctorRemedy(), browser: "ffmpeg", executable_path: exe[1], install_command: recorderInstallCommand("ffmpeg"), playwright_version: playwrightVersion(), cause: firstLine(msg) });
+  }
   if (configuredMissing && configuredMissing[1].trim() === configured.executablePath) {
     // (#302) The browser the operator configured is not there: theirs to fix, never a download.
     return new RecorderError(C.BROWSER_MISSING,
