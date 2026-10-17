@@ -4,6 +4,20 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Fixed
+- **An over-cap upload gets its 413 instead of a reset connection, on every OS.** `PUT /d/:doc/api/theme/source`
+  and `PUT /api/demo/import/:chapter` answered 413 (`Connection: close`) while the caller was still sending.
+  Node closes the socket as soon as that answer is written, with request bytes still unread, so the close went
+  out as a reset: the caller saw `ECONNRESET` (Windows) or `EPIPE` (macOS) and never read the 413. Both routes
+  now drain the rest of the body first and answer once it is read. This failed the v0.14.0 release's macOS and
+  Windows test legs, so 0.14.0 was tagged but never published.
+- **A refused demo-import upload leaves no `.part` file.** The temp file was removed before its write stream
+  had opened it, so the stream created it again afterwards. It is now removed once the stream has closed, on
+  the over-cap and failure paths, before the answer is sent.
+
+### Changed
+- **PR CI runs the unit tests on macOS and Windows too (`test-os`)**, as the tag's release workflow does.
+
 ## [0.14.0] — 2026-10-17
 
 ### Changed
