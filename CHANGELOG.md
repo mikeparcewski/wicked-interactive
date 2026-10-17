@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-10-17
+
+Patch: the over-cap upload fixes that failed the 0.14.0 release on macOS and Windows. 0.14.0 was tagged but never
+published; 0.14.1 ships its changes too.
+
 ### Fixed
 - **An over-cap upload gets its 413 instead of a reset connection, on every OS.** `PUT /d/:doc/api/theme/source`
   and `PUT /api/demo/import/:chapter` answered 413 (`Connection: close`) while the caller was still sending.
@@ -430,7 +435,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.1...v0.12.0
