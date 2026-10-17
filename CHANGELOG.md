@@ -4,6 +4,9 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Changed
+- **Docs say demos are captioned, not narrated.** The recorder burns in on-screen captions and title cards and renders without an audio track (`demo-cut.js` passes `-an`), so the README and CLAUDE.md now say "captioned walkthroughs (no voice-over)". The wi.* redirect page calls studio "where you direct your coding agents" instead of "the orchestrator IDE".
+
 ### Added
 - **A theme learn's PDF or image can be uploaded (`PUT /d/:doc/api/theme/source`).** Studio's "Learn from
   a brand" no longer asks for a file path the operator cannot know. The file's bytes ride a raw body as
