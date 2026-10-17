@@ -2,7 +2,7 @@
 
 The wicked family's **document engine** — an API-only local service. It owns document storage
 with write-once version lineage and forking (`data-wid` anchoring), renders and exports
-HTML / PDF / native PowerPoint / video, records narrated demos, and learns themes. It has **no
+HTML / PDF / native PowerPoint / video, records captioned demos (no voice-over), and learns themes. It has **no
 supported UI of its own**: wicked-crew spawns it as a local bridge and reverse-proxies its HTTP
 surface at `/api/v1/projects/:projectId/interactive/*`, and wicked-studio is where people point,
 edit, rewind, fork and export. Inline `(ADR-00NN)` tags mark the load-bearing decisions

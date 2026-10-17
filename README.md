@@ -6,7 +6,7 @@
    \_/\_/ |_|\___|_|\_\___|\__,_|     |_|_| |_|\__\___|_|  \__,_|\___|\__|_| \_/ \___|
 ```
 
-> The wicked family's **document engine**. One local service owns document storage with write-once version lineage and forking, renders and exports HTML / PDF / native PowerPoint / video, records narrated demo walkthroughs, and learns themes from your existing brand pages. [wicked-crew](https://github.com/mikeparcewski/wicked-crew) spawns it as a local bridge and reverse-proxies its API; [wicked-studio](https://github.com/mikeparcewski/wicked-studio) is where you point, edit, rewind, fork, and export. You depend on it — you don't visit it.
+> The wicked family's **document engine**. One local service owns document storage with write-once version lineage and forking, renders and exports HTML / PDF / native PowerPoint / video, records captioned demo walkthroughs (on-screen captions and title cards, no voice-over), and learns themes from your existing brand pages. [wicked-crew](https://github.com/mikeparcewski/wicked-crew) spawns it as a local bridge and reverse-proxies its API; [wicked-studio](https://github.com/mikeparcewski/wicked-studio) is where you point, edit, rewind, fork, and export. You depend on it — you don't visit it.
 
 ## What lives here
 
@@ -14,7 +14,7 @@ The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-
 
 - 📦 **Documents & lineage** — every change is a write-once saved version; rewind to any of them, or fork a version and chase two ideas at once without losing either.
 - 📤 **Exports** — single-file HTML with the document's local assets embedded, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`; needs `python-pptx` on the exporting machine), and video. The recipient needs no wicked install, but remote fonts, scripts, stylesheets and images stay links to the network unless you export in strict offline mode — every export tells you which ones (see [Exports](#exports)).
-- 🎬 **Demo recording** — narrated walkthroughs of a live app with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
+- 🎬 **Demo recording** — captioned walkthroughs of a live app (on-screen captions, no voice-over) with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
 - 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls, and its write side (`PUT`/`DELETE` on the same path): every token is checked against a per-field grammar before it can reach the CSS.
 - 🔌 **One HTTP API + one bus vocabulary** — the `/api/*` surface and the `wicked.interactive.*` event types (ADR-0019) that the studio UI and supervising agents both speak.
 
