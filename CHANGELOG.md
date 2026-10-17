@@ -5,6 +5,12 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ## [Unreleased]
 
 ### Added
+- **A theme learn's PDF or image can be uploaded (`PUT /d/:doc/api/theme/source`).** Studio's "Learn from
+  a brand" no longer asks for a file path the operator cannot know. The file's bytes ride a raw body as
+  `application/pdf` or `image/png|jpeg|gif|webp`, checked against their first bytes, at most 20 MB, one
+  upload at a time per document. They land in the document's `theme/` directory beside the pages a URL
+  learn grabs. The answer is `{document_id, path, format, bytes}`: the path that `theme.requested {path}`
+  then names, so the learn reads the file in place as before. Nothing is served back.
 - **The demo recorder can record with an installed browser (#302).** `WI_RECORDER_CHROME` names the
   browser's executable (for example the installed Google Chrome), and the recorder and the theme grab
   launch it instead of Playwright's bundled browser. The preflight then checks (and, with auto-install
