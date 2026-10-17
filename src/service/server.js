@@ -111,6 +111,12 @@ const COMMAND_TYPES = new Set([
  * @param {string} [opts.frontendDir]
  * @param {boolean} [opts.standalone]  serve the retired SPA shell (dev only, DES-MERGE-001 §7.13)
  */
+// Run `fn` once the request body has been read to its end (now, if it already has). An aborted request never
+// calls it: there is no one left to answer.
+function afterBody(req, fn) {
+  if (req.complete && req.readableEnded) fn(); else req.once("end", fn);
+}
+
 export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {}, demoCut = {}, deckFitOptions = {} } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
@@ -207,18 +213,26 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     let bytes = 0;
     let settled = false;
     const finish = (fn) => { if (settled) return; settled = true; uploading = false; fn(); };
-    const fail = (e) => finish(() => { out.destroy(); rmSync(tmp, { force: true }); cutFailure(res, e); });
-    // Over the cap: stop writing, answer 413 on a connection that will close, and drain the rest of the body
-    // (destroying the request would reset the socket before the answer reached the caller).
+    // Remove the temp file only once the stream has closed: the file is opened asynchronously, so a remove
+    // before the open completes would leave a `.part` behind.
+    const discard = (then) => {
+      const rm = () => { rmSync(tmp, { force: true }); then(); };
+      if (out.closed) rm(); else { out.once("close", rm); out.destroy(); }
+    };
+    const fail = (e) => finish(() => discard(() => cutFailure(res, e)));
+    // Over the cap: stop writing, drain the rest of the body, and answer 413 once it is read and the temp file is
+    // gone. Answering while the caller is still sending resets the socket (unread bytes at close), and the caller
+    // sees ECONNRESET/EPIPE instead of the 413.
     req.on("data", (chunk) => {
       if (settled) return;
       bytes += chunk.length;
       if (bytes <= uploadLimit) return;
       finish(() => {
         req.unpipe(out);
-        out.destroy();
-        rmSync(tmp, { force: true });
-        res.status(413).set("Connection", "close").json({ error: "too_large", limit: uploadLimit });
+        let pending = 2;
+        const done = () => { if (--pending === 0) res.status(413).set("Connection", "close").json({ error: "too_large", limit: uploadLimit }); };
+        discard(done);
+        afterBody(req, done);
         req.resume();
       });
     });
@@ -601,7 +615,12 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       if (settled) return;
       bytes += chunk.length;
       if (bytes > THEME_SOURCE_LIMIT) {
-        finish(() => { res.status(413).set("Connection", "close").json({ error: "too_large", limit: THEME_SOURCE_LIMIT }); req.resume(); });
+        // Drain the rest, then answer: a 413 sent while the caller is still sending resets the socket.
+        finish(() => {
+          chunks.length = 0;
+          afterBody(req, () => res.status(413).set("Connection", "close").json({ error: "too_large", limit: THEME_SOURCE_LIMIT }));
+          req.resume();
+        });
         return;
       }
       chunks.push(chunk);
