@@ -27,6 +27,16 @@ import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.j
 import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError } from "./demo-cut.js";
 /** One staged chapter's upload cap. */
 const IMPORT_UPLOAD_LIMIT = 1024 * 1024 * 1024;
+/** One brand source a learn reads (a PDF or an image the operator chose in studio). */
+const THEME_SOURCE_LIMIT = 20 * 1024 * 1024;
+/** The kinds a theme learn reads, by content type — and the bytes each must start with (never trust the label). */
+const THEME_SOURCE_TYPES = {
+  "application/pdf": { ext: "pdf", format: "pdf", magic: (b) => b.subarray(0, 5).toString("latin1") === "%PDF-" },
+  "image/png": { ext: "png", format: "image", magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  "image/jpeg": { ext: "jpg", format: "image", magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  "image/gif": { ext: "gif", format: "image", magic: (b) => /^GIF8[79]a$/.test(b.subarray(0, 6).toString("latin1")) },
+  "image/webp": { ext: "webp", format: "image", magic: (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP" },
+};
 import { deckFit } from "./deck-fit.js";
 import { effectiveTheme, fetchSkin } from "./video-skin.js";
 import { exportHtml, exportPdf, listExports, emptyReceipt, ExportNotOfflineError } from "./export.js";
@@ -560,6 +570,56 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       return { version: out.version, parent: out.parent, kind: "theme" };
     }).then((r) => res.json({ document_id: documentId, written: true, ...r }))
       .catch((e) => res.status(500).json({ error: e.message }));
+  });
+
+  // A brand source the operator chose in studio (studio, operator 2026-10-17: "it's impossible to guess what
+  // paths it would take but it could be an upload or select file"). The bytes ride a raw body — an image or a
+  // PDF by its content type, checked against its first bytes — and land in this doc's theme dir beside the
+  // pages a URL learn grabs. Nothing is served back: the answer is only the path a `theme.requested {path}`
+  // then names, so the learn reads the file in place exactly as it reads a path typed by hand. At most
+  // THEME_SOURCE_LIMIT bytes; one upload at a time per document.
+  let sourceUploading = false;
+  app.put("/api/theme/source", (req, res) => {
+    const type = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+    const kind = THEME_SOURCE_TYPES[type];
+    if (!kind) return res.status(415).json({ error: "unsupported_type", accepted: Object.keys(THEME_SOURCE_TYPES) });
+    const declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > THEME_SOURCE_LIMIT) {
+      // Answer, then drain what the caller is still sending (closing the socket under it would lose the answer).
+      res.status(413).json({ error: "too_large", limit: THEME_SOURCE_LIMIT });
+      req.resume();
+      return;
+    }
+    if (sourceUploading) return res.status(429).json({ error: "upload_in_flight" });
+    sourceUploading = true;
+    const chunks = [];
+    let bytes = 0;
+    let settled = false;
+    const finish = (fn) => { if (settled) return; settled = true; sourceUploading = false; fn(); };
+    req.on("data", (chunk) => {
+      if (settled) return;
+      bytes += chunk.length;
+      if (bytes > THEME_SOURCE_LIMIT) {
+        finish(() => { res.status(413).set("Connection", "close").json({ error: "too_large", limit: THEME_SOURCE_LIMIT }); req.resume(); });
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("error", (e) => finish(() => res.status(400).json({ error: e.message })));
+    req.on("end", () => {
+      if (settled) return;
+      const body = Buffer.concat(chunks);
+      if (body.length === 0) return finish(() => res.status(400).json({ error: "invalid_body" }));
+      if (!kind.magic(body)) return finish(() => res.status(415).json({ error: "content_mismatch", type }));
+      try {
+        const file = resolve(dir, "theme", `source_${Date.now()}_${randomUUID().slice(0, 8)}.${kind.ext}`);
+        mkdirSync(dirname(file), { recursive: true });
+        atomicWrite(file, body);
+        finish(() => res.json({ document_id: documentId, path: file, format: kind.format, bytes: body.length }));
+      } catch (e) {
+        finish(() => res.status(500).json({ error: e.message }));
+      }
+    });
   });
 
   app.delete("/api/theme/learned", (_req, res) => {
