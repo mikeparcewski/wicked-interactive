@@ -80,6 +80,12 @@ test("only an image or a PDF, and only when its first bytes say so", async () =>
     assert.equal((await lie.json()).error, "content_mismatch");
     const empty = await put(base, Buffer.alloc(0), "image/png");
     assert.equal(empty.status, 400);
+    // An inherited key is no type (codex r1: `constructor` reached `kind.magic` and threw outside the handler).
+    for (const inherited of ["constructor", "__proto__", "toString"]) {
+      const r = await put(base, PNG, inherited);
+      assert.equal(r.status, 415, inherited);
+    }
+    assert.equal((await put(base, PNG, "image/png")).status, 200);
   } finally { await cleanup(); }
 });
 

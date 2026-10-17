@@ -581,7 +581,8 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
   let sourceUploading = false;
   app.put("/api/theme/source", (req, res) => {
     const type = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
-    const kind = THEME_SOURCE_TYPES[type];
+    // Own keys only: a type named `constructor` or `__proto__` must never reach an inherited value (codex r1).
+    const kind = Object.hasOwn(THEME_SOURCE_TYPES, type) ? THEME_SOURCE_TYPES[type] : null;
     if (!kind) return res.status(415).json({ error: "unsupported_type", accepted: Object.keys(THEME_SOURCE_TYPES) });
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > THEME_SOURCE_LIMIT) {
@@ -608,10 +609,11 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     req.on("error", (e) => finish(() => res.status(400).json({ error: e.message })));
     req.on("end", () => {
       if (settled) return;
-      const body = Buffer.concat(chunks);
-      if (body.length === 0) return finish(() => res.status(400).json({ error: "invalid_body" }));
-      if (!kind.magic(body)) return finish(() => res.status(415).json({ error: "content_mismatch", type }));
+      // Everything after the body landed answers through `finish`: nothing thrown here may escape the listener.
       try {
+        const body = Buffer.concat(chunks);
+        if (body.length === 0) return finish(() => res.status(400).json({ error: "invalid_body" }));
+        if (!kind.magic(body)) return finish(() => res.status(415).json({ error: "content_mismatch", type }));
         const file = resolve(dir, "theme", `source_${Date.now()}_${randomUUID().slice(0, 8)}.${kind.ext}`);
         mkdirSync(dirname(file), { recursive: true });
         atomicWrite(file, body);
