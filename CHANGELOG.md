@@ -4,6 +4,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-10-17
+
 ### Changed
 - **Docs say demos are captioned, not narrated.** The recorder burns in on-screen captions and title cards and renders without an audio track (`demo-cut.js` passes `-an`), so the README and CLAUDE.md now say "captioned walkthroughs (no voice-over)". The wi.* redirect page calls studio "where you direct your coding agents" instead of "the orchestrator IDE".
 
@@ -414,7 +416,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.11.0...v0.11.1
