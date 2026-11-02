@@ -45,6 +45,10 @@ export const EVENT_TYPES = Object.freeze({
   "wicked.interactive.feedback.processed":  { subdomain: "feedback",   owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.edit.completed":      { subdomain: "feedback",   owners: [AGENT, CREW],   uiEmittable: false },
   "wicked.interactive.draft.completed":     { subdomain: "generation", owners: [AGENT, CREW],   uiEmittable: false },
+  // DES-CHAT-ARTIFACTS-001 §6.2 (slice I1): a draft.completed that named the head its run worked
+  // from (`expect_head`) found a different head, so nothing landed. Service-announced, once per
+  // refused landing, so the run's owner can offer a redo on the new head; never UI-emittable.
+  "wicked.interactive.draft.conflict":      { subdomain: "generation", owners: [SERVICE],       uiEmittable: false },
   "wicked.interactive.chat.posted":         { subdomain: "chat",       owners: [UI, AGENT],     uiEmittable: true  },
   "wicked.interactive.question.answered":   { subdomain: "chat",       owners: [UI],            uiEmittable: true  },
   "wicked.interactive.status.posted":       { subdomain: "status",     owners: [AGENT, SERVICE, CREW], uiEmittable: false },

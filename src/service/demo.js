@@ -450,7 +450,7 @@ export async function recordDemo(dir, opts = {}) {
   const parent = m.head;
   const prepared = themed(instrument(html).html, opts);
   atomicWrite(join(dir, `_v${version}.html`), prepared);
-  ({ manifest: m } = recordVersion(m, { version, parent, feedbackFile: null }));
+  ({ manifest: m } = recordVersion(m, { version, parent, feedbackFile: null, kind: "demo" }));
   saveManifest(dir, m);
 
   opts.emit?.("HTML_UPDATED", {

@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { isColor } from "../core/theme-grammar.js";
 import { instrument } from "../core/instrument.js";
 import { themeCss } from "../core/theme.js";
-import { nextVersionNumber, recordVersion } from "../core/versions.js";
+import { nextVersionNumber, recordVersion, versionCreated } from "../core/versions.js";
 import { atomicWrite, loadManifest, saveManifest } from "./fsstore.js";
 import { highestVersionOnDisk } from "./workspace.js";
 import { effectiveTheme, fetchSkin, NEUTRAL_PALETTE } from "./video-skin.js";
@@ -324,7 +324,7 @@ export async function renderCut(dir, cut, opts = {}) {
     url: opts.url ?? cut.url ?? "", videoFile: null, mp4File: `_v${version}.mp4`, posterFile: `_v${version}-poster.jpg`,
     steps: timeline(cut).map((c) => ({ label: c.title, at: c.at })) });
   atomicWrite(join(dir, `_v${version}.html`), themed(instrument(html).html, opts));
-  const landed = recordVersion(manifest, { version, parent }).manifest;
+  const landed = recordVersion(manifest, { version, parent, kind: "demo" }).manifest;
   landed.versions.at(-1).render = { mp4: `_v${version}.mp4`, vtt: `_v${version}.vtt`, ass: `_v${version}.ass`,
     burnIn: cut.style.captions.burnIn && !capabilities.burnIn ? "unavailable" : burnIn,
     cardText: cardText && !capabilities.burnIn ? "unavailable" : cardText,
@@ -334,7 +334,7 @@ export async function renderCut(dir, cut, opts = {}) {
   const saved = { ...stored, rev: stored.rev + 1, version };
   atomicWrite(join(dir, CUT_FILE), JSON.stringify(saved, null, 2));
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
-  opts.emit?.("wicked.interactive.version.created", { version, parent, kind: "demo", html_file: `_v${version}.html` });
+  opts.emit?.("wicked.interactive.version.created", versionCreated({ version, parent, kind: "demo" }));
   return { rev: saved.rev, version, parent };
 }
 

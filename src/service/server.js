@@ -20,7 +20,7 @@ import { appendConversation, deckOpProblem, materializeDeckOp, materializeFeedba
 import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead } from "./workspace.js";
 import { closeProposal, openProposal, recordDecision, reviewFor, setAudience } from "./deck-review.js";
 import { saveManifest, atomicWrite } from "./fsstore.js";
-import { isRetired as manifestRetired, retireManifest } from "../core/versions.js";
+import { isRetired as manifestRetired, retireManifest, versionCreated, readRunId } from "../core/versions.js";
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
@@ -321,7 +321,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         if (head !== expectHead) return { headMoved: true, head };
       }
       const { version, parent } = forkVersion(dir, from);
-      emit("wicked.interactive.version.created", { version, parent, kind: "fork", html_file: `_v${version}.html` });
+      emit("wicked.interactive.version.created", versionCreated({ version, parent, kind: "fork" }));
       return { version, parent };
     }).then((r) => (r.headMoved ? res.status(409).json({ error: "head_moved", head: r.head }) : res.json(r)))
       .catch((e) => res.status(400).json({ error: e.message }));
@@ -568,19 +568,23 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
   // written); the write and the optional re-theme run inside the FIFO so they can't race a version.
   // `apply: true` lands one re-themed version of the head, announced as version.created {kind:'theme'}.
   // Undo = fork from that version's parent + DELETE below, so later versions stop wearing it.
+  // Optional `run_id` (DES-CHAT-ARTIFACTS-001 §6.2): the run that re-themed it, recorded on that
+  // version and announced; absent or null when a person did. A malformed one is a 400, nothing written.
   app.put("/api/theme/learned", (req, res) => {
     const tokens = req.body?.tokens;
     const check = checkThemeTokens(tokens);
     if (!check.ok) return res.status(400).json({ error: `theme tokens refused: ${check.reason}` });
+    const run = readRunId(req.body?.run_id);
+    if (run.problem) return res.status(400).json({ error: run.problem });
     const apply = req.body?.apply === true;
     enqueue(async () => {
       const file = learnedThemePath(dir);
       mkdirSync(dirname(file), { recursive: true });
       atomicWrite(file, JSON.stringify(tokens, null, 2));
       if (!apply) return { version: null, parent: null, kind: null };
-      const out = rethemeHead(dir, tokens);
+      const out = rethemeHead(dir, tokens, { runId: run.runId });
       if (out.unchanged) return { version: null, parent: out.parent, kind: null, unchanged: true };
-      emit("wicked.interactive.version.created", { version: out.version, parent: out.parent, kind: "theme", html_file: `_v${out.version}.html` });
+      emit("wicked.interactive.version.created", versionCreated({ version: out.version, parent: out.parent, kind: "theme", runId: run.runId }));
       return { version: out.version, parent: out.parent, kind: "theme" };
     }).then((r) => res.json({ document_id: documentId, written: true, ...r }))
       .catch((e) => res.status(500).json({ error: e.message }));

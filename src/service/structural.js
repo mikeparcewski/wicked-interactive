@@ -42,9 +42,10 @@ const rootWid = (fragmentHtml) => {
  * Apply the agent's structural results (from a `wicked.interactive.edit.completed` event) as a follow-on
  * version. The INV-2 gate (in regenerate) rejects any fragment that dropped a data-wid.
  * Result shape: { version (the parent), results: [{selector, fragment} | {selector, remove:true}] }.
+ * `runId` is the run that made the edit (recorded on the new version), or null.
  * @returns {Promise<{version:number, parent:number, applied:string[], rejected:object[]}>}
  */
-export async function applyStructuralResults(dir, { version, results }, opts = {}) {
+export async function applyStructuralResults(dir, { version, results, runId = null }, opts = {}) {
   const { parent, feedbackFile } = resolveEditBase(dir, version);
   const bySelector = new Map(results.map((r) => [r.selector, r.fragment]));
   const baseHtml = readVersionHtml(dir, parent);
@@ -72,7 +73,7 @@ export async function applyStructuralResults(dir, { version, results }, opts = {
 
   const newVersion = nextVersionNumber(manifest);
   atomicWrite(join(dir, `_v${newVersion}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? feedbackFile ?? null }));
+  ({ manifest } = recordVersion(manifest, { version: newVersion, parent, feedbackFile: opts.feedbackFile ?? feedbackFile ?? null, kind: "structural", runId }));
   saveManifest(dir, manifest);
   return { version: newVersion, parent, applied, rejected };
 }

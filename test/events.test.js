@@ -98,6 +98,8 @@ test("UI may only originate the conversational/intent events", () => {
     "wicked.interactive.source.attached", "wicked.interactive.source.removed", "wicked.interactive.demo.requested",
     "wicked.interactive.theme.requested", "wicked.interactive.review.requested", "wicked.interactive.status.requested"];
   const uiNo = ["wicked.interactive.edit.completed", "wicked.interactive.draft.completed", "wicked.interactive.version.created",
+    // DES-CHAT-ARTIFACTS-001 §6.2: a refused landing is the service's fact, never the browser's.
+    "wicked.interactive.draft.conflict",
     "wicked.interactive.feedback.processed", "wicked.interactive.status.posted", "wicked.interactive.doc.created",
     "wicked.interactive.doc.retired",
     "wicked.interactive.source.updated", "wicked.interactive.export.requested", "wicked.interactive.export.generated",

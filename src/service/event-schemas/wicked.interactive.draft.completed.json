@@ -18,6 +18,24 @@
     },
     "html_path": {
       "type": "string"
+    },
+    "expect_head": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "ADDITIVE (DES-CHAT-ARTIFACTS-001 \u00a76.2): the head the run worked from. The draft lands only on that head; otherwise nothing lands and draft.conflict is emitted. Absent or null: lands on the current head, as before."
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+      "description": "ADDITIVE (DES-CHAT-ARTIFACTS-001 \u00a76.2): the run that made the draft, recorded on the version it lands and on version.created. Absent or null: no run."
     }
   },
   "additionalProperties": true,

@@ -49,10 +49,10 @@ export function generationPlaceholder(name, sourcePaths, brief = "") {
 /**
  * Land the agent's generated draft (from a `wicked.interactive.draft.completed` event) as a follow-on
  * version. Instruments (fresh data-wids) and themes the draft, then records it write-once
- * (INV-4) with the current head as parent.
+ * (INV-4) with the current head as parent, and with the run that made it (`runId`, or null).
  * @returns {Promise<{version:number, parent:number}>}
  */
-export async function applyGeneratedHtml(dir, html, opts = {}) {
+export async function applyGeneratedHtml(dir, html, opts = {}, { runId = null } = {}) {
   html = String(html ?? "");
   if (!html.trim()) throw new Error("generated draft missing html");
 
@@ -61,7 +61,7 @@ export async function applyGeneratedHtml(dir, html, opts = {}) {
   const version = nextVersionNumber(manifest);
   const prepared = themed(instrument(html, { slideIds: isDeckManifest(manifest) }).html, opts);
   atomicWrite(join(dir, `_v${version}.html`), prepared);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: opts.feedbackFile ?? null }));
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: opts.feedbackFile ?? null, kind: "generated", runId }));
   saveManifest(dir, manifest);
   return { version, parent };
 }
