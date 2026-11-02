@@ -4,6 +4,25 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **A generated draft lands only on the head its run worked from (`draft.completed {expect_head}`).** The head
+  check runs on the document's queue, the rule `POST /api/fork` already follows. If the head moved (someone edited
+  the document while the run worked), nothing lands and the service emits one new
+  `wicked.interactive.draft.conflict {document_id, project_id, run_id, expect_head, actual_head}`, so a hand edit is
+  never overwritten. A redelivered draft whose run already landed on that head is announced again, not reported as a
+  conflict. Without `expect_head`, a draft lands on the current head as before.
+- **Every version says which run made it.** `draft.completed`, `edit.completed` and `PUT /d/:doc/api/theme/learned`
+  accept an optional `run_id`. Each new manifest entry (`GET /d/:doc/api/versions`) records `kind` and `run_id`,
+  which is null when no run made the version (a hand edit, a fork, a person's re-theme). An entry recorded before
+  this release has neither key, so a reader can tell "by hand" from "unknown".
+- **`version.created` always carries `parent`, `kind` and `run_id`** (null for hand versions), on every path:
+  feedback, deck ops, structural edits, drafts, demos, demo cuts, forks and theme applies.
+
+### Changed
+- **A malformed `expect_head` or `run_id` lands nothing.** On the bus the command answers with
+  `status.posted {state: "error", code: "invalid_landing", retryable: false}` (not retried); the theme PUT answers
+  400. Absent or null fields behave exactly as before.
+
 ## [0.14.1] — 2026-10-17
 
 Patch: the over-cap upload fixes that failed the 0.14.0 release on macOS and Windows. 0.14.0 was tagged but never

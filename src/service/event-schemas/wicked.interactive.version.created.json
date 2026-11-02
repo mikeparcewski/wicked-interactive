@@ -6,7 +6,9 @@
     "document_id",
     "ts",
     "version",
-    "kind"
+    "parent",
+    "kind",
+    "run_id"
   ],
   "properties": {
     "document_id": {
@@ -19,7 +21,8 @@
       "type": "integer"
     },
     "parent": {
-      "type": "integer"
+      "type": "integer",
+      "description": "The version this one was made from (a fork's parent is the version it branched off)."
     },
     "kind": {
       "enum": [
@@ -30,6 +33,13 @@
         "demo",
         "theme"
       ]
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ADDITIVE (DES-CHAT-ARTIFACTS-001 \u00a76.2): the run that made this version, or null when no run did (a hand edit, a fork, a person's re-theme). The manifest entry records the same value; an entry from before this field has no run_id key (unknown)."
     },
     "html_file": {
       "type": "string"

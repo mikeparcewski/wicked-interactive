@@ -15,6 +15,7 @@
 import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { writeFeedback, applyFeedbackItems, loadManifest } from "./workspace.js";
+import { versionCreated, readRunId, readExpectHead } from "../core/versions.js";
 import { DECK_OPS, isDeckManifest, isSafeSlideId } from "../core/deck.js";
 import { applyStructuralResults, REQUESTS_DIR } from "./structural.js";
 import { applyGeneratedHtml } from "./generation.js";
@@ -71,9 +72,9 @@ export async function materializeFeedback(dir, payload, ctx) {
   // deterministic edits that were all no-ops) lands nothing (F-RECON-005) — so nothing is
   // announced, and no skin can say "v3 landed" for a document that did not change.
   if (!result.idempotent && result.landed) {
-    ctx.emit("wicked.interactive.version.created", {
-      version, parent, kind: "deterministic", html_file: result.html_file,
-    });
+    ctx.emit("wicked.interactive.version.created", versionCreated({
+      version, parent, kind: "deterministic", htmlFile: result.html_file,
+    }));
   }
   ctx.emit("wicked.interactive.feedback.processed", {
     // `version` stays the batch's reserved number — the handoff id the agent/crew edit is keyed on
@@ -129,30 +130,82 @@ export async function materializeDeckOp(dir, { expect_head: expectHead, op, auth
   const result = await applyFeedbackItems(dir, { version, parent, items }, themeOpts(ctx, dir));
   if (result.rejected.length > 0) return { refused: result.rejected[0].reason, head: manifest.head };
   if (!result.landed) return { unchanged: true, head: manifest.head };
-  ctx.emit("wicked.interactive.version.created", { version, parent, kind: "deterministic", html_file: result.html_file });
+  ctx.emit("wicked.interactive.version.created", versionCreated({ version, parent, kind: "deterministic", htmlFile: result.html_file }));
   return { version, parent };
 }
 
-/** Agent structural results → follow-on version (INV-2 gate). */
+/**
+ * A landing command whose new field is malformed lands nothing (DES-CHAT-ARTIFACTS-001 §6.2): a
+ * dropped `run_id` would record a run's version as a hand edit, and an unreadable `expect_head`
+ * would land over a hand edit. Said on the doc thread as a typed error; the command resolves, so
+ * the bus does not retry a deterministic refusal.
+ */
+function refuseLanding(ctx, type, problem) {
+  ctx.emit("wicked.interactive.status.posted", {
+    state: "error", code: "invalid_landing", retryable: false,
+    message: `The ${type} was not landed: ${problem}. Nothing was changed.`,
+  });
+  return { refused: problem };
+}
+
+/**
+ * Agent structural results → follow-on version (INV-2 gate). An optional `run_id` (the run that
+ * made the edit) is recorded on the version and announced on version.created.
+ */
 export async function materializeEdit(dir, payload, ctx) {
   const { version, results } = payload;
-  const out = await applyStructuralResults(dir, { version, results }, themeOpts(ctx, dir));
-  ctx.emit("wicked.interactive.version.created", {
-    version: out.version, parent: out.parent, kind: "structural", html_file: `_v${out.version}.html`,
-  });
+  const run = readRunId(payload.run_id);
+  if (run.problem) return refuseLanding(ctx, "edit", run.problem);
+  const out = await applyStructuralResults(dir, { version, results, runId: run.runId }, themeOpts(ctx, dir));
+  ctx.emit("wicked.interactive.version.created", versionCreated({
+    version: out.version, parent: out.parent, kind: "structural", runId: run.runId,
+  }));
   return out;
 }
 
-/** Agent first draft → land it as a new version. html inline, or html_path on disk (ADR-0019 D5). */
+/**
+ * Agent first draft → land it as a new version. html inline, or html_path on disk (ADR-0019 D5).
+ *
+ * Landing contract (DES-CHAT-ARTIFACTS-001 §6.2, slice I1), both fields optional:
+ *   • `run_id` — the run that made the draft, recorded on the version and on version.created.
+ *   • `expect_head` — the head the run worked from. The draft lands only on that head, the rule
+ *     `POST /api/fork` already follows. Checked on the doc FIFO, so a version queued ahead of this
+ *     command is seen. A moved head lands nothing and emits exactly one
+ *     `draft.conflict {run_id, expect_head, actual_head}`: a hand edit made while the run worked
+ *     is never overwritten. A redelivered draft whose run already landed on that head is the
+ *     landing it made, not a conflict: its version.created is announced again.
+ * Without them, a draft lands exactly as before I1 (on the current head, `run_id: null`).
+ */
 export async function materializeDraft(dir, payload, ctx) {
+  const run = readRunId(payload.run_id);
+  if (run.problem) return refuseLanding(ctx, "draft", run.problem);
+  const expect = readExpectHead(payload.expect_head);
+  if (expect.problem) return refuseLanding(ctx, "draft", expect.problem);
+  const { runId } = run;
+  const { expectHead } = expect;
+  if (expectHead !== null) {
+    const manifest = loadManifest(dir);
+    if (manifest.head !== expectHead) {
+      const landed = runId === null ? null
+        : manifest.versions.find((v) => v.run_id === runId && v.parent === expectHead && v.kind === "generated");
+      if (landed) {
+        ctx.emit("wicked.interactive.version.created", versionCreated({
+          version: landed.version, parent: landed.parent, kind: "generated", runId,
+        }));
+        return { version: landed.version, parent: landed.parent, replayed: true };
+      }
+      ctx.emit("wicked.interactive.draft.conflict", { run_id: runId, expect_head: expectHead, actual_head: manifest.head });
+      return { conflict: true, expect_head: expectHead, actual_head: manifest.head };
+    }
+  }
   let html = payload.html;
   if ((html == null || html === "") && payload.html_path) {
     html = readFileSync(resolve(payload.html_path), "utf-8");
   }
-  const out = await applyGeneratedHtml(dir, html, themeOpts(ctx, dir));
-  ctx.emit("wicked.interactive.version.created", {
-    version: out.version, parent: out.parent, kind: "generated", html_file: `_v${out.version}.html`,
-  });
+  const out = await applyGeneratedHtml(dir, html, themeOpts(ctx, dir), { runId });
+  ctx.emit("wicked.interactive.version.created", versionCreated({
+    version: out.version, parent: out.parent, kind: "generated", runId,
+  }));
   return out;
 }
 
@@ -210,9 +263,9 @@ export async function materializeDemo(dir, payload, ctx, { record = recordDemo, 
         emitWorking(`Step ${index}${total ? `/${total}` : ""}: ${label}`);
       },
     });
-    ctx.emit("wicked.interactive.version.created", {
-      version: result.version, parent: result.parent, kind: "demo", html_file: `_v${result.version}.html`,
-    });
+    ctx.emit("wicked.interactive.version.created", versionCreated({
+      version: result.version, parent: result.parent, kind: "demo",
+    }));
     onState({ state: "recorded", headless, version: result.version });
     return result;
   } catch (e) {

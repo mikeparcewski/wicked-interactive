@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Draft not landed: the head moved",
+  "description": "DES-CHAT-ARTIFACTS-001 \u00a76.2 (slice I1): a draft.completed named expect_head, the document's head was a different version, and nothing landed. Emitted once per refused landing.",
+  "type": "object",
+  "required": [
+    "document_id",
+    "ts",
+    "run_id",
+    "expect_head",
+    "actual_head"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The run_id the draft.completed carried, or null when it carried none."
+    },
+    "expect_head": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The head the run worked from."
+    },
+    "actual_head": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The head the document had when the draft arrived."
+    },
+    "project_id": {
+      "type": "string",
+      "description": "The crew project this doc is bound to (derived by the service, as on every service emit). Absent for unbound docs."
+    }
+  },
+  "additionalProperties": true
+}

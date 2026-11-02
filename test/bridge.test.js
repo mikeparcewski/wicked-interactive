@@ -76,6 +76,7 @@ async function openBridge() {
     } catch { /* reader cancelled on close */ }
   })();
   return {
+    frames,
     waitFor(pred, timeoutMs = 6000) {
       const hit = frames.find(pred);
       if (hit) return Promise.resolve(hit);
@@ -169,6 +170,40 @@ test("agent draft.completed lands a generated first draft for a source doc", asy
     const vc = await bridge.waitFor((f) => f.ev === "wicked.interactive.version.created" && f.data.payload.document_id === "delta" && f.data.payload.kind === "generated");
     assert.ok(vc.data.payload.version >= 1);
     assert.match(await (await fetch(`${base}/d/delta/doc`)).text(), /Investor Update/);
+  } finally { bridge.close(); }
+});
+
+test("crew draft.completed on a moved head: one draft.conflict on the bus, nothing lands; a matching one lands with its run_id (I1)", async () => {
+  await createDoc("delta-cas", "", { kind: "source", brief: "a teaser" });
+  const bridge = await openBridge();
+  try {
+    // A hand edit moves the head v0 → v1 while the run works from v0.
+    const fork = await jpost("/d/delta-cas/api/fork", { from: 0 });
+    assert.equal(fork.status, 200);
+    const handHead = (await fork.json()).version;
+    const hand = await bridge.waitFor((f) => f.ev === "wicked.interactive.version.created" && f.data.payload.document_id === "delta-cas" && f.data.payload.kind === "fork");
+    assert.equal(hand.data.payload.run_id, null, "a hand fork carries no run_id");
+    await emitEvent("wicked.interactive.draft.completed",
+      { document_id: "delta-cas", html: "<section><h1>Stale Draft</h1></section>", expect_head: 0, run_id: "run-stale" },
+      { producer: PRODUCERS.CREW });
+    const conflict = await bridge.waitFor((f) => f.ev === "wicked.interactive.draft.conflict" && f.data.payload.document_id === "delta-cas");
+    assert.equal(conflict.data.producer_id, PRODUCERS.SERVICE);
+    assert.equal(conflict.data.payload.run_id, "run-stale");
+    assert.equal(conflict.data.payload.expect_head, 0);
+    assert.equal(conflict.data.payload.actual_head, handHead);
+    assert.equal(typeof conflict.data.payload.ts, "string");
+    assert.doesNotMatch(await (await fetch(`${base}/d/delta-cas/doc`)).text(), /Stale Draft/, "nothing landed");
+    await emitEvent("wicked.interactive.draft.completed",
+      { document_id: "delta-cas", html: "<section><h1>Fresh Draft</h1></section>", expect_head: handHead, run_id: "run-fresh" },
+      { producer: PRODUCERS.CREW });
+    const vc = await bridge.waitFor((f) => f.ev === "wicked.interactive.version.created" && f.data.payload.document_id === "delta-cas" && f.data.payload.kind === "generated");
+    assert.deepEqual({ parent: vc.data.payload.parent, run_id: vc.data.payload.run_id }, { parent: handHead, run_id: "run-fresh" });
+    assert.match(await (await fetch(`${base}/d/delta-cas/doc`)).text(), /Fresh Draft/);
+    const entry = (await (await fetch(`${base}/d/delta-cas/api/versions`)).json()).versions.find((v) => v.version === vc.data.payload.version);
+    assert.deepEqual({ kind: entry.kind, run_id: entry.run_id }, { kind: "generated", run_id: "run-fresh" });
+    // Exactly one conflict for the one stale landing.
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(bridge.frames.filter((f) => f.ev === "wicked.interactive.draft.conflict" && f.data.payload.document_id === "delta-cas").length, 1);
   } finally { bridge.close(); }
 });
 

@@ -130,7 +130,7 @@ export async function applyFeedbackItems(dir, { version, parent, items }, opts =
     };
   }
   atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: feedback_file }));
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: feedback_file, kind: "deterministic" }));
   saveManifest(dir, manifest);
   return {
     version, html_file: `_v${version}.html`, applied, rejected, stale,
@@ -155,7 +155,7 @@ export function forkVersion(dir, from) {
   if (getVersion(manifest, from) == null) throw new Error(`fork: v${from} does not exist`);
   const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
   copyFileSync(join(dir, `_v${from}.html`), join(dir, `_v${version}.html`));
-  ({ manifest } = recordVersion(manifest, { version, parent: from, feedbackFile: null }));
+  ({ manifest } = recordVersion(manifest, { version, parent: from, feedbackFile: null, kind: "fork" }));
   saveManifest(dir, manifest);
   return { version, parent: from };
 }
@@ -165,10 +165,11 @@ export function forkVersion(dir, from) {
  * Re-theme the head with a learned token object (EP-I2): a new write-once version whose parent is
  * the head, carrying the same content with the learned theme block. Content-only otherwise — no
  * re-instrument, so every data-wid stays byte-for-byte. A head that already wears exactly these
- * tokens lands nothing (F-RECON-005): `{version:null, unchanged:true}`.
+ * tokens lands nothing (F-RECON-005): `{version:null, unchanged:true}`. `runId` is the run that
+ * re-themed it (recorded on the new version), or null when a person did.
  * @returns {{version:number|null, parent:number, unchanged:boolean}}
  */
-export function rethemeHead(dir, tokens) {
+export function rethemeHead(dir, tokens, { runId = null } = {}) {
   let manifest = loadManifest(dir);
   const parent = manifest.head;
   const prevHtml = readVersionHtml(dir, parent);
@@ -176,7 +177,7 @@ export function rethemeHead(dir, tokens) {
   if (contentHash(html) === contentHash(prevHtml)) return { version: null, parent, unchanged: true };
   const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
   atomicWrite(join(dir, `_v${version}.html`), html);
-  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: null }));
+  ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: null, kind: "theme", runId }));
   saveManifest(dir, manifest);
   return { version, parent, unchanged: false };
 }
