@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { initWorkspace, loadManifest } from "../src/service/workspace.js";
 import { materializeFeedback, materializeEdit, materializeDraft } from "../src/service/handlers.js";
 import { createServer } from "../src/service/server.js";
-import { getVersion } from "../src/core/versions.js";
+import { getVersion, readRunId } from "../src/core/versions.js";
 
 const VC = "wicked.interactive.version.created";
 const CONFLICT = "wicked.interactive.draft.conflict";
@@ -166,7 +166,40 @@ test("a malformed expect_head or run_id lands nothing and says why (no conflict,
   }
 });
 
+test("a conflict or refusal that can't be published fails the command; the retry publishes exactly one", async () => {
+  const dir = ws();
+  const ctx = spyCtx();
+  try {
+    await handEdit(dir, ctx);
+    ctx.events.length = 0;
+    // The bus refuses the publish (e.g. SQLITE_BUSY): the handler must not resolve as if it said so.
+    const failing = { ...ctx, emit: (type, payload) => (type === CONFLICT || type === "wicked.interactive.status.posted"
+      ? Promise.reject(new Error("SQLITE_BUSY")) : ctx.emit(type, payload)) };
+    await assert.rejects(materializeDraft(dir, { html: DRAFT, expect_head: 0, run_id: "run-retry" }, failing), /SQLITE_BUSY/);
+    await assert.rejects(materializeDraft(dir, { html: DRAFT, run_id: 9 }, failing), /SQLITE_BUSY/);
+    assert.equal(loadManifest(dir).head, 1, "nothing landed");
+    // The bus retries the command: the same decision, published once.
+    const out = await materializeDraft(dir, { html: DRAFT, expect_head: 0, run_id: "run-retry" }, ctx);
+    assert.equal(out.conflict, true);
+    assert.deepEqual(ofType(ctx.events, CONFLICT), [{ run_id: "run-retry", expect_head: 0, actual_head: 1 }]);
+  } finally { cleanup(dir); }
+});
+
 // ── run_id on every landing path ─────────────────────────────────────────────────────────────
+
+test("the run_id schemas of draft.completed and edit.completed accept exactly what the handlers accept", () => {
+  const schemas = ["draft.completed", "edit.completed"].map((n) => JSON.parse(readFileSync(
+    new URL(`../src/service/event-schemas/wicked.interactive.${n}.json`, import.meta.url), "utf-8")).properties.run_id);
+  const bySchema = (s, v) => v === null
+    || (typeof v === "string" && [...v].length >= s.minLength && [...v].length <= s.maxLength && new RegExp(s.pattern, "u").test(v));
+  const samples = [null, "run-1", "", "x".repeat(200), "x".repeat(201), "run\nforged", "tab\there", "del\u007f",
+    "\u{1F600}".repeat(200), "\u{1F600}".repeat(201), 42];
+  for (const s of schemas) {
+    for (const v of samples) {
+      assert.equal(bySchema(s, v), !readRunId(v).problem, `schema and readRunId agree on ${JSON.stringify(v)?.slice(0, 40)}`);
+    }
+  }
+});
 
 test("edit.completed records its run_id on the version and on version.created", async () => {
   const dir = ws();

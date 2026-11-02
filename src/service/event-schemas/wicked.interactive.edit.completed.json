@@ -29,6 +29,7 @@
       ],
       "minLength": 1,
       "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
       "description": "ADDITIVE (DES-CHAT-ARTIFACTS-001 \u00a76.2): the run that made the edit, recorded on the version it lands and on version.created. Absent or null: no run."
     }
   },

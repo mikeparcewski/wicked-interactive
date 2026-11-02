@@ -138,10 +138,11 @@ export async function materializeDeckOp(dir, { expect_head: expectHead, op, auth
  * A landing command whose new field is malformed lands nothing (DES-CHAT-ARTIFACTS-001 §6.2): a
  * dropped `run_id` would record a run's version as a hand edit, and an unreadable `expect_head`
  * would land over a hand edit. Said on the doc thread as a typed error; the command resolves, so
- * the bus does not retry a deterministic refusal.
+ * the bus does not retry a deterministic refusal. The announce is awaited: if it can't be published
+ * the command fails and is retried, and the retry refuses (and announces) again.
  */
-function refuseLanding(ctx, type, problem) {
-  ctx.emit("wicked.interactive.status.posted", {
+async function refuseLanding(ctx, type, problem) {
+  await ctx.emit("wicked.interactive.status.posted", {
     state: "error", code: "invalid_landing", retryable: false,
     message: `The ${type} was not landed: ${problem}. Nothing was changed.`,
   });
@@ -174,6 +175,8 @@ export async function materializeEdit(dir, payload, ctx) {
  *     `draft.conflict {run_id, expect_head, actual_head}`: a hand edit made while the run worked
  *     is never overwritten. A redelivered draft whose run already landed on that head is the
  *     landing it made, not a conflict: its version.created is announced again.
+ *   The conflict and the re-announce are the command's only outcome, so both are awaited: one that
+ *   can't be published fails the command for the bus to retry, and the retry decides the same way.
  * Without them, a draft lands exactly as before I1 (on the current head, `run_id: null`).
  */
 export async function materializeDraft(dir, payload, ctx) {
@@ -189,12 +192,12 @@ export async function materializeDraft(dir, payload, ctx) {
       const landed = runId === null ? null
         : manifest.versions.find((v) => v.run_id === runId && v.parent === expectHead && v.kind === "generated");
       if (landed) {
-        ctx.emit("wicked.interactive.version.created", versionCreated({
+        await ctx.emit("wicked.interactive.version.created", versionCreated({
           version: landed.version, parent: landed.parent, kind: "generated", runId,
         }));
         return { version: landed.version, parent: landed.parent, replayed: true };
       }
-      ctx.emit("wicked.interactive.draft.conflict", { run_id: runId, expect_head: expectHead, actual_head: manifest.head });
+      await ctx.emit("wicked.interactive.draft.conflict", { run_id: runId, expect_head: expectHead, actual_head: manifest.head });
       return { conflict: true, expect_head: expectHead, actual_head: manifest.head };
     }
   }

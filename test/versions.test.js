@@ -49,3 +49,9 @@ test("ancestry walks parent pointers to the root", () => {
 test("addVersion from a non-existent parent throws", () => {
   assert.throws(() => addVersion(initManifest(), { parent: 99 }), /does not exist/);
 });
+
+test("the core fork records its provenance: kind fork, run_id null (I1)", () => {
+  const { manifest, version } = fork(initManifest(), 0);
+  const entry = getVersion(manifest, version);
+  assert.deepEqual({ parent: entry.parent, kind: entry.kind, run_id: entry.run_id }, { parent: 0, kind: "fork", run_id: null });
+});

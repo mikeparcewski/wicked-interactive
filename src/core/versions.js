@@ -107,13 +107,14 @@ export function versionCreated({ version, parent, kind, runId = null, htmlFile =
 
 /**
  * A landing's optional `run_id` (DES-CHAT-ARTIFACTS-001 §6.2): absent or null means no run made
- * it (exactly as before I1); otherwise a non-empty string of at most 200 characters without
- * control characters. Returns `{ runId }` or `{ problem }`; a caller lands nothing on a problem,
- * because a dropped id would record a run's version as a hand edit.
+ * it (exactly as before I1); otherwise a non-empty string of at most 200 characters (code points,
+ * as JSON Schema's maxLength counts them) without control characters — the `run_id` schema of
+ * draft.completed and edit.completed says the same. Returns `{ runId }` or `{ problem }`; a caller
+ * lands nothing on a problem, because a dropped id would record a run's version as a hand edit.
  */
 export function readRunId(value) {
   if (value === undefined || value === null) return { runId: null };
-  if (typeof value !== "string" || value.length === 0 || value.length > 200 || /[\u0000-\u001f\u007f]/.test(value)) {
+  if (typeof value !== "string" || value.length === 0 || [...value].length > 200 || /[\u0000-\u001f\u007f]/.test(value)) {
     return { problem: "run_id must be a non-empty string of at most 200 characters" };
   }
   return { runId: value };
@@ -158,7 +159,7 @@ export function nextVersionNumber(manifest) {
  */
 export function fork(manifest, from) {
   if (getVersion(manifest, from) == null) throw new Error(`fork: v${from} does not exist`);
-  return addVersion(manifest, { parent: from, feedbackFile: null });
+  return addVersion(manifest, { parent: from, feedbackFile: null, kind: "fork" });
 }
 
 /** The chain of ancestors from a version back to the root (inclusive), root-first. */
