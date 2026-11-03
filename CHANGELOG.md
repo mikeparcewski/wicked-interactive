@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-11-03
+
+Minor: an optional `expect_head` lets a generated draft land only on the head its run worked from, and every version
+landed after version 0 records the run that made it, or null (I1, #323).
+
 ### Added
 - **A generated draft lands only on the head its run worked from (`draft.completed {expect_head}`).** The head
   check runs on the document's queue, the rule `POST /api/fork` already follows. If the head moved (someone edited
@@ -14,7 +19,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 - **Every version says which run made it.** `draft.completed`, `edit.completed` and `PUT /d/:doc/api/theme/learned`
   accept an optional `run_id`. Each new manifest entry (`GET /d/:doc/api/versions`) records `kind` and `run_id`,
   which is null when no run made the version (a hand edit, a fork, a person's re-theme). An entry recorded before
-  this release has neither key, so a reader can tell "by hand" from "unknown".
+  this release has neither key, so a reader can tell "by hand" from "unknown". Version 0, the root a document starts
+  from, carries neither key either.
 - **`version.created` always carries `parent`, `kind` and `run_id`** (null for hand versions), on every path:
   feedback, deck ops, structural edits, drafts, demos, demo cuts, forks and theme applies.
 
@@ -454,7 +460,8 @@ published; 0.14.1 ships its changes too.
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.12.0...v0.13.0
