@@ -1,6 +1,6 @@
 {
   "name": "wicked-interactive",
-  "description": "Interactive HTML & presentation builder with an in-browser feedback loop for non-technical business users. Highlight blocks, attach plain-language feedback, regenerate live with the supervising Claude session in the loop. Versioned, forkable, exportable to self-contained HTML, PDF, native PowerPoint (PPTX), or video.",
+  "description": "The wicked family's document engine: write-once version lineage and forking (data-wid anchoring), HTML / PDF / native PowerPoint / video export, captioned demo recording and theme learning behind one local API. wicked-crew spawns and proxies it; you edit, rewind, fork and export in wicked-studio.",
   "owner": {
     "name": "Mike Parcewski",
     "url": "https://github.com/mikeparcewski"
@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "wicked-interactive",
-      "description": "Interactive HTML & presentation builder with an in-browser feedback loop. One command starts the service, opens the browser, and puts the running Claude session into the supervising-agent loop. Deterministic edits apply instantly; structural edits, drafts, and demos flow over wicked-bus events between the UI, the service, and the agent (data-wid preserving). Requires wicked-bus as the control plane.",
+      "description": "The wicked family's document engine behind one local API: versioned, forkable documents (data-wid anchoring), HTML / PDF / native PowerPoint / video export and captioned demos. wicked-crew spawns and proxies it, and wicked-studio is its UI. The serve and assist skills start the engine and keep this Claude session on its wicked-bus events. Requires wicked-bus.",
       "version": "0.15.0",
       "source": "./",
       "author": {

@@ -28,7 +28,7 @@ The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-
 
 You normally never start this service yourself:
 
-1. **Through crew — the supported path.** `npx wicked-crew serve` (studio's UI is bundled) spawns this package from npm as a local bridge (`wicked-interactive@^0.9.3` — crew's `INTERACTIVE_DEFAULT_RANGE`, overridable with `WICKED_INTERACTIVE_SPEC`; one bridge per project docs root) and reverse-proxies its entire HTTP surface at `/api/v1/projects/:projectId/interactive/*` on crew's own origin — pure transport, SSE streamed unbuffered both ways. The studio client only ever talks to crew.
+1. **Through crew — the supported path.** `npx wicked-crew serve` (studio's UI is bundled) spawns this package from npm as a local bridge (`wicked-interactive@^0.15.0` — crew's `INTERACTIVE_DEFAULT_RANGE`, overridable with `WICKED_INTERACTIVE_SPEC`; one bridge per project docs root) and reverse-proxies its entire HTTP surface at `/api/v1/projects/:projectId/interactive/*` on crew's own origin — pure transport, SSE streamed unbuffered both ways. The studio client only ever talks to crew.
 2. **Directly, as an API.** `npx wicked-interactive serve --root ~/wicked-interactive/docs` runs the API-only service on a dynamic port (ADR-0022/0025). `GET /` redirects to the recorded studio origin; there is no bundled UI on the supported path.
 3. **The dev escape hatch.** `wicked-interactive serve --standalone` (or `WI_STANDALONE=1`) serves the retired SPA shell for local development of the engine itself — not the supported UI.
 
@@ -87,7 +87,7 @@ WebVTT sidecars are always written.
 ## What Studio exposes
 
 Every engine capability is reachable over this API. Not every one has a Studio action yet.
-Checked against wicked-studio `main` (2026-10-10):
+Checked against wicked-studio and wicked-crew `main` (2026-11-04):
 
 | Capability | Engine API | Studio action |
 |---|---|---|
@@ -106,6 +106,9 @@ Checked against wicked-studio `main` (2026-10-10):
 | Attach / list reference sources | `POST` / `GET /d/:doc/api/sources` | No (client wrapper, no UI action) |
 | Record a demo through this bridge | `wicked.interactive.demo.requested`, `/api/demo/*` | No (Studio records demos through crew's governed `demo` run instead) |
 | Analyze / review a document | `wicked.interactive.review.requested` | No (API only; Studio shows `review.completed` verdicts on the thread) |
+| Make a document from a chat | crew creates it through its proxy (`POST /api/docs` with `chat_id` + `proposal_id`), then a governed draft lands it (`draft.completed {run_id, expect_head}`) | Yes: a studio chat's proposal card, then Go (create only; refine, theme and demo proposals are not live yet) |
+| Land a draft only on the head its run worked from | `draft.completed {expect_head}`; a moved head lands nothing and emits `wicked.interactive.draft.conflict` | Automatic: crew sends `expect_head` with a chat proposal's draft (no Studio action) |
+| Which run made a version | `kind` + `run_id` on `GET /d/:doc/api/versions` entries and `version.created` | No (API only) |
 
 ## Moving? The builder UI now lives in wicked-studio
 
@@ -147,8 +150,8 @@ notably *analyze / review* (the reviewer pass over a document). It remains fully
 
 Asked and answered (twice — 2026-08-24 parity audit, re-verified 2026-08-29; the full record is
 ADR-0027 in [`docs/architecture-decisions.md`](docs/architecture-decisions.md)): the UI merge did
-**not** move the engine, so this repo cannot be archived. crew resolves `wicked-interactive@^0.9.3`
-from the public npm registry at runtime — archiving would strand a live dependency, deprecating
+**not** move the engine, so this repo cannot be archived. crew resolves `wicked-interactive` (its
+`INTERACTIVE_DEFAULT_RANGE`, `^0.15.0` today) from the public npm registry at runtime — archiving would strand a live dependency, deprecating
 would announce a migration that never happened, and unpublishing would kill every route under
 crew's interactive proxy. The repo stays live, reworded to the engine story it now is.
 
