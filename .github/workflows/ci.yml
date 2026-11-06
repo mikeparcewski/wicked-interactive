@@ -30,16 +30,17 @@ jobs:
           cache: npm
       - name: Install (clean, from lockfile)
         run: npm ci
-      # python-pptx for the PPTX read-back tests (deck.test.js, pptx.test.js), which skip without it.
-      # A venv, so the runner's system python stays untouched (PEP 668).
-      - name: python-pptx for the PowerPoint read-back tests
-        run: python3 -m venv "$RUNNER_TEMP/pptx" && "$RUNNER_TEMP/pptx/bin/pip" install --quiet python-pptx
+      # Bounded and visible: on 2026-11-06 the runner's Ubuntu mirror served ffmpeg's ~90 packages so slowly that this
+      # step ran 10-16 min four times before any test ran. A slow mirror now fails the step in minutes (shown as an
+      # error) and the unit tests still run; the ffmpeg-only re-cut tests skip without it, as on the macOS/Windows jobs.
       - name: ffmpeg for video re-cut tests
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive timeout 120 apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -q --no-install-recommends ffmpeg
       - name: Unit tests
         run: npm test
-        env:
-          WI_PYTHON: ${{ runner.temp }}/pptx/bin/python
       - name: Plugin version is consistent (and matches the tag, if tagged)
         run: npm run check:version
       - name: Cross-machine smoke — packaged tarball installs & serves from a foreign dir
@@ -108,6 +109,11 @@ jobs:
       # The deck fit check measures real layout: required here, where a browser is pinned (WI_CHROME).
       - name: Deck fit check in headless Chrome
         run: node --test test/deck-fit.test.js
+        env:
+          WI_REQUIRE_BROWSER: '1'
+      # A restyle is recorded only when the render changes (F8): the real render, required here.
+      - name: Restyle render check in headless Chrome
+        run: node --test test/theme-effect.test.js
         env:
           WI_REQUIRE_BROWSER: '1'
 

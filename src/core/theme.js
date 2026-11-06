@@ -4,7 +4,9 @@
 // service/theme-source.js. This keeps the core layer side-effect-free and unit-testable.
 //
 // The block uses element-level selectors so it is a genuine BASE layer: a document's own
-// classed/inline styles win over it. It is injected FIRST (lowest precedence among equal
+// classed/inline styles win over its element rules. Its `--wi-*` token values sit on `:root:root`,
+// which outranks a document's own `:root`/`html` declaration of a token, so a document that styles
+// itself through `var(--wi-…)` (the drafting contract) always wears the theme it is given. It is injected FIRST (lowest precedence among equal
 // specificity) and is idempotent — re-running replaces the previous block rather than
 // stacking, so re-instrument after regenerate keeps a single, current theme block. It never
 // touches data-wid anchors (INV-1/INV-2 safe — it only adds an anchor-free <style>).
@@ -39,13 +41,17 @@ export function themeCss(tokens = DEFAULT_THEME) {
     `--wi-bg:${c.background};`, `--wi-surface:${c.surface};`, `--wi-primary:${c.primary};`,
     `--wi-secondary:${c.secondary};`, `--wi-accent:${c.accent};`, `--wi-text:${c.text_primary};`,
     `--wi-text-secondary:${c.text_secondary};`, `--wi-muted:${c.text_muted};`, `--wi-border:${c.border};`,
+    `--wi-success:${c.success};`, `--wi-warning:${c.warning};`, `--wi-error:${c.error};`,
     `--wi-font-heading:${f.heading};`, `--wi-font-body:${f.body};`, `--wi-font-mono:${f.mono};`,
-    `--wi-size-title:${s.title};`, `--wi-size-heading:${s.heading};`, `--wi-size-body:${s.body};`,
+    `--wi-size-title:${s.title};`, `--wi-size-heading:${s.heading};`, `--wi-size-subheading:${s.subheading};`,
+    `--wi-size-body:${s.body};`,
     `--wi-card-bg:${card.background};`, `--wi-card-radius:${card.border_radius};`,
     `--wi-card-padding:${card.padding};`, `--wi-card-shadow:${card.shadow};`,
   ].filter((v) => !v.includes("undefined")).join("");
   return [
-    `:root{${vars}}`,
+    // `:root:root` outranks a plain `:root`/`html` rule, so a document that declares one of these tokens
+    // itself (the drafting contract says not to) still wears the theme it is given.
+    `:root:root{${vars}}`,
     `body{font-family:var(--wi-font-body),system-ui,-apple-system,sans-serif;color:var(--wi-text);background:var(--wi-bg);}`,
     `h1,h2,h3,h4,h5,h6{font-family:var(--wi-font-heading),system-ui,sans-serif;color:var(--wi-primary);line-height:1.2;}`,
     `h1{font-size:var(--wi-size-title);}`,

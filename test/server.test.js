@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { request } from "node:http";
 import { createServer, createMultiServer } from "../src/service/server.js";
 import { initWorkspace } from "../src/service/workspace.js";
-import { pptxReady } from "../src/service/pptx.js";
+import { readPptx } from "./fixtures/read-pptx.js";
 
 async function boot(parent = tmpdir()) {
   const dir = mkdtempSync(join(parent, "wi-srv-"));
@@ -193,24 +193,22 @@ test("GET /api/export/file rejects path-traversal attempts", async () => {
   } finally { await cleanup(); }
 });
 
-test("POST /api/export pptx — builds a deck where python-pptx exists, else a clean 400 (ADR-0020)", async () => {
+test("POST /api/export pptx builds a deck in Node, no Python needed (ADR-0020, interactive#322)", async () => {
   const { base, cleanup } = await boot();
   try {
     const res = await fetch(`${base}/api/export`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ version: 0, format: "pptx" }),
     });
-    if (pptxReady().ok) {
-      assert.equal(res.status, 200);
-      const body = await res.json();
-      assert.match(body.file, /\.pptx$/);
-      const dl = await fetch(`${base}${body.download}`);
-      assert.equal(dl.status, 200);
-      assert.match(dl.headers.get("content-type") || "", /presentationml|octet-stream/);
-    } else {
-      assert.equal(res.status, 400);
-      assert.match((await res.json()).error, /python-pptx/);
-    }
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.match(body.file, /\.pptx$/);
+    assert.ok(body.slides >= 1);
+    const dl = await fetch(`${base}${body.download}`);
+    assert.equal(dl.status, 200);
+    assert.match(dl.headers.get("content-type") || "", /presentationml|octet-stream/);
+    const bytes = Buffer.from(await dl.arrayBuffer());
+    assert.equal(readPptx(bytes).slides.length, body.slides);
   } finally { await cleanup(); }
 });
 

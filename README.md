@@ -13,9 +13,9 @@
 The builder **UI** moved to wicked-studio (see [Moving?](#moving-the-builder-ui-now-lives-in-wicked-studio) below). The **engine** did not move — this repo is its sole implementation:
 
 - 📦 **Documents & lineage** — every change is a write-once saved version; rewind to any of them, or fork a version and chase two ideas at once without losing either.
-- 📤 **Exports** — single-file HTML with the document's local assets embedded, PDF, native editable PowerPoint (`vendor/pptx/html_to_pptx.py`; needs `python-pptx` on the exporting machine), and video. The recipient needs no wicked install, but remote fonts, scripts, stylesheets and images stay links to the network unless you export in strict offline mode — every export tells you which ones (see [Exports](#exports)).
+- 📤 **Exports** — single-file HTML with the document's local assets embedded, PDF, native editable PowerPoint (`src/service/pptx.js`, built in Node: one slide per slide with its title, text and speaker notes, in the version's theme), and video. The recipient needs no wicked install, but remote fonts, scripts, stylesheets and images stay links to the network unless you export in strict offline mode — every export tells you which ones (see [Exports](#exports)).
 - 🎬 **Demo recording** — captioned walkthroughs of a live app (on-screen captions, no voice-over) with chapter thumbnails (`src/service/demo.js`): mp4, poster, GIF.
-- 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls, and its write side (`PUT`/`DELETE` on the same path): every token is checked against a per-field grammar before it can reach the CSS.
+- 🎨 **Theme learning** — an SSRF-hardened theme-grab over pages you already ship, plus the learned-theme readback (`GET /d/:docId/api/theme/learned`, v0.8.1) that studio's brand tooling polls, and its write side (`PUT`/`DELETE` on the same path): every token is checked against a per-field grammar before it can reach the CSS. A re-theme (`apply: true`) is recorded only when it changes how the version renders (a sealed, sandboxed headless-Chromium pixel comparison): a document whose own CSS fixes every colour and font (drafted before the `var(--wi-…)` theme tokens) is refused with `reason: "no_visible_change"`, never recorded as a restyle.
 - 🔌 **One HTTP API + one bus vocabulary** — the `/api/*` surface and the `wicked.interactive.*` event types (ADR-0019) that the studio UI and supervising agents both speak.
 
 <p align="center">
@@ -58,7 +58,9 @@ document's `exports/` folder and answers with a `download` URL. What it embeds, 
 - **Every export returns a dependency receipt** in `dependencies`:
   `{ self_contained, embedded: [{ref, kind}], remote: [{ref, kind, remedy}], unresolved: [{ref, kind, reason, remedy}] }`.
   `self_contained` is true only when nothing is remote or unresolved. PPTX is built natively
-  from the markup and carries no linked resources, so its receipt is always empty.
+  from the markup and carries no linked resources, so its receipt is always empty. It needs no
+  Python: the deck's top-level slides become slides (titles, paragraphs, list items, table rows and
+  loose card text; `aside[data-notes-for]` becomes the speaker notes), in the exported version's theme.
 - **Strict offline mode:** add `"offline": true`. The export succeeds only when every resource is
   embedded; otherwise it answers `422 {code: "export_not_offline", dependencies}` listing each
   remote or unresolved resource, and writes nothing.

@@ -17,7 +17,11 @@ import { homedir } from "node:os";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, deckOpProblem, materializeDeckOp, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
-import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead } from "./workspace.js";
+import { initWorkspace, forkVersion, loadManifest, readVersionHtml, rethemeHead, planRetheme } from "./workspace.js";
+import { themeEffect, ThemeCheckUnavailable, ThemeCheckUnverifiable } from "./theme-effect.js";
+
+/** How long a theme apply may take to check its render, from the request's arrival (theme-effect.js). */
+const THEME_CHECK_MS = 30_000;
 import { closeProposal, openProposal, recordDecision, reviewFor, setAudience } from "./deck-review.js";
 import { saveManifest, atomicWrite } from "./fsstore.js";
 import { isRetired as manifestRetired, retireManifest, versionCreated, readRunId } from "../core/versions.js";
@@ -117,7 +121,7 @@ function afterBody(req, fn) {
   if (req.complete && req.readableEnded) fn(); else req.once("end", fn);
 }
 
-export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {}, demoCut = {}, deckFitOptions = {} } = {}) {
+export function createServer({ dir, documentId = "doc", emit = () => {}, frontendDir, standalone = standaloneDefault(), recorder = {}, demoCut = {}, deckFitOptions = {}, themeCheck = themeEffect, themeCheckMs = THEME_CHECK_MS } = {}) {
   const app = express();
   app.use(express.json({ limit: "5mb" }));
 
@@ -400,7 +404,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     try {
       // PPTX is built natively from the markup's text and shapes: it carries no linked resources.
       const result = format === "pdf" ? await exportPdf(dir, version, undefined, { offline })
-        : format === "pptx" ? { ...exportPptx(dir, version), dependencies: emptyReceipt() }
+        : format === "pptx" ? { ...(await exportPptx(dir, version)), dependencies: emptyReceipt() }
         : exportHtml(dir, version, undefined, { offline });
       const file = basename(result.path);
       const download = `${req.baseUrl || ""}/api/export/file/${encodeURIComponent(file)}`;
@@ -570,6 +574,12 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
   // Undo = fork from that version's parent + DELETE below, so later versions stop wearing it.
   // Optional `run_id` (DES-CHAT-ARTIFACTS-001 §6.2): the run that re-themed it, recorded on that
   // version and announced; absent or null when a person did. A malformed one is a 400, nothing written.
+  // With `apply: true` the head and its re-themed copy are rendered first (theme-effect.js): a theme that changes
+  // nothing a reader can see writes nothing and answers `{written:false, version:null, unchanged:true,
+  // reason:"no_visible_change", message}`; a version the check can't render faithfully offline (a remote or missing
+  // resource, a render that differs from itself, too large) is a 422 `theme_unverifiable`; no browser to check it
+  // with (or a check past its deadline) is a 503 `theme_check_unavailable`. Tokens that are byte-identical to the head's theme still
+  // write the learned theme (they are what the head already wears) and answer `{version:null, unchanged:true}`.
   app.put("/api/theme/learned", (req, res) => {
     const tokens = req.body?.tokens;
     const check = checkThemeTokens(tokens);
@@ -577,17 +587,48 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     const run = readRunId(req.body?.run_id);
     if (run.problem) return res.status(400).json({ error: run.problem });
     const apply = req.body?.apply === true;
+    // A re-theme's check has one deadline from this request's arrival: its wait in the document queue counts. Past
+    // it, the caller gets a 503 at once and the queued work is inert (it checks nothing and writes nothing).
+    const expiresAt = Date.now() + themeCheckMs;
+    let answered = false, expired = false, timer = null;
+    const answer = (status, body) => { if (answered) return; answered = true; clearTimeout(timer); res.status(status).json(body); };
+    const busy = () => new ThemeCheckUnavailable("the check ran past its deadline (the machine may be busy)", "try again in a moment");
+    if (apply) {
+      timer = setTimeout(() => {
+        expired = true;
+        const e = busy();
+        answer(503, { error: e.message, code: e.code, hint: e.hint });
+      }, themeCheckMs);
+    }
     enqueue(async () => {
+      // F8: a re-theme is recorded only when it changes how the version looks (theme-effect.js renders both). Every
+      // refusal returns before anything is written: no learned theme, no version, no event.
+      let plan = null;
+      if (apply) {
+        if (expired || Date.now() >= expiresAt) throw busy();
+        plan = planRetheme(dir, tokens);
+        if (!plan.unchanged) {
+          const effect = await themeCheck(plan.prevHtml, plan.html, { dir, expiresAt });
+          if (expired) throw busy(); // answered already: write nothing it didn't promise
+          if (!effect.changed) {
+            return { written: false, version: null, parent: plan.parent, kind: null, unchanged: true, reason: "no_visible_change",
+              message: "This theme changes nothing you can see on this version, so no version was made. If the " +
+                "version sets its own colours and fonts (documents drafted before themes do), draft it again to restyle it." };
+          }
+        }
+      }
       const file = learnedThemePath(dir);
       mkdirSync(dirname(file), { recursive: true });
       atomicWrite(file, JSON.stringify(tokens, null, 2));
-      if (!apply) return { version: null, parent: null, kind: null };
-      const out = rethemeHead(dir, tokens, { runId: run.runId });
-      if (out.unchanged) return { version: null, parent: out.parent, kind: null, unchanged: true };
+      if (!apply) return { written: true, version: null, parent: null, kind: null };
+      const out = rethemeHead(dir, tokens, { runId: run.runId, plan });
+      if (out.unchanged) return { written: true, version: null, parent: out.parent, kind: null, unchanged: true };
       emit("wicked.interactive.version.created", versionCreated({ version: out.version, parent: out.parent, kind: "theme", runId: run.runId }));
-      return { version: out.version, parent: out.parent, kind: "theme" };
-    }).then((r) => res.json({ document_id: documentId, written: true, ...r }))
-      .catch((e) => res.status(500).json({ error: e.message }));
+      return { written: true, version: out.version, parent: out.parent, kind: "theme" };
+    }).then((r) => answer(200, { document_id: documentId, ...r }))
+      .catch((e) => (e instanceof ThemeCheckUnavailable ? answer(503, { error: e.message, code: e.code, hint: e.hint })
+        : e instanceof ThemeCheckUnverifiable ? answer(422, { error: `No version was made: ${e.message}.`, code: e.code })
+        : answer(500, { error: e.message })));
   });
 
   // A brand source the operator chose in studio (studio, operator 2026-10-17: "it's impossible to guess what
@@ -764,7 +805,7 @@ export function bridgePluginNames(root) {
 }
 
 /** Create a multi-doc server. `root` is the parent dir holding one subdir per doc. */
-export function createMultiServer({ root, frontendDir, standalone = standaloneDefault(), recorder = {} } = {}) {
+export function createMultiServer({ root, frontendDir, standalone = standaloneDefault(), recorder = {}, themeCheck } = {}) {
   if (!root) throw new Error("createMultiServer: root is required");
   // Recorder preflight seams (F-RECON-012), shared by every doc app + the top-level gates.
   // Resolved per call (not captured) so an injected seam can be swapped by a test harness.
@@ -909,7 +950,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     if (!isExistingDoc(name)) throw new Error(`unknown or invalid doc: ${name}`);
     if (retiredInfo(name)) throw new Error(`doc retired: ${name}`);
     const dir = docDir(name);
-    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone, recorder });
+    const svc = createServer({ dir, documentId: name, emit: serviceEmit(name), frontendDir: null, standalone, recorder, ...(themeCheck ? { themeCheck } : {}) });
     top.use(`/d/${name}`, svc.app);
     docs.set(name, { svc, dir });
     return docs.get(name);
