@@ -30,18 +30,15 @@ jobs:
           cache: npm
       - name: Install (clean, from lockfile)
         run: npm ci
-      # Bounded and visible: on 2026-11-06 this step hung silently (four runs, 10-16 min, before any test ran) while
-      # other repos' apt steps took seconds. A hang now fails the step in minutes, prints who holds apt, and the unit
-      # tests still run (the ffmpeg-only re-cut tests skip without it, as on the macOS/Windows jobs).
+      # Bounded and visible: on 2026-11-06 the runner's Ubuntu mirror served ffmpeg's ~90 packages so slowly that this
+      # step ran 10-16 min four times before any test ran. A slow mirror now fails the step in minutes (shown as an
+      # error) and the unit tests still run; the ffmpeg-only re-cut tests skip without it, as on the macOS/Windows jobs.
       - name: ffmpeg for video re-cut tests
         timeout-minutes: 6
         continue-on-error: true
-        env:
-          DEBIAN_FRONTEND: noninteractive
         run: |
-          ps -eo pid,etime,cmd | grep -Ei 'apt|dpkg|unattended' | grep -v grep || true
-          sudo -E timeout 120 apt-get update -q
-          sudo -E timeout 180 apt-get install -y -q --no-install-recommends ffmpeg
+          sudo DEBIAN_FRONTEND=noninteractive timeout 120 apt-get update -q
+          sudo DEBIAN_FRONTEND=noninteractive timeout 180 apt-get install -y -q --no-install-recommends ffmpeg
       - name: Unit tests
         run: npm test
       - name: Plugin version is consistent (and matches the tag, if tagged)
