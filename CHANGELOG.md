@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.15.1] — 2026-11-06
+
+Patch: a restyle that changes nothing is never recorded as one, checked by comparing rendered pixels (F8), and
+PowerPoint export is built in Node with `pptxgenjs`, so it works on a stock install (#322); both in #338.
+
 ### Fixed
 - **A restyle that changes nothing is no longer recorded as one (F8).** `PUT /d/:doc/api/theme/learned {apply: true}`
   renders the head and its re-themed copy in headless Chromium and compares their pixels (the whole page at
@@ -489,7 +494,8 @@ published; 0.14.1 ships its changes too.
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.13.0...v0.14.0

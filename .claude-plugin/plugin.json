@@ -1,6 +1,6 @@
 {
   "name": "wicked-interactive",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "The wicked family's document engine: write-once version lineage and forking (data-wid anchoring), HTML / PDF / native PowerPoint / video export, captioned demo recording and theme learning behind one local API. wicked-crew spawns and proxies it; you edit, rewind, fork and export in wicked-studio. The plugin's serve and assist skills start the engine and keep a Claude session on its wicked-bus events.",
   "author": {
     "name": "Mike Parcewski",
