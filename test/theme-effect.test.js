@@ -214,7 +214,10 @@ async function look(html) {
     for (const viewport of [{ width: 1440, height: 700 }, { width: 390, height: 844 }]) {
       const page = await browser.newPage({ viewport });
       await page.setContent(html);
-      shots.push((await page.screenshot({ fullPage: true, animations: "disabled" })).toString("base64"));
+      // The whole page, as an explicit clip (a plain full-page capture of a page wider than a phone's viewport can fail
+      // in headless Chrome: "Unable to capture screenshot").
+      const { width, height } = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight }));
+      shots.push((await page.screenshot({ fullPage: true, animations: "disabled", clip: { x: 0, y: 0, width, height: Math.min(height, 12000) } })).toString("base64"));
       colours ??= await page.evaluate(() => {
         const cs = (sel) => { const el = document.querySelector(sel); return el ? getComputedStyle(el) : null; };
         const box = cs("section") ?? cs("main");
