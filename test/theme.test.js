@@ -9,8 +9,12 @@ import { resolveThemeTokens, themed } from "../src/service/theme-source.js";
 
 test("themeCss emits :root custom properties and gentle base rules from tokens", () => {
   const css = themeCss(DEFAULT_THEME);
-  assert.match(css, /:root\{/);
+  // `:root:root` outranks a document's own `:root` declaration of a token (F8).
+  assert.match(css, /^:root:root\{/);
   assert.match(css, /--wi-primary:#1E3A5F;/);
+  for (const v of ["--wi-success:#059669;", "--wi-warning:#D97706;", "--wi-error:#DC2626;", "--wi-size-subheading:22px;"]) {
+    assert.ok(css.includes(v), v);
+  }
   assert.match(css, /--wi-font-body:Calibri;/);
   assert.match(css, /body\{font-family:var\(--wi-font-body\)/);
   assert.match(css, /\[data-card\]\{background:var\(--wi-card-bg\)/);

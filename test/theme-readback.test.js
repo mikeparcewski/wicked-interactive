@@ -26,7 +26,9 @@ function freshBus() {
 async function boot() {
   const busDir = freshBus();
   const root = mkdtempSync(join(tmpdir(), "wi-readback-"));
-  const svc = createMultiServer({ root });
+  // The render check (theme-effect.js) is pinned: these fixtures style nothing themselves, so every theme shows.
+  // theme-effect.test.js runs the real render.
+  const svc = createMultiServer({ root, themeCheck: async () => ({ changed: true }) });
   const port = await svc.start(0);
   const base = `http://localhost:${port}`;
   return {

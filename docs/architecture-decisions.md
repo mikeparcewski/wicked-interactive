@@ -194,7 +194,7 @@ still 0.8.0 — the repo was owed a release, not a retirement. Re-verified 2026-
   capability at HEAD is published.
 - **Archive parity still does NOT hold — the engine never moved.** The 2026-08-18 merge retired
   only the SPA shell. Sole-implementation in this repo, today: document storage with write-once
-  version lineage + fork, HTML/PDF export, native-PPTX export (`vendor/pptx/html_to_pptx.py`),
+  version lineage + fork, HTML/PDF export, native-PPTX export (`src/service/pptx.js`, Node + pptxgenjs since #322),
   demo recording (`src/service/demo.js`, Playwright + ffmpeg), SSRF-hardened theme-grab
   (`src/service/theme-grab.js`), the learned-theme readback, and the four CLI artifact
   subcommands (`bin/wicked-interactive.js` dynamic-imports `src/artifact/*`). Neither crew nor

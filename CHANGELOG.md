@@ -4,6 +4,35 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Fixed
+- **A restyle that changes nothing is no longer recorded as one (F8).** `PUT /d/:doc/api/theme/learned {apply: true}`
+  renders the head and its re-themed copy in headless Chromium and compares their pixels (the whole page at
+  1440 px wide, plus 820 and 390 px when the document has media or container queries) before it writes anything.
+  The render is sealed: page scripts and the network off, local assets inlined, CSS animations settled and SVG
+  animations paused, Chromium's sandbox on (`WI_RENDER_NO_SANDBOX=1` opts out where a container can't provide one),
+  one render at a time, one 30 s deadline from the request's arrival. When the pixels match (a deck whose own CSS
+  hard-codes every colour, as decks drafted before the theme tokens do), it writes neither a version nor the learned
+  theme and answers `{written: false, version: null, unchanged: true, reason: "no_visible_change", message}`. A
+  version that can't be rendered faithfully offline (a remote or missing resource, a render that differs from
+  itself, too large) is `422 {code: "theme_unverifiable", error}`. With no browser, or past the deadline, the answer
+  is `503 {code: "theme_check_unavailable", hint}`. Nothing is written on any of these. Tokens byte-identical to the
+  head's theme still write the learned theme and answer `{version: null, unchanged: true}`, as before.
+- **PowerPoint export works on a stock install (#322).** The deck is built in Node with `pptxgenjs` (4.0.1, exact
+  pin) instead of the vendored python-pptx script nothing installed. Slides, titles, body text and speaker notes as
+  before, plus loose card text, table rows, line breaks and preformatted lines that the old builder dropped or
+  flattened, and form-field values; hidden copy, the page `<title>`, SVG titles and definitions stay off the slides
+  (a hidden slide is kept blank); characters XML can't carry are removed. Every slide core/deck.js counts is
+  exported, whatever wraps it. Drawn in the exported version's own theme
+  (translucent colours composited) rather than always the default. The response now carries `slides`.
+
+### Changed
+- **The theme tokens win over a document's own declarations of them.** The theme block's variables sit on
+  `:root:root`, so a draft that also declares `--wi-*` on `:root` still wears the theme it is given. New tokens:
+  `--wi-success`, `--wi-warning`, `--wi-error`, `--wi-size-subheading`.
+
+### Removed
+- `vendor/pptx/html_to_pptx.py` and the python-pptx dependency (the `PPTX_DEP_MISSING` error is gone).
+
 ## [0.15.0] — 2026-11-03
 
 Minor: an optional `expect_head` lets a generated draft land only on the head its run worked from, and every version

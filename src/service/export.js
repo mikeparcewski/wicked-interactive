@@ -829,19 +829,23 @@ export function findChrome(override) {
   return candidates.find((c) => existsSync(c)) || null;
 }
 
-/** Playwright renderers share the PDF export's Chromium discovery and launch flags. */
-export async function launchRenderBrowser({ importPlaywright = () => import("playwright"), chromePath } = {}) {
+/**
+ * Playwright renderers share the PDF export's Chromium discovery and launch flags. `sandbox: true` keeps
+ * Chromium's process sandbox on (the theme check, theme-effect.js); the default is the export's flags.
+ */
+export async function launchRenderBrowser({ importPlaywright = () => import("playwright"), chromePath, sandbox = false } = {}) {
   const { chromium } = await importPlaywright();
-  const args = ["--disable-gpu", "--no-sandbox"];
+  const args = sandbox ? ["--disable-gpu"] : ["--disable-gpu", "--no-sandbox"];
+  const base = { headless: true, args, ...(sandbox ? { chromiumSandbox: true } : {}) };
   // An explicit override wins. Otherwise Playwright's own headless browser (what `doctor --install` provisions),
   // and a system Chrome only when that bundled executable is missing.
-  if (chromePath || process.env.WI_CHROME) return chromium.launch({ headless: true, args, executablePath: findChrome(chromePath) ?? undefined });
+  if (chromePath || process.env.WI_CHROME) return chromium.launch({ ...base, executablePath: findChrome(chromePath) ?? undefined });
   try {
-    return await chromium.launch({ headless: true, args });
+    return await chromium.launch(base);
   } catch (e) {
     const fallback = findChrome();
     if (!fallback || !/Executable doesn't exist|executable doesn.t exist/i.test(String(e?.message))) throw e;
-    return chromium.launch({ headless: true, args, executablePath: fallback });
+    return chromium.launch({ ...base, executablePath: fallback });
   }
 }
 

@@ -283,7 +283,7 @@ const TOKENS = {
 async function serve() {
   const dir = ws();
   const events = [];
-  const svc = createServer({ dir, documentId: "doc", emit: (type, payload) => events.push({ type, payload }) });
+  const svc = createServer({ dir, documentId: "doc", emit: (type, payload) => events.push({ type, payload }), themeCheck: async () => ({ changed: true }) });
   const port = await svc.start(0);
   const send = (method, path, body) => fetch(`http://localhost:${port}${path}`, {
     method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

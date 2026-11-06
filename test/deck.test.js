@@ -3,14 +3,13 @@
 // Each op lands exactly one version through the feedback pipeline; a stale head is refused (C5);
 // INV-2 holds (every anchor of the base is still there, except what `remove` deletes); order is the
 // document's, identity is `data-slide-id`; speaker notes ride in the slide and reach the PPTX notes
-// page (read back with python-pptx where it is installed — `WI_PYTHON` may name the interpreter).
+// page (read back with an independent zip/OOXML reader, test/fixtures/read-pptx.js).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
 import * as cheerio from "cheerio";
 import { instrument, collectWids } from "../src/core/instrument.js";
 import { deckOutline, SLIDE_ID_ATTR } from "../src/core/deck.js";
@@ -18,7 +17,8 @@ import { parseFeedback, serializeFeedback } from "../src/core/feedback-schema.js
 import { initWorkspace, loadManifest, readVersionHtml, writeFeedback, applyFeedbackItems } from "../src/service/workspace.js";
 import { materializeDeckOp, materializeFeedback } from "../src/service/handlers.js";
 import { createServer } from "../src/service/server.js";
-import { exportPptx, pptxReady } from "../src/service/pptx.js";
+import { exportPptx } from "../src/service/pptx.js";
+import { readPptx } from "./fixtures/read-pptx.js";
 import { saveManifest } from "../src/service/fsstore.js";
 
 const DECK = [
@@ -267,35 +267,22 @@ test("POST /api/deck: expect_head required, op shape checked, 409 head_moved, on
   } finally { await svc.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-const PY = process.env.WI_PYTHON;
-const READY = pptxReady(PY);
-test("a reorder and notes round-trip through PPTX: slide order and the notes page (python-pptx read-back)",
-  { skip: READY.ok ? false : "python-pptx not installed (set WI_PYTHON to an interpreter that has it)" }, async () => {
-    const dir = deck();
-    try {
-      const [a, b, c] = idsOf(headHtml(dir));
-      await op(dir, { type: "slide-move", slide: c, after: null });
-      await op(dir, { type: "notes-set", slide: b, text: "Revenue notes\nsecond line" });
-      const { path } = exportPptx(dir, head(dir), { ready: READY });
-      const read = join(dir, "read.py");
-      writeFileSync(read, [
-        "import json, sys", "from pptx import Presentation", "p = Presentation(sys.argv[1])", "out = []",
-        "for s in p.slides:",
-        "    texts = [sh.text_frame.text for sh in s.shapes if sh.has_text_frame]",
-        "    notes = s.notes_slide.notes_text_frame.text if s.has_notes_slide else ''",
-        "    out.append({'title': texts[0] if texts else '', 'body': texts[1:], 'notes': notes})",
-        "print(json.dumps(out))",
-      ].join("\n"));
-      const r = spawnSync(READY.python, [read, path], { encoding: "utf-8" });
-      assert.equal(r.status, 0, r.stderr);
-      const slides = JSON.parse(r.stdout);
-      assert.deepEqual(slides.map((s) => s.title), ["Next", "Q3 review", "Revenue"]);
-      assert.equal(slides[2].notes, "Revenue notes\nsecond line");
-      assert.equal(slides[0].notes, "");
-      assert.ok(!slides.some((s) => s.body.join(" ").includes("Revenue notes")), "notes never land on a slide");
-      void a;
-    } finally { rmSync(dir, { recursive: true, force: true }); }
-  });
+// The exported .pptx read back with an independent reader (fixtures/read-pptx.js): slide texts and notes.
+const exported = async (dir, version) => readPptx(readFileSync((await exportPptx(dir, version)).path)).slides;
+test("a reorder and notes round-trip through PPTX: slide order and the notes page", async () => {
+  const dir = deck();
+  try {
+    const [a, b, c] = idsOf(headHtml(dir));
+    await op(dir, { type: "slide-move", slide: c, after: null });
+    await op(dir, { type: "notes-set", slide: b, text: "Revenue notes\nsecond line" });
+    const slides = (await exported(dir, head(dir))).map((s) => ({ title: s.texts[0] ?? "", body: s.texts.slice(1), notes: s.notes }));
+    assert.deepEqual(slides.map((s) => s.title), ["Next", "Q3 review", "Revenue"]);
+    assert.equal(slides[2].notes, "Revenue notes\nsecond line");
+    assert.equal(slides[0].notes, "");
+    assert.ok(!slides.some((s) => s.body.join(" ").includes("Revenue notes")), "notes never land on a slide");
+    void a;
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 // ── codex r1 on I-D1 ──────────────────────────────────────────────────────────────────────────────
 
@@ -349,21 +336,13 @@ test("codex r1: notes that hold review anchors are refused as an item (422), nev
 });
 
 test("codex r1: PPTX keeps a blank inserted slide, and a nested section's notes stay with their top-level slide",
-  { skip: READY.ok ? false : "python-pptx not installed (set WI_PYTHON to an interpreter that has it)" }, async () => {
+  async () => {
     const dir = deck("<section><h1>A</h1><p>a body</p><section><h2>Inner</h2></section><p>after inner</p></section><section><h1>B</h1></section>");
     try {
       const [a, b] = idsOf(headHtml(dir));
       await op(dir, { type: "notes-set", slide: a, text: "notes for A" });
       await op(dir, { type: "slide-insert", slide: b, after: b });
-      const { path } = exportPptx(dir, head(dir), { ready: READY });
-      const read = join(dir, "read.py");
-      writeFileSync(read, [
-        "import json, sys", "from pptx import Presentation", "p = Presentation(sys.argv[1])",
-        "print(json.dumps([{'texts': [sh.text_frame.text for sh in s.shapes if sh.has_text_frame], 'notes': s.notes_slide.notes_text_frame.text if s.has_notes_slide else ''} for s in p.slides]))",
-      ].join("\n"));
-      const r = spawnSync(READY.python, [read, path], { encoding: "utf-8" });
-      assert.equal(r.status, 0, r.stderr);
-      const slides = JSON.parse(r.stdout);
+      const slides = await exported(dir, head(dir));
       assert.equal(slides.length, 3, "A (with its nested section), B, and the blank inserted slide");
       assert.equal(slides[0].texts[0], "A");
       assert.ok(slides[0].texts.join(" ").includes("Inner") && slides[0].texts.join(" ").includes("after inner"));
@@ -374,51 +353,39 @@ test("codex r1: PPTX keeps a blank inserted slide, and a nested section's notes 
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-test("codex r2: a void element marked as a slide is not a slide (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+test("codex r2: a void element marked as a slide is not a slide (core and PPTX agree)", async () => {
   const html = '<section><h1>A</h1><img data-slide class="slide" src="x.png"></section><section><h1>B</h1></section>';
   assert.equal(instrument(html, { slideIds: true }).slideIds.length, 2);
   const dir = deck(html);
   try {
-    const { path } = exportPptx(dir, 0, { ready: READY });
-    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout.trim(), "2");
+    assert.equal((await exported(dir, 0)).length, 2);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("codex r3: a notes aside is never a slide, whatever its class (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+test("codex r3: a notes aside is never a slide, whatever its class (core and PPTX agree)", async () => {
   const html = '<aside class="slide notes" data-notes-for="x" hidden>n</aside><section><h1>B</h1></section>';
   assert.equal(instrument(html, { slideIds: true }).slideIds.length, 1);
   const dir = deck(html);
   try {
-    const { path } = exportPptx(dir, 0, { ready: READY });
-    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout.trim(), "1");
+    assert.equal((await exported(dir, 0)).length, 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("codex r4: a slide container inside a notes aside is notes, not a slide (core and PPTX agree)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+test("codex r4: a slide container inside a notes aside is notes, not a slide (core and PPTX agree)", async () => {
   const html = '<aside class="slide notes" data-notes-for="x" hidden><section><h2>Speaker notes</h2></section></aside><section><h1>B</h1></section>';
   assert.equal(instrument(html, { slideIds: true }).slideIds.length, 1);
   const dir = deck(html);
   try {
-    const { path } = exportPptx(dir, 0, { ready: READY });
-    const r = spawnSync(READY.python, ["-c", "import sys; from pptx import Presentation; print(len(Presentation(sys.argv[1]).slides))", path], { encoding: "utf-8" });
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout.trim(), "1");
+    assert.equal((await exported(dir, 0)).length, 1);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("codex r5: content before the first slide joins that slide in PPTX (core and PPTX agree, nothing dropped)", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+test("codex r5: content before the first slide joins that slide in PPTX (core and PPTX agree, nothing dropped)", async () => {
   const html = '<h1>Deck title</h1><p>lead para</p><section><h2>A</h2><p>a body</p></section><section><h2>B</h2></section>';
   assert.equal(instrument(html, { slideIds: true }).slideIds.length, 2);
   const dir = deck(html);
   try {
-    const { path } = exportPptx(dir, 0, { ready: READY });
-    const r = spawnSync(READY.python, ["-c", "import sys, json; from pptx import Presentation; print(json.dumps([[sh.text_frame.text for sh in s.shapes if sh.has_text_frame] for s in Presentation(sys.argv[1]).slides]))", path], { encoding: "utf-8" });
-    assert.equal(r.status, 0, r.stderr);
-    const slides = JSON.parse(r.stdout);
+    const slides = (await exported(dir, 0)).map((sl) => sl.texts);
     assert.equal(slides.length, 2);
     assert.equal(slides[0][0], "Deck title");
     const body = slides[0].join(" ");
@@ -427,13 +394,10 @@ test("codex r5: content before the first slide joins that slide in PPTX (core an
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("codex r6: folding keeps reading order — a demoted title stays where it sat", { skip: READY.ok ? false : "python-pptx not installed" }, async () => {
+test("codex r6: folding keeps reading order — a demoted title stays where it sat", async () => {
   const dir = deck('<h1>Deck title</h1><section><p>intro</p><h2>A</h2><p>body</p></section>');
   try {
-    const { path } = exportPptx(dir, 0, { ready: READY });
-    const r = spawnSync(READY.python, ["-c", "import sys, json; from pptx import Presentation; print(json.dumps([[sh.text_frame.text for sh in s.shapes if sh.has_text_frame] for s in Presentation(sys.argv[1]).slides]))", path], { encoding: "utf-8" });
-    assert.equal(r.status, 0, r.stderr);
-    const slides = JSON.parse(r.stdout);
+    const slides = (await exported(dir, 0)).map((sl) => sl.texts);
     assert.equal(slides.length, 1);
     assert.equal(slides[0][0], "Deck title");
     const body = slides[0].slice(1).join("\n");

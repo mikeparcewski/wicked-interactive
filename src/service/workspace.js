@@ -162,6 +162,19 @@ export function forkVersion(dir, from) {
 
 
 /**
+ * What re-theming the head with `tokens` would write, without writing it: the head (`parent`), its HTML
+ * (`prevHtml`), the re-themed HTML (`html`), and `unchanged` when the bytes are identical. The route renders
+ * `prevHtml` against `html` before it records anything (theme-effect.js), so a theme that changes nothing a
+ * reader can see is never recorded as a version.
+ */
+export function planRetheme(dir, tokens) {
+  const parent = loadManifest(dir).head;
+  const prevHtml = readVersionHtml(dir, parent);
+  const html = themed(prevHtml, { tokens });
+  return { parent, prevHtml, html, unchanged: contentHash(html) === contentHash(prevHtml) };
+}
+
+/**
  * Re-theme the head with a learned token object (EP-I2): a new write-once version whose parent is
  * the head, carrying the same content with the learned theme block. Content-only otherwise — no
  * re-instrument, so every data-wid stays byte-for-byte. A head that already wears exactly these
@@ -169,12 +182,11 @@ export function forkVersion(dir, from) {
  * re-themed it (recorded on the new version), or null when a person did.
  * @returns {{version:number|null, parent:number, unchanged:boolean}}
  */
-export function rethemeHead(dir, tokens, { runId = null } = {}) {
+export function rethemeHead(dir, tokens, { runId = null, plan = null } = {}) {
   let manifest = loadManifest(dir);
-  const parent = manifest.head;
-  const prevHtml = readVersionHtml(dir, parent);
-  const html = themed(prevHtml, { tokens });
-  if (contentHash(html) === contentHash(prevHtml)) return { version: null, parent, unchanged: true };
+  // A plan the caller already made (and checked) on this head is used as is; on the document queue the head can't move.
+  const { parent, html, unchanged } = plan && plan.parent === manifest.head ? plan : planRetheme(dir, tokens);
+  if (unchanged) return { version: null, parent, unchanged: true };
   const version = Math.max(nextVersionNumber(manifest), highestVersionOnDisk(dir) + 1);
   atomicWrite(join(dir, `_v${version}.html`), html);
   ({ manifest } = recordVersion(manifest, { version, parent, feedbackFile: null, kind: "theme", runId }));
