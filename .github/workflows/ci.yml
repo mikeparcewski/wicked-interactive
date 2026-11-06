@@ -30,11 +30,18 @@ jobs:
           cache: npm
       - name: Install (clean, from lockfile)
         run: npm ci
-      # Non-interactive and bounded: on 2026-11-06 this step hung (three runs, 15+ min, silent) with the default
-      # debconf frontend; a package prompt must never wait on a terminal CI doesn't have.
+      # Bounded and visible: on 2026-11-06 this step hung silently (four runs, 10-16 min, before any test ran) while
+      # other repos' apt steps took seconds. A hang now fails the step in minutes, prints who holds apt, and the unit
+      # tests still run (the ffmpeg-only re-cut tests skip without it, as on the macOS/Windows jobs).
       - name: ffmpeg for video re-cut tests
-        timeout-minutes: 10
-        run: sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg
+        timeout-minutes: 6
+        continue-on-error: true
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          ps -eo pid,etime,cmd | grep -Ei 'apt|dpkg|unattended' | grep -v grep || true
+          sudo -E timeout 120 apt-get update -q
+          sudo -E timeout 180 apt-get install -y -q --no-install-recommends ffmpeg
       - name: Unit tests
         run: npm test
       - name: Plugin version is consistent (and matches the tag, if tagged)
