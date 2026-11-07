@@ -112,6 +112,45 @@ export function loadCut(dir) {
   if (!existsSync(path)) throw new CutError("no_cut", null, 404);
   return JSON.parse(readFileSync(path, "utf8"));
 }
+
+/** Where a rendered version's cut is kept (beside its `_v<N>.html`): the decision list that version was made from. */
+export function cutSnapshotFile(version) { return `_v${version}.cut.json`; }
+
+/** The cut a rendered version was made from: the head's own, or its snapshot. A version rendered before snapshots
+ *  were kept (or one that is not a cut render) has none: 404 `no_snapshot`. */
+export function loadCutVersion(dir, version) {
+  const cut = loadCut(dir);
+  if (!Number.isInteger(version) || version < 0) bad("version");
+  if (version === cut.version) return cut;
+  const path = join(dir, cutSnapshotFile(version));
+  if (!existsSync(path)) throw new CutError("no_snapshot", "version", 404);
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
+/**
+ * Restore: render the cut as it was at version `from` (its chapters, trims, takes and style) as a NEW version whose
+ * parent is the head. A restore is a re-cut to an earlier decision list, so it renders like any re-cut (the studio
+ * skin is re-read). `rev` is the head cut's, as for a re-cut: a moved cut is 409 `rev_moved`.
+ */
+export async function restoreCut(dir, body, opts = {}) {
+  closed(body, ["rev", "from"], "body");
+  const cut = loadCut(dir);
+  checkRev(cut, body.rev);
+  if (!Number.isInteger(body.from) || body.from < 0 || body.from === cut.version) bad("from");
+  const was = loadCutVersion(dir, body.from);
+  // A full take of a re-authored spec starts a new takes list (extractTakes); the files stay on disk. Keep both lists.
+  const takes = structuredClone(cut.takes ?? {});
+  for (const [id, list] of Object.entries(was.takes ?? {})) {
+    const into = Object.hasOwn(takes, id) ? takes[id] : (takes[id] = []);
+    for (const t of list) if (!into.some((x) => x.file === t.file)) into.push(t);
+  }
+  was.chapters.forEach((c, i) => {
+    if (typeof c.take !== "string" || !/^[A-Za-z0-9._-]+$/.test(c.take) || !existsSync(join(dir, RECORDINGS_DIR, c.take))) {
+      throw new CutError("take_missing", `chapters.${i}.take`, 409);
+    }
+  });
+  return renderCut(dir, { ...cut, chapters: was.chapters, style: was.style, url: was.url ?? cut.url, takes }, { ...opts, restoredFrom: body.from });
+}
 export function checkRev(cut, rev) {
   if (rev !== cut.rev) throw new CutError("rev_moved", null, 409, { rev: cut.rev });
 }
@@ -330,8 +369,11 @@ export async function renderCut(dir, cut, opts = {}) {
     cardText: cardText && !capabilities.burnIn ? "unavailable" : cardText,
     palette: { source: skin === null ? "custom" : skin.source, theme: skin?.theme ?? null, background: cut.style.theme.background,
       foreground: cut.style.theme.foreground, accent: cut.style.theme.accent, font: cut.style.theme.font } };
-  saveManifest(dir, landed);
+  if (Number.isInteger(opts.restoredFrom)) landed.versions.at(-1).restored_from = opts.restoredFrom;
   const saved = { ...stored, rev: stored.rev + 1, version };
+  // The version's own decision list first, so a version in the manifest always has its cut (Versions, Restore).
+  atomicWrite(join(dir, cutSnapshotFile(version)), JSON.stringify(saved, null, 2));
+  saveManifest(dir, landed);
   atomicWrite(join(dir, CUT_FILE), JSON.stringify(saved, null, 2));
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
   opts.emit?.("wicked.interactive.version.created", versionCreated({ version, parent, kind: "demo" }));

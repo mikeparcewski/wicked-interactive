@@ -4,6 +4,18 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **A demo cut keeps its history, and an earlier version can be restored.** Every render writes the cut it was made
+  from beside its page (`_v<N>.cut.json`: chapters, trims, takes, style). `GET /d/:doc/api/demo/cut?version=N` reads
+  that version's cut in the same shape as the head read (404 `no_snapshot` for a version rendered before this).
+  `POST /d/:doc/api/demo/restore {rev, from}` renders version `from`'s cut as a new version whose parent is the head
+  (the manifest entry carries `restored_from`); a moved cut is 409 `rev_moved`, a take that is gone is 409
+  `take_missing`, and takes a later full re-take dropped from the list are kept.
+
+### Changed
+- **`POST /api/fork` refuses a document with a demo cut** (409 `cut_restore`): forking its storyboard page moved the
+  head without the cut. Restore a cut with `POST /api/demo/restore`.
+
 ## [0.15.1] — 2026-11-06
 
 Patch: a restyle that changes nothing is never recorded as one, checked by comparing rendered pixels (F8), and
