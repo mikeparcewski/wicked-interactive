@@ -28,7 +28,7 @@ import { isRetired as manifestRetired, retireManifest, versionCreated, readRunId
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
-import { loadCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError } from "./demo-cut.js";
+import { loadCut, loadCutVersion, restoreCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError, CUT_FILE } from "./demo-cut.js";
 /** One staged chapter's upload cap. */
 const IMPORT_UPLOAD_LIMIT = 1024 * 1024 * 1024;
 /** One brand source a learn reads (a PDF or an image the operator chose in studio). */
@@ -171,10 +171,12 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   const cutOptions = () => ({ ...demoCut, documentId, emit, tokens: resolveLearnedTheme(dir) });
   const cutFailure = (res, e) => res.status(e.status ?? 400).json(e.payload ?? { error: e.message });
   // The cut, what this ffmpeg can do, and the colours the next render will use: the studio skin's (with its
-  // source) unless the style chose custom colours.
-  app.get("/api/demo/cut", async (_req, res) => {
+  // source) unless the style chose custom colours. `?version=N`: the cut that version was rendered from.
+  app.get("/api/demo/cut", async (req, res) => {
     try {
-      const cut = loadCut(dir);
+      const asked = req.query?.version;
+      const cut = asked === undefined ? loadCut(dir)
+        : loadCutVersion(dir, typeof asked === "string" && /^\d{1,9}$/.test(asked) ? Number(asked) : NaN);
       const style = validateStyle({}, "Demo", cut.style);
       const skin = style.theme.palette === "custom" ? null : await (demoCut.fetchSkin ?? fetchSkin)();
       res.json({ ...cut, style, ffmpeg: await ffmpegCapabilities(demoCut),
@@ -266,6 +268,13 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       return { rev, version };
     }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
+  // Restore: the cut as it was at an earlier version, rendered as a new version (history kept, nothing removed).
+  app.post("/api/demo/restore", (req, res) => {
+    enqueue(async () => {
+      const { rev, version, parent } = await restoreCut(dir, req.body, cutOptions());
+      return { rev, version, parent };
+    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+  });
   app.put("/api/demo/style", (req, res) => {
     enqueue(async () => {
       closed(req.body, ["rev", "style"], "body");
@@ -320,6 +329,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       return res.status(400).json({ error: "expect_head must be a version number" });
     }
     enqueue(async () => {
+      // A demo cut's version is its render, not its storyboard page: forking the page would move the head without
+      // the cut. Its restore is POST /api/demo/restore.
+      if (existsSync(join(dir, CUT_FILE))) return { cut: true };
       if (hasExpect) {
         const { head } = loadManifest(dir);
         if (head !== expectHead) return { headMoved: true, head };
@@ -327,7 +339,8 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       const { version, parent } = forkVersion(dir, from);
       emit("wicked.interactive.version.created", versionCreated({ version, parent, kind: "fork" }));
       return { version, parent };
-    }).then((r) => (r.headMoved ? res.status(409).json({ error: "head_moved", head: r.head }) : res.json(r)))
+    }).then((r) => (r.cut ? res.status(409).json({ error: "cut_restore", hint: "a demo cut restores with POST /api/demo/restore {rev, from}" })
+      : r.headMoved ? res.status(409).json({ error: "head_moved", head: r.head }) : res.json(r)))
       .catch((e) => res.status(400).json({ error: e.message }));
   });
 
