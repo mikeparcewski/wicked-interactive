@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { initWorkspace, loadManifest } from "../src/service/workspace.js";
+import { initWorkspace, loadManifest, rethemeHead } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 import { exportGif } from "../src/service/demo.js";
 import { defaultStyle, renderCut, loadCut, loadCutVersion, restoreCut, cutSnapshotFile } from "../src/service/demo-cut.js";
@@ -77,6 +77,7 @@ test("restore refuses a moved cut, the head itself, a version with no kept cut, 
   await assert.rejects(restoreCut(dir, { rev, from: version }, opts), (e) => e.status === 400 && e.payload.field === "from");
   await assert.rejects(restoreCut(dir, { rev, from: 0 }, opts), (e) => e.status === 404 && e.payload.error === "no_snapshot");
   await assert.rejects(restoreCut(dir, { rev, from: v1.version, extra: 1 }, opts), (e) => e.status === 400 && e.payload.field === "body.extra");
+  await assert.rejects(restoreCut(dir, { rev, from: v1.version, expect_head: "2" }, opts), (e) => e.status === 400 && e.payload.field === "expect_head");
   rmSync(join(dir, "recordings", "_take-two-1.mp4"));
   await assert.rejects(restoreCut(dir, { rev, from: v1.version }, opts), (e) => e.status === 409 && e.payload.error === "take_missing" && e.payload.field === "chapters.1.take");
   assert.equal(loadCut(dir).version, version, "nothing landed");
@@ -133,4 +134,33 @@ test("a cut version's GIF is made from its MP4 (a re-cut lands no WebM)", async 
   assert.equal(source, join(dir, "recordings", `_v${v.version}.mp4`));
   assert.equal(out.path, join(dir, "recordings", `_v${v.version}.gif`));
   assert.ok(readFileSync(join(dir, "recordings", `_v${v.version}-poster.jpg`), "utf8").length > 0, "every render writes the poster");
+});
+
+test("restore with expect_head refuses when a page version landed on the cut document since", async (t) => {
+  const dir = fixture(t);
+  const v1 = await renderCut(dir, cut(), opts);
+  const v2 = await renderCut(dir, { ...loadCut(dir), chapters: loadCut(dir).chapters.map((c) => ({ ...c, outSec: c.outSec - 1 })) }, opts);
+  // A page version (a re-theme) moves the document head without touching the cut's rev.
+  const themed = rethemeHead(dir, { colors: { primary: "#123456" } });
+  assert.ok(themed.version > v2.version, "the head moved past the cut");
+  const { rev } = loadCut(dir);
+  await assert.rejects(restoreCut(dir, { rev, from: v1.version, expect_head: v2.version }, opts), (e) => e.status === 409 && e.payload.error === "head_moved" && e.payload.head === themed.version);
+  assert.equal(loadManifest(dir).head, themed.version, "nothing landed");
+  const ok = await restoreCut(dir, { rev, from: v1.version, expect_head: themed.version }, opts);
+  assert.equal(ok.parent, themed.version);
+});
+
+test("the GIF route answers the file name studio links to", async (t) => {
+  const dir = fixture(t);
+  const v = await renderCut(dir, cut(), opts);
+  // The route encodes with the real encoder; a GIF already cached for the version is served as is.
+  writeFileSync(join(dir, "recordings", `_v${v.version}.gif`), "GIF89a");
+  const svc = createServer({ dir, documentId: "tour", demoCut: { runner, fetchSkin: async () => null } });
+  const port = await svc.start(0);
+  t.after(() => svc.stop());
+  const r = await fetch(`http://localhost:${port}/api/demo/gif`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: v.version }) });
+  assert.equal(r.status, 200);
+  const body = await r.json();
+  assert.equal(body.file, `_v${v.version}.gif`);
+  assert.equal(body.cached, true);
 });

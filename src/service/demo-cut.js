@@ -130,12 +130,20 @@ export function loadCutVersion(dir, version) {
 /**
  * Restore: render the cut as it was at version `from` (its chapters, trims, takes and style) as a NEW version whose
  * parent is the head. A restore is a re-cut to an earlier decision list, so it renders like any re-cut (the studio
- * skin is re-read). `rev` is the head cut's, as for a re-cut: a moved cut is 409 `rev_moved`.
+ * skin is re-read). `rev` is the head cut's, as for a re-cut: a moved cut is 409 `rev_moved`; with `expect_head`, a
+ * moved document head is 409 `head_moved {head}`.
  */
 export async function restoreCut(dir, body, opts = {}) {
-  closed(body, ["rev", "from"], "body");
+  closed(body, ["rev", "from", "expect_head"], "body");
   const cut = loadCut(dir);
   checkRev(cut, body.rev);
+  // `expect_head`: the DOCUMENT's head the caller saw. A page version (a re-theme, a draft) can land on a cut document
+  // without moving the cut's rev; a restore must not land over it unseen.
+  if (body.expect_head !== undefined) {
+    if (!Number.isInteger(body.expect_head)) bad("expect_head");
+    const { head } = loadManifest(dir);
+    if (head !== body.expect_head) throw new CutError("head_moved", null, 409, { head });
+  }
   if (!Number.isInteger(body.from) || body.from < 0 || body.from === cut.version) bad("from");
   const was = loadCutVersion(dir, body.from);
   // A full take of a re-authored spec starts a new takes list (extractTakes); the files stay on disk. Keep both lists.
