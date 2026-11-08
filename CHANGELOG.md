@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-11-08
+
+Minor: a demo video's cut keeps its history, so you can go back to an earlier cut and make it the working version;
+forking a document that has a cut is refused (restore the cut instead). #341.
+
 ### Added
 - **A demo cut keeps its history, and an earlier version can be restored.** Every render writes the cut it was made
   from beside its page (`_v<N>.cut.json`: chapters, trims, takes, style). `GET /d/:doc/api/demo/cut?version=N` reads
@@ -506,7 +511,8 @@ published; 0.14.1 ships its changes too.
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.0...v0.14.1
