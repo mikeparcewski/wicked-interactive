@@ -5,9 +5,10 @@
 // anything. Pure, side-effect-light helpers live here so they can be unit-tested; the CLI
 // (bin/wicked-interactive.js) wires them to process lifecycle.
 
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { listenLoopback, LOOPBACK_HOSTS } from "./loopback.js";
 
 export const LOCK_NAME = ".wi-serve.json";
 export const PORT_BASE = 4400;          // friendly starting point for the free-port scan
@@ -99,14 +100,29 @@ export async function stopDaemon(root, { kill = process.kill, alive = pidAlive, 
   return { stopped: true, pid, forced: true };
 }
 
-// True iff `port` can be bound right now (probe binds + immediately releases it).
-export function isPortFree(port) {
+// Does anything accept a TCP connection on host:port? (ECONNREFUSED / no route → false.)
+function accepts(host, port, timeoutMs = 500) {
   return new Promise((res) => {
-    const probe = createServer();
-    probe.once("error", () => res(false));
-    probe.once("listening", () => probe.close(() => res(true)));
-    probe.listen(port, "0.0.0.0");
+    const sock = connect({ host, port });
+    const done = (v) => { clearTimeout(timer); sock.destroy(); res(v); };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    sock.once("connect", () => done(true));
+    sock.once("error", () => done(false));
   });
+}
+
+// True iff `port` is free for a bridge right now (#344). Two checks, because binding loopback
+// alone can succeed on macOS/BSD while another process holds the WILDCARD on that port (libuv
+// sets SO_REUSEADDR), and the new bridge would then shadow it on loopback:
+//   1. nothing answers on any loopback address, and
+//   2. every loopback address can be bound (probe binds + immediately releases them).
+export async function isPortFree(port) {
+  for (const host of LOOPBACK_HOSTS) if (await accepts(host, port)) return false;
+  try {
+    const probe = await listenLoopback(() => createServer(), port, { attempts: 1 });
+    await probe.close();
+    return true;
+  } catch { return false; }
 }
 
 // Resolve a bindable port: try `preferred`, then scan upward, then let the OS assign one (0).

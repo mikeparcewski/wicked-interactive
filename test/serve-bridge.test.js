@@ -20,8 +20,9 @@ function tmpRoot() {
   const d = mkdtempSync(join(tmpdir(), "wi-bridge-"));
   return d;
 }
-// Bind the wildcard address — same as the real server (server.js top.listen(port)) and the
-// address isPortFree() probes — so an occupied port is genuinely detected as taken.
+// Bind the WILDCARD on purpose: the bridge itself binds loopback only (#344), but a port another
+// process holds on 0.0.0.0 must still read as taken, even where (macOS/BSD) a loopback bind over
+// it would succeed — isPortFree() also checks whether anything answers on loopback.
 const listen = (srv, port = 0) =>
   new Promise((res) => srv.listen(port, "0.0.0.0", () => res(srv.address().port)));
 const close = (srv) => new Promise((res) => srv.close(res));
