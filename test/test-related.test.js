@@ -52,8 +52,21 @@ test("selection: what can't be traced runs every suite; docs run only the suites
       ".wicked/checks.json", "package.json", "package-lock.json", "frontend/dist/assets/index.js", "test/helper.mjs"];
     for (const f of untraceable) assert.deepEqual(selectTests([f], { root }), all, f);
     assert.deepEqual(selectTests(["src/a.js", "package.json"], { root }), all, "one untraceable file widens the whole selection");
-    assert.deepEqual(selectTests(["README.md", "docs/x.md", "site/index.astro"], { root }), []);
+    assert.deepEqual(selectTests(["README.md", "docs/x.md", "site/index.astro", "docs/shot.png"], { root }), []);
     assert.deepEqual(selectTests(["docs/guide.md"], { root }), ["test/b.test.js"]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("selection: a suite that reads a directory runs for any non-docs change; shipped skills are not docs", () => {
+  const root = fixture({
+    "src/a.js": "", "src/b.js": "",
+    "test/a.test.js": `import "../src/a.js";`,
+    "test/sweep.test.js": `for (const f of readdirSync(join(REPO, "src"))) check(f);`,
+  });
+  try {
+    assert.deepEqual(selectTests(["src/a.js"], { root }), ["test/a.test.js", "test/sweep.test.js"], "imported + the sweep");
+    assert.deepEqual(selectTests(["skills/serve/SKILL.md"], { root }), ["test/a.test.js", "test/sweep.test.js"], "a shipped skill runs everything");
+    assert.deepEqual(selectTests(["docs/x.md", "CHANGELOG.md"], { root }), [], "docs alone run no sweep");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

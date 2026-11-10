@@ -11,10 +11,13 @@
 //      reaches it: suites that import it or any module that transitively imports it, plus suites
 //      that name one of those files in a string literal (a spawned `bin/wicked-interactive.js`);
 //      a module no suite reaches runs EVERY suite;
-//   3. a docs-only file (`*.md`, `docs/`, `site/`, `examples/`, images) runs the suites that name it,
-//      usually none — then say so and exit 0;
-//   4. anything else (schemas and other data files, package manifests, `.wicked/`, `frontend/dist`
-//      assets, test helpers) runs EVERY suite: directory readers can't be told from a file name.
+//   3. a docs-only file (root `*.md`, `docs/`, `site/`, `examples/`, images) runs the suites that
+//      name it, usually none — then say so and exit 0;
+//   4. anything else (shipped skills, schemas and other data files, package manifests, `.wicked/`,
+//      `frontend/dist` assets, test helpers) runs EVERY suite;
+//   5. any touched file that is not docs-only also runs the SWEEP suites — those that read a
+//      directory (`readdirSync`), e.g. the shipped-tree string guard — since no import names
+//      what they read.
 //
 // Then `node --test <selected>` and exit with its status. `--dry-run` prints the selection as JSON.
 
@@ -28,7 +31,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const MODULE_DIRS = ["src", "bin", "scripts", "frontend/src"];
 const IS_MODULE = /^(?:src|bin|scripts|frontend\/src)\/.+\.(?:m?js|cjs|jsx)$/;
-const DOCS_ONLY = /\.(?:md|png|jpe?g|gif|svg|webp)$|^(?:docs|site|examples)\//;
+const DOCS_ONLY = /^[^/]+\.md$|^(?:docs|site|examples)\/|^(?!skills\/).*\.(?:png|jpe?g|gif|svg|webp)$/;
+const SWEEP = /\breaddirSync\s*\(|\breaddir\s*\(/;
 const SPECIFIER = /(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*["'](\.{1,2}\/[^"'\n]+)["']/g;
 
 const toRel = (root, p) => relative(root, p).split(sep).join("/");
@@ -70,11 +74,12 @@ export function selectTests(files, { root = ROOT } = {}) {
     new RegExp(`["'\`](?:[^"'\`\\n]*/)?${esc(basename(rel))}["'\`]`).test(suiteText.get(suite));
 
   const chosen = new Set();
-  let everything = false;
+  let everything = false, sweeps = false;
   for (const raw of files) {
     const rel = toRel(root, resolve(root, raw));
     if (/^test\/[^/]+\.test\.js$/.test(rel)) { if (existsSync(join(root, rel))) chosen.add(rel); continue; }
     if (DOCS_ONLY.test(rel)) { for (const s of suites) if (names(s, rel)) chosen.add(s); continue; }
+    sweeps = true;
     if (!IS_MODULE.test(rel)) { everything = true; continue; }
     // The module and every module that transitively imports it.
     const reach = new Set([rel]);
@@ -87,6 +92,7 @@ export function selectTests(files, { root = ROOT } = {}) {
     }
     if (!hit) everything = true;
   }
+  if (sweeps) for (const s of suites) if (SWEEP.test(suiteText.get(s))) chosen.add(s);
   return everything ? suites : [...chosen].sort();
 }
 
