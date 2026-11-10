@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+import { createServer as createHttpServer } from "node:http";
 import { emitEvent, busDb, startSubscription, closeBus } from "./bus-client.js";
 import { PRODUCERS, ALL_FILTER, uiEmittable, isKnownType } from "./events.js";
 import { appendConversation, deckOpProblem, materializeDeckOp, materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeSourceAttached, materializeSourceUpdated, materializeSourceRemoved, materializeThemeRequested } from "./handlers.js";
@@ -53,6 +54,7 @@ import {
 } from "./recorder-preflight.js";
 import { listInstances } from "./instances.mjs";
 import { pidAlive, LOCK_NAME, normalizeOrigin, readStudioOrigin, recordStudioOrigin } from "./serve-bridge.mjs";
+import { listenLoopback } from "./loopback.js";
 import { bindDocToProject, projectIdFor, resolveCrewApi, NO_CREW_API } from "./project.js";
 import { resolveLearnedTheme, learnedThemePath } from "./theme-source.js";
 import { checkThemeTokens } from "../core/theme-grammar.js";
@@ -760,15 +762,17 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
     if (existsSync(staticDir)) app.use(express.static(staticDir));
   }
 
-  let server;
+  // Loopback only (#344): 127.0.0.1 + ::1 on one port, never every interface.
+  let listener;
   async function start(port = 0) {
-    return new Promise((res) => { server = app.listen(port, () => res(server.address().port)); });
+    listener = await listenLoopback(() => createHttpServer(app), port);
+    return listener.port;
   }
   async function stop() {
-    if (server) await new Promise((r) => server.close(r));
+    if (listener) await listener.close();
   }
 
-  return { app, start, stop, enqueue, runCommand, emit, dir, documentId, demoStatus };
+  return { app, start, stop, enqueue, runCommand, emit, dir, documentId, demoStatus, addresses: () => listener?.addresses() ?? [] };
 }
 
 /** Recording states during which a second demo.requested is refused rather than queued (F-RECON-014). */
@@ -1080,7 +1084,7 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
   // `plugin` = this bridge's per-root bus identity; `unknown_doc_refused` = frames for docs not
   // under this root that were refused (≥ 1 is expected wherever two roots share a bus).
   top.get("/api/health", (_req, res) => res.json({
-    ok: true, root, pid: process.pid, port: topServer?.address?.().port ?? null,
+    ok: true, root, pid: process.pid, port: topServer?.port ?? null,
     plugin: PLUGIN, unknown_doc_refused: unknownDocRefused,
   }));
   // Crew projects for the creation wizard's picker (#162): docs must be project-bound to route
@@ -1533,23 +1537,23 @@ export function createMultiServer({ root, frontendDir, standalone = standaloneDe
     console.log(`[wi-service] bus identity: ${rootId} (root ${root})`);
     subs.push(startSubscription({ plugin: PLUGIN.bridge, filter: ALL_FILTER, handler: onBridge, maxRetries: 0 }));
     subs.push(startSubscription({ plugin: PLUGIN.commands, filter: ALL_FILTER, handler: onCommand, maxRetries: 2 }));
-    return new Promise((res, rej) => {
-      topServer = top.listen(port, () => res(topServer.address().port));
-      topServer.once("error", rej); // surface EADDRINUSE as a rejection so the CLI can fall forward (ADR-0022)
-    });
+    // Loopback only (#344): 127.0.0.1 + ::1 on one port, never every interface. A taken port
+    // rejects with EADDRINUSE so the CLI can fall forward (ADR-0022).
+    topServer = await listenLoopback(() => createHttpServer(top), port);
+    return topServer.port;
   }
   async function stop() {
     for (const s of subs) { try { await s.stop(); } catch { /* already stopped */ } }
     subs.length = 0;
     for (const { svc } of docs.values()) { try { await svc.stop(); } catch { /* not listening */ } }
-    if (topServer) await new Promise((r) => topServer.close(r));
+    if (topServer) await topServer.close();
     for (const res of sseClients) { try { res.end(); } catch {} }
     sseClients.clear();
     closeBus();
   }
 
   return {
-    app: top, start, stop, mountDoc, listDocs, get docCount() { return docs.size; },
+    app: top, start, stop, mountDoc, listDocs, addresses: () => topServer?.addresses() ?? [], get docCount() { return docs.size; },
     plugin: PLUGIN, rootId, get unknownDocRefused() { return unknownDocRefused; },
   };
 }

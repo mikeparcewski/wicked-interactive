@@ -8,6 +8,7 @@
 import { createServer } from "node:net";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { listenLoopback } from "./loopback.js";
 
 export const LOCK_NAME = ".wi-serve.json";
 export const PORT_BASE = 4400;          // friendly starting point for the free-port scan
@@ -99,14 +100,14 @@ export async function stopDaemon(root, { kill = process.kill, alive = pidAlive, 
   return { stopped: true, pid, forced: true };
 }
 
-// True iff `port` can be bound right now (probe binds + immediately releases it).
-export function isPortFree(port) {
-  return new Promise((res) => {
-    const probe = createServer();
-    probe.once("error", () => res(false));
-    probe.once("listening", () => probe.close(() => res(true)));
-    probe.listen(port, "0.0.0.0");
-  });
+// True iff `port` is free for a bridge right now (#344): nothing answers on loopback and every
+// loopback address can be bound — listenLoopback() checks both; the probe releases them at once.
+export async function isPortFree(port) {
+  try {
+    const probe = await listenLoopback(() => createServer(), port, { attempts: 1 });
+    await probe.close();
+    return true;
+  } catch { return false; }
 }
 
 // Resolve a bindable port: try `preferred`, then scan upward, then let the OS assign one (0).
