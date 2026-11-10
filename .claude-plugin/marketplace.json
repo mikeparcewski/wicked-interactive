@@ -9,7 +9,7 @@
     {
       "name": "wicked-interactive",
       "description": "The wicked family's document engine behind one local API: versioned, forkable documents (data-wid anchoring), HTML / PDF / native PowerPoint / video export and captioned demos. wicked-crew spawns and proxies it, and wicked-studio is its UI. The serve and assist skills start the engine and keep this Claude session on its wicked-bus events. Requires wicked-bus.",
-      "version": "0.16.0",
+      "version": "0.16.1",
       "source": "./",
       "author": {
         "name": "Mike Parcewski",
