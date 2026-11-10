@@ -4,6 +4,10 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-11-10
+
+Patch: the bridge listens on loopback only (#344, #346).
+
 ### Security
 - **The bridge listens on loopback only** (#344). It used to bind every interface, so documents and the bridge API
   were reachable from the local network. It now binds `127.0.0.1`, plus `::1` when the host has IPv6 (a client that
@@ -517,7 +521,8 @@ published; 0.14.1 ships its changes too.
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.14.1...v0.15.0
