@@ -126,6 +126,29 @@ test("listenLoopback: an explicit taken port rejects EADDRINUSE and leaves nothi
   assert.equal(await isPortFree(held.port), true, "released after close");
 });
 
+test("start() refuses a listen-options object: the host is never the caller's to choose", async () => {
+  for (const svc of [createMultiServer({ root: mkdtempSync(join(tmpdir(), "wi-loopback-opt-")), recorder }), createServer({ dir: mkdtempSync(join(tmpdir(), "wi-loopback-opt-doc-")), recorder })]) {
+    for (const bad of [{ port: 0, host: "0.0.0.0" }, { port: 0, host: "::" }, { port: 0, host: "::ffff:127.0.0.1" }, { port: 0 }, "0", -1, 65536, 1.5]) {
+      await assert.rejects(svc.start(bad), TypeError, `start(${JSON.stringify(bad)})`);
+      assert.deepEqual(svc.addresses(), [], "nothing bound");
+    }
+    await svc.stop();
+  }
+});
+
+test("an explicit port another process holds on the wildcard is EADDRINUSE, not shadowed on loopback", async () => {
+  // macOS/BSD would let a loopback bind succeed over a foreign wildcard listener (SO_REUSEADDR);
+  // the bridge must refuse it the way a plain listen(port) used to, so the CLI falls forward.
+  for (const wildcard of ["0.0.0.0", ...(ipv6 ? ["::"] : [])]) {
+    const other = netServer();
+    const port = await new Promise((res) => other.listen(0, wildcard, () => res(other.address().port)));
+    try {
+      await assert.rejects(listenLoopback(() => netServer(), port), (e) => e.code === "EADDRINUSE", `held on ${wildcard}`);
+      assert.equal(await isPortFree(port), false, `isPortFree with ${wildcard} held`);
+    } finally { await new Promise((r) => other.close(r)); }
+  }
+});
+
 test("isLoopbackAddress accepts 127/8 and ::1 only", () => {
   for (const a of ["127.0.0.1", "127.1.2.3", "::1"]) assert.equal(isLoopbackAddress(a), true, a);
   for (const a of ["0.0.0.0", "::", "::ffff:127.0.0.1", "10.0.0.1", "192.168.1.2", "", undefined]) {

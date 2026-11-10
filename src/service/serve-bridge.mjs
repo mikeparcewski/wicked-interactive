@@ -5,10 +5,10 @@
 // anything. Pure, side-effect-light helpers live here so they can be unit-tested; the CLI
 // (bin/wicked-interactive.js) wires them to process lifecycle.
 
-import { connect, createServer } from "node:net";
+import { createServer } from "node:net";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { listenLoopback, LOOPBACK_HOSTS } from "./loopback.js";
+import { listenLoopback } from "./loopback.js";
 
 export const LOCK_NAME = ".wi-serve.json";
 export const PORT_BASE = 4400;          // friendly starting point for the free-port scan
@@ -100,24 +100,9 @@ export async function stopDaemon(root, { kill = process.kill, alive = pidAlive, 
   return { stopped: true, pid, forced: true };
 }
 
-// Does anything accept a TCP connection on host:port? (ECONNREFUSED / no route → false.)
-function accepts(host, port, timeoutMs = 500) {
-  return new Promise((res) => {
-    const sock = connect({ host, port });
-    const done = (v) => { clearTimeout(timer); sock.destroy(); res(v); };
-    const timer = setTimeout(() => done(false), timeoutMs);
-    sock.once("connect", () => done(true));
-    sock.once("error", () => done(false));
-  });
-}
-
-// True iff `port` is free for a bridge right now (#344). Two checks, because binding loopback
-// alone can succeed on macOS/BSD while another process holds the WILDCARD on that port (libuv
-// sets SO_REUSEADDR), and the new bridge would then shadow it on loopback:
-//   1. nothing answers on any loopback address, and
-//   2. every loopback address can be bound (probe binds + immediately releases them).
+// True iff `port` is free for a bridge right now (#344): nothing answers on loopback and every
+// loopback address can be bound — listenLoopback() checks both; the probe releases them at once.
 export async function isPortFree(port) {
-  for (const host of LOOPBACK_HOSTS) if (await accepts(host, port)) return false;
   try {
     const probe = await listenLoopback(() => createServer(), port, { attempts: 1 });
     await probe.close();

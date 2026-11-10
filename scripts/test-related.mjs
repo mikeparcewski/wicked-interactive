@@ -6,9 +6,13 @@
 // "related" mode, so this is the one place that maps a change to its tests:
 //
 //   1. a touched `test/*.test.js` runs itself;
-//   2. a touched source file (`src/**`, `bin/**`) runs every `test/*.test.js` that imports it by
-//      name — its direct dependents, e.g. `src/service/server.js` → the bridge suites;
-//   3. nothing selected (docs, site, frontend, a file no test imports) → say so and exit 0.
+//   2. any other touched file runs every `test/*.test.js` that names it in a string literal: an
+//      import (`from "../src/service/server.js"`), a spawned entry point (`"wicked-interactive.js"`
+//      in a path join), a data file it reads (`"doc.created.json"`);
+//   3. a touched file under `src/`, `bin/`, `scripts/`, `.wicked/` or `test/` (or `package.json` /
+//      `package-lock.json`) that no suite names runs EVERY suite: its dependents can't be told,
+//      so the check stays conservative rather than passing on nothing;
+//   4. anything else (docs, site, assets) that no suite names → say so and exit 0.
 //
 // Then `node --test <selected>` and exit with its status. `--dry-run` prints the selection as JSON.
 
@@ -19,26 +23,27 @@ import { spawnSync } from "node:child_process";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Paths whose dependents can't be told when no suite names them: fall back to the whole suite.
+const CONSERVATIVE = /^(?:src|bin|scripts|\.wicked|test)\/|^package(?:-lock)?\.json$/;
+
 export function selectTests(files, { root = ROOT } = {}) {
   const testDir = join(root, "test");
   const suites = existsSync(testDir) ? readdirSync(testDir).filter((f) => f.endsWith(".test.js")).sort() : [];
+  const text = new Map(suites.map((t) => [t, readFileSync(join(testDir, t), "utf8")]));
   const chosen = new Set();
-  const sources = [];
+  let everything = false;
   for (const raw of files) {
     const rel = relative(root, resolve(root, raw)).split(sep).join("/");
     if (/^test\/[^/]+\.test\.js$/.test(rel)) { if (existsSync(join(root, rel))) chosen.add(rel); continue; }
-    if (/^(src|bin)\/.+\.(m?js)$/.test(rel)) sources.push(rel);
+    // A string literal that is the file's name or ends in `/<name>`: "../src/service/server.js",
+    // "wicked-interactive.js", "doc.created.json" — not the name inside a longer word.
+    const named = new RegExp(`["'\`](?:[^"'\`\\n]*/)?${esc(basename(rel))}["'\`]`);
+    let hit = false;
+    for (const suite of suites) if (named.test(text.get(suite))) { chosen.add(`test/${suite}`); hit = true; }
+    if (!hit && CONSERVATIVE.test(rel)) everything = true;
   }
-  for (const src of sources) {
-    const name = basename(src);
-    // An import of a specifier ending in the module's file name: `from "../src/service/server.js"`
-    // or `import("../src/service/server.js")` — not the name merely quoted in a test body.
-    const spec = new RegExp(`(?:\\bfrom|\\bimport\\s*\\()\\s*["'][^"'\\n]*/${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["']`);
-    for (const suite of suites) {
-      if (spec.test(readFileSync(join(testDir, suite), "utf8"))) chosen.add(`test/${suite}`);
-    }
-  }
-  return [...chosen].sort();
+  return everything ? suites.map((t) => `test/${t}`) : [...chosen].sort();
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

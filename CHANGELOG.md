@@ -4,6 +4,12 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Security
+- **The bridge listens on loopback only** (#344). It used to bind every interface, so documents and the bridge API
+  were reachable from the local network. It now binds `127.0.0.1`, plus `::1` when the host has IPv6 (a client that
+  resolves `localhost` to `::1` still connects), and never `0.0.0.0` or `::`; there is no option to widen it. The
+  free-port probe checks the same addresses and treats a port another process already answers on as taken.
+
 ## [0.16.0] — 2026-11-08
 
 Minor: a demo video's cut keeps its history, so you can go back to an earlier cut and make it the working version;

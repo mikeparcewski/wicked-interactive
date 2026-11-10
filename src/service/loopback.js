@@ -7,6 +7,8 @@
 // when the host has IPv6. Never the wildcards (0.0.0.0 / ::), and no host override: there is
 // no remote mode to opt into.
 
+import { connect } from "node:net";
+
 /** The only addresses a bridge listener ever binds. IPv4 first: it is the one that must work. */
 export const LOOPBACK_HOSTS = Object.freeze(["127.0.0.1", "::1"]);
 
@@ -31,15 +33,45 @@ function bindOne(server, port, host) {
 
 const closeOne = (server) => new Promise((r) => { try { server.close(() => r()); } catch { r(); } });
 
+// Does anything accept a TCP connection on host:port? (refused / unreachable / slow → false.)
+function accepts(host, port, timeoutMs = 500) {
+  return new Promise((res) => {
+    const sock = connect({ host, port });
+    const done = (v) => { clearTimeout(timer); sock.destroy(); res(v); };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    sock.once("connect", () => done(true));
+    sock.once("error", () => done(false));
+  });
+}
+
+function inUse(port) {
+  const e = new Error(`listen EADDRINUSE: port ${port} already answers on loopback`);
+  e.code = "EADDRINUSE";
+  e.port = port;
+  return e;
+}
+
 /**
  * Listen on every loopback address, one server per address, all on one port.
  * `makeServer()` returns a fresh, unbound net/http server each call (e.g.
  * `() => http.createServer(app)`). `port` 0 lets the OS pick the IPv4 port; when ::1 then finds
  * that port taken, we release it and pick again (bounded). An explicit port that is taken on
- * either address rejects with the bind error (EADDRINUSE), with nothing left bound.
+ * either address, or that anything already answers on over loopback, rejects with EADDRINUSE,
+ * with nothing left bound. A non-integer port (e.g. a listen-options object) throws a TypeError.
  * Resolves `{ port, servers, addresses(), close() }`.
  */
 export async function listenLoopback(makeServer, port = 0, { attempts = 5 } = {}) {
+  // A number, never a listen-options object: `listen({ host: "0.0.0.0" })` would ignore the host
+  // we pass and bind wherever the object says.
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new TypeError(`loopback listen: port must be an integer 0-65535, got ${typeof port === "object" ? JSON.stringify(port) : String(port)}`);
+  }
+  // An explicit port another process already serves is taken, even where (macOS/BSD, libuv sets
+  // SO_REUSEADDR) a loopback bind over that process's wildcard listener would succeed and shadow
+  // it on loopback. Same EADDRINUSE the bind itself gives, so callers fall forward as before.
+  if (port !== 0) {
+    for (const host of LOOPBACK_HOSTS) if (await accepts(host, port)) throw inUse(port);
+  }
   let lastError;
   for (let i = 0; i < attempts; i++) {
     const v4 = makeServer();
