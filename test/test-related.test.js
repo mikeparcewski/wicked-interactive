@@ -13,37 +13,47 @@ import { selectTests } from "../scripts/test-related.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** A throwaway repo root with the given test files (name → body). */
-function fixture(suites) {
+/** A throwaway repo root: `files` maps repo-relative path → body. */
+function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), "wi-test-related-"));
-  mkdirSync(join(root, "test"));
-  for (const [name, body] of Object.entries(suites)) writeFileSync(join(root, "test", name), body);
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), body);
+  }
   return root;
 }
 
-test("selection: imports, spawned entry points and data files select the suites that name them", () => {
+test("selection: a module runs the suites that reach it, directly, transitively or by name", () => {
   const root = fixture({
-    "a.test.js": `import { x } from "../src/service/server.js";`,
-    "b.test.js": `const cli = join(HERE, "..", "bin", "wicked-interactive.js");`,
-    "c.test.js": "const s = readFileSync(`../src/service/event-schemas/doc.created.json`);",
-    "d.test.js": `import { y } from "../src/service/not-server.js"; // server.js in a comment only`,
+    "src/service/server.js": `import { listenLoopback } from "./loopback.js";`,
+    "src/service/loopback.js": `export const x = 1;`,
+    "src/service/other.js": `export const y = 2;`,
+    "bin/wicked-interactive.js": `import "../src/service/other.js";`,
+    "test/a.test.js": `import { x } from "../src/service/server.js";`,
+    "test/b.test.js": `const cli = join(HERE, "..", "bin", "wicked-interactive.js");`,
+    "test/c.test.js": `import "../src/service/other.js"; // server.js in a comment only`,
   });
   try {
     assert.deepEqual(selectTests(["src/service/server.js"], { root }), ["test/a.test.js"]);
-    assert.deepEqual(selectTests(["bin/wicked-interactive.js"], { root }), ["test/b.test.js"]);
-    assert.deepEqual(selectTests(["src/service/event-schemas/doc.created.json"], { root }), ["test/c.test.js"]);
-    assert.deepEqual(selectTests(["test/d.test.js", "test/gone.test.js"], { root }), ["test/d.test.js"], "a touched suite runs itself; a deleted one is dropped");
+    assert.deepEqual(selectTests(["src/service/loopback.js"], { root }), ["test/a.test.js"], "through server.js");
+    assert.deepEqual(selectTests(["bin/wicked-interactive.js"], { root }), ["test/b.test.js"], "a spawned entry point");
+    assert.deepEqual(selectTests(["src/service/other.js"], { root }), ["test/b.test.js", "test/c.test.js"], "imported, and imported by the spawned bin");
+    assert.deepEqual(selectTests(["test/c.test.js", "test/gone.test.js"], { root }), ["test/c.test.js"], "a touched suite runs itself; a deleted one is dropped");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("selection: an unnamed source file runs every suite; an unnamed doc runs none", () => {
-  const root = fixture({ "a.test.js": `import "../src/a.js";`, "b.test.js": `import "../src/b.js";` });
+test("selection: what can't be traced runs every suite; docs run only the suites that name them", () => {
+  const root = fixture({
+    "src/a.js": "", "test/a.test.js": `import "../src/a.js";`, "test/b.test.js": `const f = "guide.md";`,
+  });
   try {
     const all = ["test/a.test.js", "test/b.test.js"];
-    for (const f of ["src/service/orphan.js", "src/x.json", "bin/other.js", "scripts/tool.mjs", ".wicked/checks.json", "package.json", "test/helper.mjs"]) {
-      assert.deepEqual(selectTests([f], { root }), all, f);
-    }
+    const untraceable = ["src/service/orphan.js", "src/service/event-schemas/x.json", "bin/other.js", "scripts/tool.mjs",
+      ".wicked/checks.json", "package.json", "package-lock.json", "frontend/dist/assets/index.js", "test/helper.mjs"];
+    for (const f of untraceable) assert.deepEqual(selectTests([f], { root }), all, f);
+    assert.deepEqual(selectTests(["src/a.js", "package.json"], { root }), all, "one untraceable file widens the whole selection");
     assert.deepEqual(selectTests(["README.md", "docs/x.md", "site/index.astro"], { root }), []);
+    assert.deepEqual(selectTests(["docs/guide.md"], { root }), ["test/b.test.js"]);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

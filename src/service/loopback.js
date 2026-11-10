@@ -33,14 +33,19 @@ function bindOne(server, port, host) {
 
 const closeOne = (server) => new Promise((r) => { try { server.close(() => r()); } catch { r(); } });
 
-// Does anything accept a TCP connection on host:port? (refused / unreachable / slow → false.)
-function accepts(host, port, timeoutMs = 500) {
+// Connect errors that prove nothing listens there: refused, or no such address family/route on
+// this host (no IPv6). Anything else, including a timeout, is inconclusive.
+const NOBODY_THERE = new Set(["ECONNREFUSED", "EADDRNOTAVAIL", "EAFNOSUPPORT", "ENETUNREACH", "EHOSTUNREACH"]);
+
+// Might something be listening on host:port? Only a definitive refusal says no: a live listener
+// whose accept queue is full makes the connect hang, and must still count as occupied.
+function occupied(host, port, timeoutMs = 1000) {
   return new Promise((res) => {
     const sock = connect({ host, port });
     const done = (v) => { clearTimeout(timer); sock.destroy(); res(v); };
-    const timer = setTimeout(() => done(false), timeoutMs);
+    const timer = setTimeout(() => done(true), timeoutMs);
     sock.once("connect", () => done(true));
-    sock.once("error", () => done(false));
+    sock.once("error", (e) => done(!NOBODY_THERE.has(e?.code)));
   });
 }
 
@@ -66,11 +71,11 @@ export async function listenLoopback(makeServer, port = 0, { attempts = 5 } = {}
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new TypeError(`loopback listen: port must be an integer 0-65535, got ${typeof port === "object" ? JSON.stringify(port) : String(port)}`);
   }
-  // An explicit port another process already serves is taken, even where (macOS/BSD, libuv sets
+  // An explicit port another process already serves (or may serve) is taken, even where (macOS/BSD, libuv sets
   // SO_REUSEADDR) a loopback bind over that process's wildcard listener would succeed and shadow
   // it on loopback. Same EADDRINUSE the bind itself gives, so callers fall forward as before.
   if (port !== 0) {
-    for (const host of LOOPBACK_HOSTS) if (await accepts(host, port)) throw inUse(port);
+    for (const host of LOOPBACK_HOSTS) if (await occupied(host, port)) throw inUse(port);
   }
   let lastError;
   for (let i = 0; i < attempts; i++) {

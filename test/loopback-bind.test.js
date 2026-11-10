@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir, networkInterfaces } from "node:os";
 import { connect, createServer as netServer } from "node:net";
+import { spawn } from "node:child_process";
 import { createMultiServer, createServer } from "../src/service/server.js";
 import { isPortFree } from "../src/service/serve-bridge.mjs";
 import { listenLoopback, isLoopbackAddress, LOOPBACK_HOSTS } from "../src/service/loopback.js";
@@ -146,6 +147,30 @@ test("an explicit port another process holds on the wildcard is EADDRINUSE, not 
       await assert.rejects(listenLoopback(() => netServer(), port), (e) => e.code === "EADDRINUSE", `held on ${wildcard}`);
       assert.equal(await isPortFree(port), false, `isPortFree with ${wildcard} held`);
     } finally { await new Promise((r) => other.close(r)); }
+  }
+});
+
+test("a wildcard holder whose accept queue is full still counts as taken (a hung probe is not 'free')", async () => {
+  // A child that listens with backlog 1 and then blocks its event loop, so it never accepts.
+  const child = spawn(process.execPath, ["-e", `
+    const s = require("node:net").createServer();
+    s.listen({ port: 0, host: "0.0.0.0", backlog: 1 }, () => {
+      process.stdout.write(String(s.address().port) + "\\n");
+      setTimeout(() => { const end = Date.now() + 20000; while (Date.now() < end); }, 50);
+    });`], { stdio: ["ignore", "pipe", "ignore"] });
+  const fillers = [];
+  try {
+    const port = await new Promise((res, rej) => {
+      child.stdout.once("data", (d) => res(Number(String(d).trim())));
+      child.once("exit", () => rej(new Error("holder exited")));
+    });
+    await new Promise((r) => setTimeout(r, 200));                  // the loop is blocked now
+    for (let i = 0; i < 8; i++) fillers.push(connect({ host: "127.0.0.1", port }).on("error", () => {}));
+    await new Promise((r) => setTimeout(r, 200));
+    await assert.rejects(listenLoopback(() => netServer(), port), (e) => e.code === "EADDRINUSE");
+  } finally {
+    for (const f of fillers) f.destroy();
+    child.kill("SIGKILL");
   }
 });
 
