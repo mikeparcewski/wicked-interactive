@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Changed
+- **Governed floors rebuild `better-sqlite3` offline after install.** `.wicked/checks.json` now declares
+  `"native_rebuild": ["better-sqlite3"]`, so a floor that installs with `--ignore-scripts` still builds the native
+  addon the bus client needs, and the bus-backed tests can run there.
+
 ## [0.16.1] — 2026-11-10
 
 Patch: the bridge listens on loopback only (#344, #346).

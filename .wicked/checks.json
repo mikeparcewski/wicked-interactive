@@ -1,5 +1,6 @@
 {
   "test": ["npm", "test"],
   "test_targeted": ["node", "scripts/test-related.mjs", "{files}"],
+  "native_rebuild": ["better-sqlite3"],
   "timeout_s": 900
 }
