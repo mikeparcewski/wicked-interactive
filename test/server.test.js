@@ -263,6 +263,36 @@ test("GET /api/fs hides dotfiles and 404s on a missing directory", async () => {
 
 // ── F-RECON-014: the per-doc recording state a "Re-record" control renders from ────────────
 
+test("GET /d/:doc/api/demo/recording serves bytes under a dotted docs root and refuses hidden names and directories", async () => {
+  const outer = mkdtempSync(join(tmpdir(), "wi-recording-dot-"));
+  const root = join(outer, ".state", "docs");
+  const dir = join(root, "tour");
+  initWorkspace(dir, "<h1>Tour</h1>", { kind: "demo" });
+  const recordings = join(dir, "recordings");
+  mkdirSync(recordings, { recursive: true });
+  const bytes = Buffer.from([0, 1, 2, 255]);
+  writeFileSync(join(recordings, "_v1.mp4"), bytes);
+  writeFileSync(join(recordings, ".hidden.mp4"), bytes);
+  mkdirSync(join(recordings, "directory.mp4"));
+  const prevBus = process.env.WICKED_BUS_DATA_DIR;
+  process.env.WICKED_BUS_DATA_DIR = join(outer, "bus");
+  const svc = createMultiServer({ root });
+  try {
+    const port = await svc.start(0);
+    const base = `http://localhost:${port}/d/tour/api/demo/recording`;
+    const video = await fetch(`${base}/_v1.mp4`);
+    assert.equal(video.status, 200);
+    assert.equal(video.headers.get("content-type"), "video/mp4");
+    assert.deepEqual(Buffer.from(await video.arrayBuffer()), bytes);
+    assert.equal((await fetch(`${base}/.hidden.mp4`)).status, 400);
+    assert.equal((await fetch(`${base}/directory.mp4`)).status, 404);
+  } finally {
+    await svc.stop();
+    rmSync(outer, { recursive: true, force: true });
+    if (prevBus === undefined) delete process.env.WICKED_BUS_DATA_DIR; else process.env.WICKED_BUS_DATA_DIR = prevBus;
+  }
+});
+
 test("GET /api/demo/status starts idle and carries the recorder browser snapshot (injected seam)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "wi-srv-demo-"));
   initWorkspace(dir, "<section><h1>Learning…</h1></section>", { kind: "demo" });

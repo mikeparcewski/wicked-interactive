@@ -4,6 +4,9 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Fixed
+- A demo's recorded video, captions and poster stream again when the documents live under a dot directory (the default ~/.wicked-crew): the recording route allows dot segments like the export route (#171).
+
 ### Changed
 - **Governed floors rebuild `better-sqlite3` offline after install.** `.wicked/checks.json` now declares
   `"native_rebuild": ["better-sqlite3"]`, so a floor that installs with `--ignore-scripts` still builds the native

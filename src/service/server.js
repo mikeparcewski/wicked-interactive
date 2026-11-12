@@ -489,9 +489,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   // Stream a recorded demo video / thumbnail / GIF. Path-locked to the slug charset.
   app.get("/api/demo/recording/:name", (req, res) => {
     const name = req.params.name;
-    if (!/^[A-Za-z0-9._-]+$/.test(name)) return res.status(400).send("invalid name");
+    if (!/^[A-Za-z0-9._-]+$/.test(name) || name.startsWith(".")) return res.status(400).send("invalid name");
     const filePath = join(dir, RECORDINGS_DIR, name);
-    if (!existsSync(filePath)) return res.status(404).send("not found");
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) return res.status(404).send("not found");
     const lower = name.toLowerCase();
     const type = lower.endsWith(".mp4") ? "video/mp4"
       : lower.endsWith(".webm") ? "video/webm"
@@ -501,7 +501,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       : lower.endsWith(".vtt") ? "text/vtt"
       : "application/octet-stream";
     res.setHeader("Content-Type", type);
-    res.sendFile(filePath);
+    res.sendFile(filePath, { dotfiles: "allow" });
   });
 
   // Standalone HTML player for a recorded version — served into an iframe in the storyboard.
