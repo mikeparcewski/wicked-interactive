@@ -4,6 +4,25 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **One route, one writer for a demo cut (studio#1140, part A).** `POST /api/demo/recut` takes `{expect_head, ops[], request_id?}`:
+  at most 20 chapter ops (`chapter-move`, `-rename`, `-trim`, `-take`, `-say`), folded in order inside the document's
+  queue, validated as a whole and rendered once; a bad op refuses the batch and nothing moves. A `chapter-take` resets
+  that chapter's trim to the whole take and may name any take in the cut's inventory (`.mp4` included); `say` is one line
+  of at most 2000 characters. A `request_id` (≤ 128 characters) is kept on the version; a replay returns that version
+  and renders nothing, and `GET /api/demo/cut?request_id=<id>` answers `{version}` or 404.
+- `expect_head` (the manifest head) guards recut, `PUT /api/demo/style`, `POST /api/demo/restore` and `POST /api/demo/takes`:
+  a moved head is 409 `head_moved {head}`. The old bodies (`rev`, no `expect_head`) work unchanged.
+- `GET /api/demo/cut` returns each chapter's `startSec` and `durationSec`, and the `render` entry of the version read.
+
+### Changed
+- **A cut's state is the snapshot of its newest cut version** (a manifest version with a `render` entry), committed by the
+  manifest write, which now always comes last; `demo-cut.json` stays as the marker and for older readers. A crash before
+  the manifest write leaves the previous commit in force. A legacy cut with no snapshot is verified once against the
+  marker's `version` and backfilled, otherwise edits answer 409 `cut_unverified`.
+- Every other writer refuses a demo cut with 409 `cut_document`: the head re-theme, deck ops, and the feedback, edit,
+  draft and demo bus handlers (a non-retryable `status.posted`), as fork already did.
+
 ## [0.16.2] — 2026-11-12
 
 Patch: a demo recording streams when the documents live under a dot directory (#349). Spawned by wicked-crew

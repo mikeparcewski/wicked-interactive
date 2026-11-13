@@ -1,5 +1,5 @@
 // Chapter takes and write-once renders of the current edit decision list.
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { isColor } from "../core/theme-grammar.js";
@@ -107,24 +107,83 @@ export function chapterIds(labels) {
   });
 }
 
-export function loadCut(dir) {
+/** A document is a cut when its marker exists; the marker is written first on creation and kept for older readers. */
+export function isCut(dir) { return existsSync(join(dir, CUT_FILE)); }
+
+/** A cut version is a manifest version with a `render` entry (only renderCut writes it); a legacy recorder storyboard
+ *  has kind demo but no render. The newest one is the commit point of the cut's state. */
+export function newestCutVersion(manifest) {
+  let newest = null;
+  for (const v of manifest.versions) if (v.render && (newest === null || v.version > newest.version)) newest = v;
+  return newest;
+}
+
+/**
+ * The current cut: the snapshot of the newest cut version in the manifest, never `demo-cut.json` (an orphan snapshot or
+ * marker from a write that died before the manifest is ignored). A legacy head with no snapshot is verified once: when the
+ * marker's own `version` is that head it is written as the snapshot, otherwise the history cannot be trusted
+ * (409 `cut_unverified`). With no cut version yet the marker answers only when it names a version the manifest holds
+ * (a cut written by an older service); a first creation killed before its manifest write is no cut at all (null).
+ */
+export function currentCut(dir, { write = true } = {}) {
   const path = join(dir, CUT_FILE);
-  if (!existsSync(path)) throw new CutError("no_cut", null, 404);
-  return JSON.parse(readFileSync(path, "utf8"));
+  if (!existsSync(path)) return null;
+  const marker = JSON.parse(readFileSync(path, "utf8"));
+  const manifest = loadManifest(dir);
+  const newest = newestCutVersion(manifest);
+  if (!newest) return manifest.versions.some((v) => v.version === marker.version) ? marker : null;
+  const snapshot = join(dir, cutSnapshotFile(newest.version));
+  if (existsSync(snapshot)) return JSON.parse(readFileSync(snapshot, "utf8"));
+  if (marker.version !== newest.version) {
+    throw new CutError("cut_unverified", null, 409, { message: "This video's history predates kept cuts; Record it again to edit it." });
+  }
+  // Only a caller inside the document's queue writes; a read (a GET, an existence check) answers the same cut without it.
+  if (write) atomicWrite(snapshot, JSON.stringify(marker, null, 2));
+  return marker;
+}
+
+/** True when a cut exists or cannot be told apart from one (an unverified legacy history still counts). */
+export function cutExists(dir) {
+  try { return currentCut(dir, { write: false }) !== null; } catch { return true; }
+}
+
+export function loadCut(dir, opts) {
+  const cut = currentCut(dir, opts);
+  if (!cut) throw new CutError("no_cut", null, 404);
+  return cut;
 }
 
 /** Where a rendered version's cut is kept (beside its `_v<N>.html`): the decision list that version was made from. */
 export function cutSnapshotFile(version) { return `_v${version}.cut.json`; }
 
-/** The cut a rendered version was made from: the head's own, or its snapshot. A version rendered before snapshots
- *  were kept (or one that is not a cut render) has none: 404 `no_snapshot`. */
-export function loadCutVersion(dir, version) {
-  const cut = loadCut(dir);
+/** The cut a rendered version was made from: its snapshot, the head's included. A version that is not a cut render
+ *  has none: 404 `no_snapshot`. */
+export function loadCutVersion(dir, version, opts) {
+  const current = loadCut(dir, opts);
   if (!Number.isInteger(version) || version < 0) bad("version");
-  if (version === cut.version) return cut;
+  const entry = loadManifest(dir).versions.find((v) => v.version === version);
   const path = join(dir, cutSnapshotFile(version));
-  if (!existsSync(path)) throw new CutError("no_snapshot", "version", 404);
+  // A legacy head not yet backfilled (a read does not write) is its marker, which `currentCut` verified.
+  if (entry?.render && !existsSync(path) && current.version === version) return current;
+  if (!entry?.render || !existsSync(path)) throw new CutError("no_snapshot", "version", 404);
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+/** `expect_head`: the DOCUMENT's head the caller saw, the staleness token of every cut mutation. A page version can
+ *  land on the manifest without moving the cut's rev, so a mutation must not land over it unseen. */
+export function checkHead(dir, expectHead) {
+  if (!Number.isInteger(expectHead)) bad("expect_head");
+  const { head } = loadManifest(dir);
+  if (head !== expectHead) throw new CutError("head_moved", null, 409, { head });
+}
+
+/** The version a `request_id` already produced (the recut's replay key), or null. */
+export function findRequest(dir, requestId) {
+  return loadManifest(dir).versions.find((v) => v.render && v.request_id === requestId) ?? null;
+}
+export function readRequestId(value) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 128) bad("request_id");
+  return value;
 }
 
 /**
@@ -136,14 +195,9 @@ export function loadCutVersion(dir, version) {
 export async function restoreCut(dir, body, opts = {}) {
   closed(body, ["rev", "from", "expect_head"], "body");
   const cut = loadCut(dir);
-  checkRev(cut, body.rev);
-  // `expect_head`: the DOCUMENT's head the caller saw. A page version (a re-theme, a draft) can land on a cut document
-  // without moving the cut's rev; a restore must not land over it unseen.
-  if (body.expect_head !== undefined) {
-    if (!Number.isInteger(body.expect_head)) bad("expect_head");
-    const { head } = loadManifest(dir);
-    if (head !== body.expect_head) throw new CutError("head_moved", null, 409, { head });
-  }
+  // A body in the old form (rev, no expect_head) is checked by rev as ever; one that sends expect_head may leave rev out.
+  if (body.rev !== undefined || body.expect_head === undefined) checkRev(cut, body.rev);
+  if (body.expect_head !== undefined) checkHead(dir, body.expect_head);
   if (!Number.isInteger(body.from) || body.from < 0 || body.from === cut.version) bad("from");
   const was = loadCutVersion(dir, body.from);
   // A full take of a re-authored spec starts a new takes list (extractTakes); the files stay on disk. Keep both lists.
@@ -163,18 +217,25 @@ export function checkRev(cut, rev) {
   if (rev !== cut.rev) throw new CutError("rev_moved", null, 409, { rev: cut.rev });
 }
 
-export function validateRecut(cut, body) {
+const MAX_SAY = 2000;
+const say = (value, field) => {
+  if (typeof value !== "string" || value.length > MAX_SAY || /[\r\n]/.test(value)) bad(field);
+};
+
+/** `allowSay`: only the folded ops of the recut body's new form carry narration; the old body never did. */
+export function validateRecut(cut, body, { allowSay = false } = {}) {
   closed(body, ["rev", "chapters", "style"], "body");
   checkRev(cut, body.rev);
   if (!Array.isArray(body.chapters) || body.chapters.length !== cut.chapters.length) bad("chapters");
   const seen = new Set();
   const chapters = body.chapters.map((entry, index) => {
     const field = `chapters.${index}`;
-    closed(entry, ["id", "title", "take", "inSec", "outSec"], field);
+    closed(entry, allowSay ? ["id", "title", "take", "inSec", "outSec", "say"] : ["id", "title", "take", "inSec", "outSec"], field);
     const current = cut.chapters.find((c) => c.id === entry.id);
     if (!current || seen.has(entry.id)) bad(`${field}.id`);
     seen.add(entry.id);
     if (entry.title !== undefined) text(entry.title, `${field}.title`);
+    if (entry.say !== undefined) say(entry.say, `${field}.say`);
     const chapter = { ...current, ...entry };
     const take = Object.hasOwn(cut.takes, chapter.id) ? cut.takes[chapter.id].find((t) => t.file === chapter.take) : undefined;
     if (!take) bad(`${field}.take`);
@@ -184,6 +245,77 @@ export function validateRecut(cut, body) {
     return chapter;
   });
   return { ...cut, chapters, style: body.style === undefined ? cut.style : validateStyle(body.style, "Demo", cut.style) };
+}
+
+const MAX_OPS = 20;
+const OP_FIELDS = {
+  "chapter-move": ["op", "chapter", "after"], "chapter-rename": ["op", "chapter", "title"],
+  "chapter-trim": ["op", "chapter", "inSec", "outSec"], "chapter-take": ["op", "chapter", "take"],
+  "chapter-say": ["op", "chapter", "say"],
+};
+/** Fold the ops in order, each against the chapters the previous one left; a bad op throws and nothing has moved.
+ *  A take is any file in the cut's own takes inventory (.mp4 included) and resets that chapter's trim to the whole take. */
+export function foldOps(cut, ops) {
+  if (!Array.isArray(ops) || ops.length < 1 || ops.length > MAX_OPS) bad("ops");
+  const chapters = cut.chapters.map((c) => ({ ...c }));
+  ops.forEach((op, i) => {
+    const field = `ops.${i}`;
+    if (!object(op) || !Object.hasOwn(OP_FIELDS, op.op)) bad(`${field}.op`);
+    closed(op, OP_FIELDS[op.op], field);
+    const at = chapters.findIndex((c) => c.id === op.chapter);
+    if (typeof op.chapter !== "string" || at < 0) bad(`${field}.chapter`);
+    const chapter = chapters[at];
+    switch (op.op) {
+      case "chapter-move": {
+        if (op.after !== null && (typeof op.after !== "string" || op.after === op.chapter || !chapters.some((c) => c.id === op.after))) bad(`${field}.after`);
+        chapters.splice(at, 1);
+        chapters.splice(op.after === null ? 0 : chapters.findIndex((c) => c.id === op.after) + 1, 0, chapter);
+        break;
+      }
+      case "chapter-rename": text(op.title, `${field}.title`); chapter.title = op.title; break;
+      case "chapter-trim":
+        if (!Number.isFinite(op.inSec)) bad(`${field}.inSec`);
+        if (!Number.isFinite(op.outSec)) bad(`${field}.outSec`);
+        chapter.inSec = op.inSec; chapter.outSec = op.outSec;
+        break;
+      case "chapter-take": {
+        const take = Object.hasOwn(cut.takes ?? {}, chapter.id) ? cut.takes[chapter.id].find((t) => t.file === op.take) : undefined;
+        if (typeof op.take !== "string" || !take) bad(`${field}.take`);
+        chapter.take = take.file; chapter.inSec = 0; chapter.outSec = take.durationSec;
+        break;
+      }
+      default: say(op.say, `${field}.say`); chapter.say = op.say;
+    }
+  });
+  return chapters;
+}
+
+/**
+ * The recut. The new body `{expect_head, ops[], request_id?}` is folded, validated and rendered once; a known
+ * `request_id` replays its version and renders nothing. The old body `{rev, chapters, style}` works as it did (and may
+ * add `expect_head`). Runs inside the document's queue.
+ */
+export async function recutCut(dir, body, opts = {}) {
+  if (!object(body) || !Object.hasOwn(body, "ops")) {
+    const { expect_head: expectHead, ...old } = object(body) ? body : {};
+    const cut = loadCut(dir);
+    if (expectHead !== undefined) checkHead(dir, expectHead);
+    return renderCut(dir, validateRecut(cut, object(body) ? old : body), opts);
+  }
+  closed(body, ["expect_head", "ops", "request_id"], "body");
+  const requestId = body.request_id === undefined ? undefined : readRequestId(body.request_id);
+  if (requestId !== undefined) {
+    const known = findRequest(dir, requestId);
+    if (known) {
+      const path = join(dir, cutSnapshotFile(known.version));
+      return { rev: existsSync(path) ? JSON.parse(readFileSync(path, "utf8")).rev : null, version: known.version, parent: known.parent, replayed: true };
+    }
+  }
+  const cut = loadCut(dir);
+  checkHead(dir, body.expect_head);
+  const chapters = foldOps(cut, body.ops);
+  const folded = validateRecut(cut, { rev: cut.rev, chapters }, { allowSay: true });
+  return renderCut(dir, folded, { ...opts, ...(requestId === undefined ? {} : { requestId }) });
 }
 
 // One runner per binary in production; one probe per runner, including injected fakes.
@@ -360,29 +492,46 @@ export async function renderCut(dir, cut, opts = {}) {
   cut = { ...cut, style: { ...cut.style, theme: effectiveTheme(cut.style.theme, skin) } };
   const { titleCard, endCard } = cut.style.theme;
   const cardText = [titleCard, endCard].some((c) => c.on && (c.title || c.subtitle));
-  atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
-  atomicWrite(join(rec, `_v${version}.vtt`), writeVtt(cut));
-  const burnIn = cut.style.captions.burnIn && capabilities.burnIn;
-  // The overlay carries the cards' text even with caption burn-in off; it needs libass either way.
-  const overlay = capabilities.burnIn && (cut.style.captions.burnIn || cardText);
-  await runFfmpeg(ctx.runner, renderArgs(dir, cut, version, overlay, vars), { cwd: rec });
-  await runFfmpeg(ctx.runner, ["-y", "-i", join(rec, `_v${version}.mp4`), "-frames:v", "1", "-q:v", "2", join(rec, `_v${version}-poster.jpg`)], { cwd: rec });
-  const html = storyboard({ documentId: opts.documentId ?? "doc", title: cut.style.theme.titleCard.title,
-    url: opts.url ?? cut.url ?? "", videoFile: null, mp4File: `_v${version}.mp4`, posterFile: `_v${version}-poster.jpg`,
-    steps: timeline(cut).map((c) => ({ label: c.title, at: c.at })) });
-  atomicWrite(join(dir, `_v${version}.html`), themed(instrument(html).html, opts));
+  // A first creation is classified as a cut before its first output file lands (a process that dies mid-render leaves
+  // a marker, never output files on a document that is not yet a cut). A render that fails cleanly takes its marker back.
+  const first = newestCutVersion(manifest) === null, hadMarker = isCut(dir);
+  const saved = { ...stored, rev: stored.rev + 1, version };
+  const body = JSON.stringify(saved, null, 2), published = (step) => opts.onPublish?.(step);
+  if (first && !hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  let burnIn, overlay, html;
+  try {
+    atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
+    atomicWrite(join(rec, `_v${version}.vtt`), writeVtt(cut));
+    burnIn = cut.style.captions.burnIn && capabilities.burnIn;
+    // The overlay carries the cards' text even with caption burn-in off; it needs libass either way.
+    overlay = capabilities.burnIn && (cut.style.captions.burnIn || cardText);
+    await runFfmpeg(ctx.runner, renderArgs(dir, cut, version, overlay, vars), { cwd: rec });
+    await runFfmpeg(ctx.runner, ["-y", "-i", join(rec, `_v${version}.mp4`), "-frames:v", "1", "-q:v", "2", join(rec, `_v${version}-poster.jpg`)], { cwd: rec });
+    html = storyboard({ documentId: opts.documentId ?? "doc", title: cut.style.theme.titleCard.title,
+      url: opts.url ?? cut.url ?? "", videoFile: null, mp4File: `_v${version}.mp4`, posterFile: `_v${version}-poster.jpg`,
+      steps: timeline(cut).map((c) => ({ label: c.title, at: c.at })) });
+    atomicWrite(join(dir, `_v${version}.html`), themed(instrument(html).html, opts));
+  } catch (e) {
+    if (first && !hadMarker) rmSync(join(dir, CUT_FILE), { force: true });
+    throw e;
+  }
   const landed = recordVersion(manifest, { version, parent, kind: "demo" }).manifest;
+  if (typeof opts.requestId === "string") landed.versions.at(-1).request_id = opts.requestId;
   landed.versions.at(-1).render = { mp4: `_v${version}.mp4`, vtt: `_v${version}.vtt`, ass: `_v${version}.ass`,
     burnIn: cut.style.captions.burnIn && !capabilities.burnIn ? "unavailable" : burnIn,
     cardText: cardText && !capabilities.burnIn ? "unavailable" : cardText,
     palette: { source: skin === null ? "custom" : skin.source, theme: skin?.theme ?? null, background: cut.style.theme.background,
       foreground: cut.style.theme.foreground, accent: cut.style.theme.accent, font: cut.style.theme.font } };
   if (Number.isInteger(opts.restoredFrom)) landed.versions.at(-1).restored_from = opts.restoredFrom;
-  const saved = { ...stored, rev: stored.rev + 1, version };
-  // The version's own decision list first, so a version in the manifest always has its cut (Versions, Restore).
-  atomicWrite(join(dir, cutSnapshotFile(version)), JSON.stringify(saved, null, 2));
+  // Publication. The manifest is the commit point and is always last: a crash before it leaves the previous commit in
+  // force (the next load ignores the orphan snapshot and marker), and a version in the manifest always has its cut. On
+  // a first creation the marker went first (above, before any output file), so a document with any cut state is already classified as a cut; on later
+  // edits it follows the snapshot.
+  atomicWrite(join(dir, cutSnapshotFile(version)), body);
+  published("snapshot");
+  if (!first || hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   saveManifest(dir, landed);
-  atomicWrite(join(dir, CUT_FILE), JSON.stringify(saved, null, 2));
+  published("manifest");
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
   opts.emit?.("wicked.interactive.version.created", versionCreated({ version, parent, kind: "demo" }));
   return { rev: saved.rev, version, parent };
@@ -391,7 +540,7 @@ export async function renderCut(dir, cut, opts = {}) {
 /** Extract frame-accurate chapter takes from the SAME caption-free browser run. */
 export async function extractTakes(dir, recording, steps, duration, meta, opts = {}) {
   const ctx = ffmpegContext(opts), rec = join(dir, RECORDINGS_DIR);
-  const existing = existsSync(join(dir, CUT_FILE)) ? loadCut(dir) : null;
+  const existing = currentCut(dir);
   if (opts.chapter !== undefined && !existing?.chapters.some((c) => c.id === opts.chapter)) bad("chapter");
   const ids = chapterIds(steps.map((s) => s.label));
   const changed = existing !== null && (ids.length !== existing.chapters.length || ids.some((id) => !existing.chapters.some((c) => c.id === id)));
@@ -450,12 +599,18 @@ export function importStagePath(dir, chapter) {
 export function stageImport(dir, chapter, bytes) {
   const target = importStagePath(dir, chapter);
   if (!Buffer.isBuffer(bytes) || bytes.length === 0) bad("body");
-  if (existsSync(join(dir, CUT_FILE))) throw new CutError("cut_exists", null, 409, { rev: loadCut(dir).rev });
+  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir, { write: false })?.rev });
   mkdirSync(join(dir, RECORDINGS_DIR), { recursive: true });
   const tmp = `${target}.part`;
   writeFileSync(tmp, bytes);
   renameSync(tmp, target);
   return { chapter, bytes: bytes.length };
+}
+
+/** The chapter's staged video, or (an import killed after its files moved, before its manifest write) its first take. */
+function stagedOrTaken(dir, chapter) {
+  const staged = importStagePath(dir, chapter);
+  return existsSync(staged) ? staged : join(dir, RECORDINGS_DIR, `_take-${chapter}-1.mp4`);
 }
 
 /** A file's duration in seconds, from ffmpeg's own header read (`-i` with no output exits non-zero; that is fine).
@@ -472,7 +627,7 @@ export async function probeDuration(runner, file) {
 /** Build the first cut from the staged chapters and render it. Refused once the document has a cut. */
 export async function importCut(dir, body, opts = {}) {
   closed(body, ["title", "url", "chapters"], "body");
-  if (existsSync(join(dir, CUT_FILE))) throw new CutError("cut_exists", null, 409, { rev: loadCut(dir).rev });
+  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir, { write: false })?.rev });
   const title = body.title ?? "Demo";
   text(title, "title");
   if (body.url !== undefined && (typeof body.url !== "string" || body.url.length > 2000 || /[\r\n]/.test(body.url))) bad("url");
@@ -486,7 +641,7 @@ export async function importCut(dir, body, opts = {}) {
     seen.add(c.id);
     text(c.title, `${field}.title`);
     if (c.say !== undefined && (typeof c.say !== "string" || c.say.length > 2000)) bad(`${field}.say`);
-    if (!existsSync(importStagePath(dir, c.id))) throw new CutError("not_staged", `${field}.id`, 409);
+    if (!existsSync(stagedOrTaken(dir, c.id))) throw new CutError("not_staged", `${field}.id`, 409);
     return c;
   });
   const ctx = ffmpegContext(opts);
@@ -494,7 +649,7 @@ export async function importCut(dir, body, opts = {}) {
   // or failed import can be retried as it is, without uploading again.
   const durations = [];
   for (const [i, c] of named.entries()) {
-    const seconds = await probeDuration(ctx.runner, importStagePath(dir, c.id));
+    const seconds = await probeDuration(ctx.runner, stagedOrTaken(dir, c.id));
     if (!(seconds >= 0.5)) throw new CutError("too_short", `chapters.${i}.id`, 400);
     durations.push(seconds);
   }
@@ -503,8 +658,11 @@ export async function importCut(dir, body, opts = {}) {
   try {
     for (const [i, c] of named.entries()) {
       const file = `_take-${c.id}-1.mp4`;
-      renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
-      moved.push([c.id, file]);
+      // A process killed after the move left the take in place and no staged file: the retry finds it there.
+      if (existsSync(importStagePath(dir, c.id))) {
+        renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
+        moved.push([c.id, file]);
+      }
       cut.takes[c.id] = [{ file, durationSec: durations[i], at: new Date().toISOString() }];
       cut.chapters.push({ id: c.id, title: c.title, say: (c.say ?? "").replace(/[\r\n]+/g, " "), take: file, inSec: 0, outSec: durations[i] });
     }
