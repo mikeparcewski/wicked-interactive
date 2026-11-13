@@ -4,6 +4,11 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.16.2] — 2026-11-12
+
+Patch: a demo recording streams when the documents live under a dot directory (#349). Spawned by wicked-crew
+0.18.14, whose interactive floor moves to `^0.16.2`.
+
 ### Fixed
 - A demo's recorded video, captions and poster stream again when the documents live under a dot directory (the default ~/.wicked-crew): the recording route allows dot segments like the export route (#171).
 
@@ -529,7 +534,8 @@ published; 0.14.1 ships its changes too.
 ### Fixed
 - Help text for `create` subcommand now shows `--output <path>` instead of `--out <path>`.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/mikeparcewski/wicked-interactive/compare/v0.15.0...v0.15.1
