@@ -29,7 +29,7 @@ import { isRetired as manifestRetired, retireManifest, versionCreated, readRunId
 import { REQUESTS_DIR } from "./structural.js";
 import { generationPlaceholder } from "./generation.js";
 import { demoPlaceholder, exportGif, recordDemo, RECORDINGS_DIR } from "./demo.js";
-import { loadCut, loadCutVersion, restoreCut, validateRecut, validateStyle, checkRev, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError, CUT_FILE } from "./demo-cut.js";
+import { loadCut, loadCutVersion, restoreCut, recutCut, validateStyle, checkRev, checkHead, findRequest, readRequestId, isCut, cutExists, newestCutVersion, timeline, closed, ffmpegCapabilities, ffmpegContext, renderCut, importStagePath, importCut, CutError, CUT_FILE } from "./demo-cut.js";
 /** One staged chapter's upload cap. */
 const IMPORT_UPLOAD_LIMIT = 1024 * 1024 * 1024;
 /** One brand source a learn reads (a PDF or an image the operator chose in studio). */
@@ -176,19 +176,28 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   // source) unless the style chose custom colours. `?version=N`: the cut that version was rendered from.
   app.get("/api/demo/cut", async (req, res) => {
     try {
+      // Does a version carry this request_id? (crew's launcher finds a recut it already sent.)
+      if (req.query?.request_id !== undefined) {
+        const found = findRequest(dir, readRequestId(req.query.request_id));
+        return found ? res.json({ version: found.version }) : res.status(404).json({ error: "not_found" });
+      }
       const asked = req.query?.version;
       const cut = asked === undefined ? loadCut(dir)
         : loadCutVersion(dir, typeof asked === "string" && /^\d{1,9}$/.test(asked) ? Number(asked) : NaN);
       const style = validateStyle({}, "Demo", cut.style);
       const skin = style.theme.palette === "custom" ? null : await (demoCut.fetchSkin ?? fetchSkin)();
-      res.json({ ...cut, style, ffmpeg: await ffmpegCapabilities(demoCut),
+      const start = new Map(timeline({ ...cut, style }).map((c) => [c.id, c]));
+      const chapters = cut.chapters.map((c) => ({ ...c, startSec: start.get(c.id).at, durationSec: start.get(c.id).end - start.get(c.id).at }));
+      const render = loadManifest(dir).versions.find((v) => v.version === cut.version)?.render ?? null;
+      res.json({ ...cut, chapters, render, style, ffmpeg: await ffmpegCapabilities(demoCut),
         skin: skin && { source: skin.source, theme: skin.theme, palette: skin.palette },
         resolvedTheme: effectiveTheme(style.theme, skin) });
     } catch (e) { cutFailure(res, e); }
   });
   app.post("/api/demo/takes", (req, res) => {
     enqueue(async () => {
-      closed(req.body ?? {}, ["chapter"], "body");
+      closed(req.body ?? {}, ["chapter", "expect_head"], "body");
+      if (req.body?.expect_head !== undefined) checkHead(dir, req.body.expect_head);
       const chapter = req.body?.chapter;
       if (chapter !== undefined && !loadCut(dir).chapters.some((c) => c.id === chapter)) {
         return { status: 400, payload: { error: "invalid_body", field: "chapter" } };
@@ -212,7 +221,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   app.put("/api/demo/import/:chapter", (req, res) => {
     let target;
     try { target = importStagePath(dir, req.params.chapter); } catch (e) { return cutFailure(res, e); }
-    if (existsSync(join(dir, "demo-cut.json"))) return res.status(409).json({ error: "cut_exists" });
+    if (cutExists(dir)) return res.status(409).json({ error: "cut_exists" });
     if (uploading) return res.status(429).json({ error: "upload_in_flight" });
     uploading = true;
     const tmp = `${target}.part`;
@@ -250,7 +259,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       if (settled) return;
       enqueue(async () => {
         if (bytes === 0) throw new CutError("invalid_body", "body");
-        if (existsSync(join(dir, "demo-cut.json"))) throw new CutError("cut_exists", null, 409);
+        if (cutExists(dir)) throw new CutError("cut_exists", null, 409);
         renameSync(tmp, target);
         return { chapter: req.params.chapter, bytes };
       }).then((r) => finish(() => res.json(r)), fail);
@@ -265,9 +274,8 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   });
   app.post("/api/demo/recut", (req, res) => {
     enqueue(async () => {
-      const cut = validateRecut(loadCut(dir), req.body);
-      const { rev, version } = await renderCut(dir, cut, cutOptions());
-      return { rev, version };
+      const { rev, version, replayed } = await recutCut(dir, req.body, cutOptions());
+      return { rev, version, ...(replayed ? { replayed } : {}) };
     }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
   // Restore: the cut as it was at an earlier version, rendered as a new version (history kept, nothing removed).
@@ -279,9 +287,10 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   });
   app.put("/api/demo/style", (req, res) => {
     enqueue(async () => {
-      closed(req.body, ["rev", "style"], "body");
+      closed(req.body, ["rev", "style", "expect_head"], "body");
       const cut = loadCut(dir);
-      checkRev(cut, req.body.rev);
+      if (req.body.expect_head !== undefined) checkHead(dir, req.body.expect_head);
+      if (req.body.rev !== undefined || req.body.expect_head === undefined) checkRev(cut, req.body.rev);
       const style = validateStyle(req.body.style, "Demo", cut.style);
       const { rev, version } = await renderCut(dir, { ...cut, style }, cutOptions());
       return { rev, version };
@@ -360,6 +369,7 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
     const ctx = { emit, documentId, dir };
     enqueue(() => materializeDeckOp(dir, { expect_head: expectHead, op }, ctx))
       .then((r) => {
+        if (r.cutDocument) return res.status(409).json({ error: "cut_document" });
         if (r.notDeck) return res.status(409).json({ error: "not_a_deck" });
         if (r.headMoved) return res.status(409).json({ error: "head_moved", head: r.head });
         if (r.refused) return res.status(422).json({ error: "refused", reason: r.refused, head: r.head });
@@ -620,6 +630,8 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       // refusal returns before anything is written: no learned theme, no version, no event.
       let plan = null;
       if (apply) {
+        // A cut changes only through the cut module: a re-theme would land a page version over its render.
+        if (isCut(dir)) throw new CutError("cut_document", null, 409, { message: "this document is a demo cut" });
         if (expired || Date.now() >= expiresAt) throw busy();
         plan = planRetheme(dir, tokens);
         if (!plan.unchanged) {
@@ -641,7 +653,7 @@ v.addEventListener('ended',()=>btn.classList.remove('gone'));
       emit("wicked.interactive.version.created", versionCreated({ version: out.version, parent: out.parent, kind: "theme", runId: run.runId }));
       return { written: true, version: out.version, parent: out.parent, kind: "theme" };
     }).then((r) => answer(200, { document_id: documentId, ...r }))
-      .catch((e) => (e instanceof ThemeCheckUnavailable ? answer(503, { error: e.message, code: e.code, hint: e.hint })
+      .catch((e) => (e instanceof CutError ? answer(e.status, e.payload) : e instanceof ThemeCheckUnavailable ? answer(503, { error: e.message, code: e.code, hint: e.hint })
         : e instanceof ThemeCheckUnverifiable ? answer(422, { error: `No version was made: ${e.message}.`, code: e.code })
         : answer(500, { error: e.message })));
   });
