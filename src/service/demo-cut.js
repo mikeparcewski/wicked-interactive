@@ -497,7 +497,7 @@ export async function renderCut(dir, cut, opts = {}) {
   const first = newestCutVersion(manifest) === null, hadMarker = isCut(dir);
   const saved = { ...stored, rev: stored.rev + 1, version };
   const body = JSON.stringify(saved, null, 2), published = (step) => opts.onPublish?.(step);
-  if (first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  if (first && !hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   let burnIn, overlay, html;
   try {
     atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
@@ -529,7 +529,7 @@ export async function renderCut(dir, cut, opts = {}) {
   // edits it follows the snapshot.
   atomicWrite(join(dir, cutSnapshotFile(version)), body);
   published("snapshot");
-  if (!first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  if (!first || hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   saveManifest(dir, landed);
   published("manifest");
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).

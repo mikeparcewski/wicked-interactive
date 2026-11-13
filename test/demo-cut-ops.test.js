@@ -361,3 +361,19 @@ test("routes: ops recut, request_id read, head_moved on style and takes, cut_doc
   const deck = await req("POST", "/api/deck", { expect_head: head(dir), op: { type: "slide-move", slide: "s", after: null } });
   assert.deepEqual([deck.status, deck.body.error], [409, "cut_document"]);
 });
+
+// ── an old-style cut: demo-cut.json only, no cut version in the manifest ────────────────────────
+
+test("an old-style cut keeps its demo-cut.json when a render fails, and gets the new one once a render lands", async (t) => {
+  const dir = fixture(t), rec = recorder();
+  const old = JSON.stringify({ ...cut(), rev: 5, version: 0 });
+  writeFileSync(join(dir, CUT_FILE), old);
+  const failing = { runner: (args) => (args.includes("-filters") ? { status: 0, stderr: " ... ass V->V\n" } : { status: 1, stderr: "encode failed" }), skin: null, fetchSkin: async () => null };
+  await assert.rejects(renderCut(dir, loadCut(dir), failing), /ffmpeg_failed/);
+  assert.equal(readFileSync(join(dir, CUT_FILE), "utf8"), old, "byte-identical");
+  assert.equal(loadCut(dir).rev, 5);
+  const out = await renderCut(dir, loadCut(dir), rec.opts);
+  const marker = JSON.parse(readFileSync(join(dir, CUT_FILE), "utf8"));
+  assert.deepEqual([marker.rev, marker.version], [6, out.version]);
+  assert.equal(loadCut(dir).rev, 6);
+});
