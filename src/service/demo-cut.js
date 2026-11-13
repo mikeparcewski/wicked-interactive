@@ -1,5 +1,5 @@
 // Chapter takes and write-once renders of the current edit decision list.
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { isColor } from "../core/theme-grammar.js";
@@ -492,18 +492,29 @@ export async function renderCut(dir, cut, opts = {}) {
   cut = { ...cut, style: { ...cut.style, theme: effectiveTheme(cut.style.theme, skin) } };
   const { titleCard, endCard } = cut.style.theme;
   const cardText = [titleCard, endCard].some((c) => c.on && (c.title || c.subtitle));
-  atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
-  atomicWrite(join(rec, `_v${version}.vtt`), writeVtt(cut));
-  const burnIn = cut.style.captions.burnIn && capabilities.burnIn;
-  // The overlay carries the cards' text even with caption burn-in off; it needs libass either way.
-  const overlay = capabilities.burnIn && (cut.style.captions.burnIn || cardText);
-  await runFfmpeg(ctx.runner, renderArgs(dir, cut, version, overlay, vars), { cwd: rec });
-  await runFfmpeg(ctx.runner, ["-y", "-i", join(rec, `_v${version}.mp4`), "-frames:v", "1", "-q:v", "2", join(rec, `_v${version}-poster.jpg`)], { cwd: rec });
-  const html = storyboard({ documentId: opts.documentId ?? "doc", title: cut.style.theme.titleCard.title,
-    url: opts.url ?? cut.url ?? "", videoFile: null, mp4File: `_v${version}.mp4`, posterFile: `_v${version}-poster.jpg`,
-    steps: timeline(cut).map((c) => ({ label: c.title, at: c.at })) });
-  atomicWrite(join(dir, `_v${version}.html`), themed(instrument(html).html, opts));
-  const first = newestCutVersion(manifest) === null;
+  // A first creation is classified as a cut before its first output file lands (a process that dies mid-render leaves
+  // a marker, never output files on a document that is not yet a cut). A render that fails cleanly takes its marker back.
+  const first = newestCutVersion(manifest) === null, hadMarker = isCut(dir);
+  const saved = { ...stored, rev: stored.rev + 1, version };
+  const body = JSON.stringify(saved, null, 2), published = (step) => opts.onPublish?.(step);
+  if (first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  let burnIn, overlay, html;
+  try {
+    atomicWrite(join(rec, `_v${version}.ass`), writeAss(cut, vars, { captions: cut.style.captions.burnIn }));
+    atomicWrite(join(rec, `_v${version}.vtt`), writeVtt(cut));
+    burnIn = cut.style.captions.burnIn && capabilities.burnIn;
+    // The overlay carries the cards' text even with caption burn-in off; it needs libass either way.
+    overlay = capabilities.burnIn && (cut.style.captions.burnIn || cardText);
+    await runFfmpeg(ctx.runner, renderArgs(dir, cut, version, overlay, vars), { cwd: rec });
+    await runFfmpeg(ctx.runner, ["-y", "-i", join(rec, `_v${version}.mp4`), "-frames:v", "1", "-q:v", "2", join(rec, `_v${version}-poster.jpg`)], { cwd: rec });
+    html = storyboard({ documentId: opts.documentId ?? "doc", title: cut.style.theme.titleCard.title,
+      url: opts.url ?? cut.url ?? "", videoFile: null, mp4File: `_v${version}.mp4`, posterFile: `_v${version}-poster.jpg`,
+      steps: timeline(cut).map((c) => ({ label: c.title, at: c.at })) });
+    atomicWrite(join(dir, `_v${version}.html`), themed(instrument(html).html, opts));
+  } catch (e) {
+    if (first && !hadMarker) rmSync(join(dir, CUT_FILE), { force: true });
+    throw e;
+  }
   const landed = recordVersion(manifest, { version, parent, kind: "demo" }).manifest;
   if (typeof opts.requestId === "string") landed.versions.at(-1).request_id = opts.requestId;
   landed.versions.at(-1).render = { mp4: `_v${version}.mp4`, vtt: `_v${version}.vtt`, ass: `_v${version}.ass`,
@@ -512,13 +523,10 @@ export async function renderCut(dir, cut, opts = {}) {
     palette: { source: skin === null ? "custom" : skin.source, theme: skin?.theme ?? null, background: cut.style.theme.background,
       foreground: cut.style.theme.foreground, accent: cut.style.theme.accent, font: cut.style.theme.font } };
   if (Number.isInteger(opts.restoredFrom)) landed.versions.at(-1).restored_from = opts.restoredFrom;
-  const saved = { ...stored, rev: stored.rev + 1, version };
   // Publication. The manifest is the commit point and is always last: a crash before it leaves the previous commit in
   // force (the next load ignores the orphan snapshot and marker), and a version in the manifest always has its cut. On
-  // a first creation the marker goes first, so a document with any cut state is already classified as a cut; on later
+  // a first creation the marker went first (above, before any output file), so a document with any cut state is already classified as a cut; on later
   // edits it follows the snapshot.
-  const body = JSON.stringify(saved, null, 2), published = (step) => opts.onPublish?.(step);
-  if (first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   atomicWrite(join(dir, cutSnapshotFile(version)), body);
   published("snapshot");
   if (!first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }

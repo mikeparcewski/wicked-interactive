@@ -197,7 +197,12 @@ test("a later edit killed after the manifest write is committed exactly as descr
 
 test("a first creation killed after the marker, and before the manifest, is no cut and a retry succeeds", async (t) => {
   const dir = fixture(t), rec = recorder();
-  await assert.rejects(renderCut(dir, cut(), { ...rec.opts, ...killAt("marker") }), /killed/);
+  const seen = [];
+  await assert.rejects(renderCut(dir, cut(), { ...rec.opts, onPublish: (step) => {
+    seen.push(isCut(dir) && !existsSync(join(dir, "recordings", "_v1.ass")));
+    if (step === "marker") throw new Error("killed after marker");
+  } }), /killed/);
+  assert.deepEqual(seen, [true], "the marker precedes the first output file");
   assert.ok(isCut(dir), "the marker is written first");
   assert.equal(currentCut(dir), null);
   assert.equal(cutExists(dir), false, "an import or a first take is not refused as cut_exists");
