@@ -182,8 +182,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
         return found ? res.json({ version: found.version }) : res.status(404).json({ error: "not_found" });
       }
       const asked = req.query?.version;
-      const cut = asked === undefined ? loadCut(dir)
-        : loadCutVersion(dir, typeof asked === "string" && /^\d{1,9}$/.test(asked) ? Number(asked) : NaN);
+      // A GET never writes: the legacy snapshot backfill belongs to the queue's mutations.
+      const cut = asked === undefined ? loadCut(dir, { write: false })
+        : loadCutVersion(dir, typeof asked === "string" && /^\d{1,9}$/.test(asked) ? Number(asked) : NaN, { write: false });
       const style = validateStyle({}, "Demo", cut.style);
       const skin = style.theme.palette === "custom" ? null : await (demoCut.fetchSkin ?? fetchSkin)();
       const start = new Map(timeline({ ...cut, style }).map((c) => [c.id, c]));

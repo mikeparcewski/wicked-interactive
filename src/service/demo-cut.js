@@ -125,7 +125,7 @@ export function newestCutVersion(manifest) {
  * (409 `cut_unverified`). With no cut version yet the marker answers only when it names a version the manifest holds
  * (a cut written by an older service); a first creation killed before its manifest write is no cut at all (null).
  */
-export function currentCut(dir) {
+export function currentCut(dir, { write = true } = {}) {
   const path = join(dir, CUT_FILE);
   if (!existsSync(path)) return null;
   const marker = JSON.parse(readFileSync(path, "utf8"));
@@ -137,17 +137,18 @@ export function currentCut(dir) {
   if (marker.version !== newest.version) {
     throw new CutError("cut_unverified", null, 409, { message: "This video's history predates kept cuts; Record it again to edit it." });
   }
-  atomicWrite(snapshot, JSON.stringify(marker, null, 2));
+  // Only a caller inside the document's queue writes; a read (a GET, an existence check) answers the same cut without it.
+  if (write) atomicWrite(snapshot, JSON.stringify(marker, null, 2));
   return marker;
 }
 
 /** True when a cut exists or cannot be told apart from one (an unverified legacy history still counts). */
 export function cutExists(dir) {
-  try { return currentCut(dir) !== null; } catch { return true; }
+  try { return currentCut(dir, { write: false }) !== null; } catch { return true; }
 }
 
-export function loadCut(dir) {
-  const cut = currentCut(dir);
+export function loadCut(dir, opts) {
+  const cut = currentCut(dir, opts);
   if (!cut) throw new CutError("no_cut", null, 404);
   return cut;
 }
@@ -157,11 +158,13 @@ export function cutSnapshotFile(version) { return `_v${version}.cut.json`; }
 
 /** The cut a rendered version was made from: its snapshot, the head's included. A version that is not a cut render
  *  has none: 404 `no_snapshot`. */
-export function loadCutVersion(dir, version) {
-  loadCut(dir);
+export function loadCutVersion(dir, version, opts) {
+  const current = loadCut(dir, opts);
   if (!Number.isInteger(version) || version < 0) bad("version");
   const entry = loadManifest(dir).versions.find((v) => v.version === version);
   const path = join(dir, cutSnapshotFile(version));
+  // A legacy head not yet backfilled (a read does not write) is its marker, which `currentCut` verified.
+  if (entry?.render && !existsSync(path) && current.version === version) return current;
   if (!entry?.render || !existsSync(path)) throw new CutError("no_snapshot", "version", 404);
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -588,12 +591,18 @@ export function importStagePath(dir, chapter) {
 export function stageImport(dir, chapter, bytes) {
   const target = importStagePath(dir, chapter);
   if (!Buffer.isBuffer(bytes) || bytes.length === 0) bad("body");
-  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir)?.rev });
+  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir, { write: false })?.rev });
   mkdirSync(join(dir, RECORDINGS_DIR), { recursive: true });
   const tmp = `${target}.part`;
   writeFileSync(tmp, bytes);
   renameSync(tmp, target);
   return { chapter, bytes: bytes.length };
+}
+
+/** The chapter's staged video, or (an import killed after its files moved, before its manifest write) its first take. */
+function stagedOrTaken(dir, chapter) {
+  const staged = importStagePath(dir, chapter);
+  return existsSync(staged) ? staged : join(dir, RECORDINGS_DIR, `_take-${chapter}-1.mp4`);
 }
 
 /** A file's duration in seconds, from ffmpeg's own header read (`-i` with no output exits non-zero; that is fine).
@@ -610,7 +619,7 @@ export async function probeDuration(runner, file) {
 /** Build the first cut from the staged chapters and render it. Refused once the document has a cut. */
 export async function importCut(dir, body, opts = {}) {
   closed(body, ["title", "url", "chapters"], "body");
-  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir)?.rev });
+  if (cutExists(dir)) throw new CutError("cut_exists", null, 409, { rev: currentCut(dir, { write: false })?.rev });
   const title = body.title ?? "Demo";
   text(title, "title");
   if (body.url !== undefined && (typeof body.url !== "string" || body.url.length > 2000 || /[\r\n]/.test(body.url))) bad("url");
@@ -624,7 +633,7 @@ export async function importCut(dir, body, opts = {}) {
     seen.add(c.id);
     text(c.title, `${field}.title`);
     if (c.say !== undefined && (typeof c.say !== "string" || c.say.length > 2000)) bad(`${field}.say`);
-    if (!existsSync(importStagePath(dir, c.id))) throw new CutError("not_staged", `${field}.id`, 409);
+    if (!existsSync(stagedOrTaken(dir, c.id))) throw new CutError("not_staged", `${field}.id`, 409);
     return c;
   });
   const ctx = ffmpegContext(opts);
@@ -632,7 +641,7 @@ export async function importCut(dir, body, opts = {}) {
   // or failed import can be retried as it is, without uploading again.
   const durations = [];
   for (const [i, c] of named.entries()) {
-    const seconds = await probeDuration(ctx.runner, importStagePath(dir, c.id));
+    const seconds = await probeDuration(ctx.runner, stagedOrTaken(dir, c.id));
     if (!(seconds >= 0.5)) throw new CutError("too_short", `chapters.${i}.id`, 400);
     durations.push(seconds);
   }
@@ -641,8 +650,11 @@ export async function importCut(dir, body, opts = {}) {
   try {
     for (const [i, c] of named.entries()) {
       const file = `_take-${c.id}-1.mp4`;
-      renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
-      moved.push([c.id, file]);
+      // A process killed after the move left the take in place and no staged file: the retry finds it there.
+      if (existsSync(importStagePath(dir, c.id))) {
+        renameSync(importStagePath(dir, c.id), join(dir, RECORDINGS_DIR, file));
+        moved.push([c.id, file]);
+      }
       cut.takes[c.id] = [{ file, durationSec: durations[i], at: new Date().toISOString() }];
       cut.chapters.push({ id: c.id, title: c.title, say: (c.say ?? "").replace(/[\r\n]+/g, " "), take: file, inSec: 0, outSec: durations[i] });
     }

@@ -3,13 +3,13 @@
 // manifest write; no other writer lands a page version on a cut (studio#1140, ask 1, part A).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initWorkspace, loadManifest } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 import { materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeDeckOp } from "../src/service/handlers.js";
-import { defaultStyle, renderCut, recutCut, restoreCut, loadCut, loadCutVersion, currentCut, cutExists, isCut,
+import { defaultStyle, renderCut, recutCut, importCut, restoreCut, loadCut, loadCutVersion, currentCut, cutExists, isCut,
   findRequest, cutSnapshotFile, CUT_FILE } from "../src/service/demo-cut.js";
 
 function fixture(t, { html = "<h1>Tour</h1>" } = {}) {
@@ -222,15 +222,39 @@ test("a first creation killed after the snapshot, or after the manifest, is the 
 
 // ── legacy cuts ─────────────────────────────────────────────────────────────────────────────────
 
-test("a legacy cut whose marker names the newest cut version gets its snapshot on first load, even for a versioned read", async (t) => {
+test("a legacy cut whose marker names the newest cut version is verified by a read and backfilled by the next edit", async (t) => {
   const { dir, rec, v1 } = await seeded(t);
-  rmSync(join(dir, cutSnapshotFile(v1.version)));
-  assert.equal(loadCutVersion(dir, v1.version).version, v1.version);
-  assert.ok(existsSync(join(dir, cutSnapshotFile(v1.version))));
-  rmSync(join(dir, cutSnapshotFile(v1.version)));
+  const snapshot = join(dir, cutSnapshotFile(v1.version));
+  rmSync(snapshot);
+  assert.equal(loadCutVersion(dir, v1.version, { write: false }).version, v1.version);
+  assert.equal(loadCut(dir, { write: false }).version, v1.version);
+  assert.equal(cutExists(dir), true);
+  assert.ok(!existsSync(snapshot), "a read writes nothing");
   const out = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Legacy" }] }, rec.opts);
-  assert.ok(existsSync(join(dir, cutSnapshotFile(v1.version))));
+  assert.ok(existsSync(snapshot), "the first edit in the queue wrote it");
+  assert.equal(loadCutVersion(dir, v1.version).chapters[0].title, "One");
   assert.equal(loadCut(dir).version, out.version);
+});
+
+test("an import killed after its files moved and its marker was written is retried from the takes where they lie", async (t) => {
+  const dir = fixture(t);
+  const runner = (args) => {
+    if (args.includes("-filters")) return { status: 0, stderr: " ... ass V->V Render ASS subtitles\n" };
+    if (args.includes("-i") && args.length === 3) return { status: 1, stderr: "  Duration: 00:00:04.00, start: 0.0, bitrate: 1 kb/s\n  Stream #0:0: Video: h264\n" };
+    writeFileSync(args.at(-1), "encoded");
+    return { status: 0, stderr: "" };
+  };
+  const opts = { runner, skin: null, fetchSkin: async () => null };
+  const stage = () => writeFileSync(join(dir, "recordings", "_import-one.mp4"), "bytes");
+  stage();
+  await assert.rejects(importCut(dir, { chapters: [{ id: "one", title: "One" }] }, { ...opts, ...killAt("marker") }), /killed/);
+  // The process died instead of unwinding: the staged file is gone, the take is in place.
+  renameSync(join(dir, "recordings", "_import-one.mp4"), join(dir, "recordings", "_take-one-1.mp4"));
+  assert.equal(cutExists(dir), false);
+  const out = await importCut(dir, { chapters: [{ id: "one", title: "One" }] }, opts);
+  assert.equal(head(dir), out.version);
+  assert.equal(loadCut(dir).chapters[0].take, "_take-one-1.mp4");
+  assert.equal(loadCut(dir).chapters[0].outSec, 4);
 });
 
 test("a legacy cut whose marker does not match gets cut_unverified on every edit", async (t) => {
