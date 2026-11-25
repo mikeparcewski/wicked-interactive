@@ -159,12 +159,15 @@ export function cutSnapshotFile(version) { return `_v${version}.cut.json`; }
 /** The cut a rendered version was made from: its snapshot, the head's included. A version that is not a cut render
  *  has none: 404 `no_snapshot`. */
 export function loadCutVersion(dir, version, opts) {
-  const current = loadCut(dir, opts);
+  // An unverified head (409 cut_unverified) does not hide an intact earlier snapshot: only the head's fallback needs it.
+  let current = null, unverified = null;
+  try { current = loadCut(dir, opts); } catch (e) { if (e.payload?.error !== "cut_unverified") throw e; unverified = e; }
   if (!Number.isInteger(version) || version < 0) bad("version");
   const entry = loadManifest(dir).versions.find((v) => v.version === version);
   const path = join(dir, cutSnapshotFile(version));
   // A legacy head not yet backfilled (a read does not write) is its marker, which `currentCut` verified.
-  if (entry?.render && !existsSync(path) && current.version === version) return current;
+  if (entry?.render && !existsSync(path) && current?.version === version) return current;
+  if (entry?.render && !existsSync(path) && unverified) throw unverified;
   if (!entry?.render || !existsSync(path)) throw new CutError("no_snapshot", "version", 404);
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -195,9 +198,10 @@ export function readRequestId(value) {
 export async function restoreCut(dir, body, opts = {}) {
   closed(body, ["rev", "from", "expect_head"], "body");
   const cut = loadCut(dir);
-  // A body in the old form (rev, no expect_head) is checked by rev as ever; one that sends expect_head may leave rev out.
-  if (body.rev !== undefined || body.expect_head === undefined) checkRev(cut, body.rev);
+  // The document head first (it says the most), then, for a body in the old form, the rev as ever; one that sends
+  // expect_head may leave rev out.
   if (body.expect_head !== undefined) checkHead(dir, body.expect_head);
+  if (body.rev !== undefined || body.expect_head === undefined) checkRev(cut, body.rev);
   if (!Number.isInteger(body.from) || body.from < 0 || body.from === cut.version) bad("from");
   const was = loadCutVersion(dir, body.from);
   // A full take of a re-authored spec starts a new takes list (extractTakes); the files stay on disk. Keep both lists.
@@ -218,24 +222,21 @@ export function checkRev(cut, rev) {
 }
 
 const MAX_SAY = 2000;
-const say = (value, field) => {
-  if (typeof value !== "string" || value.length > MAX_SAY || /[\r\n]/.test(value)) bad(field);
-};
 
-/** `allowSay`: only the folded ops of the recut body's new form carry narration; the old body never did. */
-export function validateRecut(cut, body, { allowSay = false } = {}) {
+/** The old recut body `{rev, chapters, style}`: every chapter, in the new order (it never carried narration). */
+export function validateRecut(cut, body) {
   closed(body, ["rev", "chapters", "style"], "body");
   checkRev(cut, body.rev);
   if (!Array.isArray(body.chapters) || body.chapters.length !== cut.chapters.length) bad("chapters");
   const seen = new Set();
   const chapters = body.chapters.map((entry, index) => {
     const field = `chapters.${index}`;
-    closed(entry, allowSay ? ["id", "title", "take", "inSec", "outSec", "say"] : ["id", "title", "take", "inSec", "outSec"], field);
+    closed(entry, ["id", "title", "take", "inSec", "outSec"], field);
     const current = cut.chapters.find((c) => c.id === entry.id);
     if (!current || seen.has(entry.id)) bad(`${field}.id`);
     seen.add(entry.id);
-    if (entry.title !== undefined) text(entry.title, `${field}.title`);
-    if (entry.say !== undefined) say(entry.say, `${field}.say`);
+    // Only words that change are checked: a recorder's long label or multi-line narration elsewhere stays as it is.
+    if (entry.title !== undefined && entry.title !== current.title) text(entry.title, `${field}.title`);
     const chapter = { ...current, ...entry };
     const take = Object.hasOwn(cut.takes, chapter.id) ? cut.takes[chapter.id].find((t) => t.file === chapter.take) : undefined;
     if (!take) bad(`${field}.take`);
@@ -251,42 +252,78 @@ const MAX_OPS = 20;
 const OP_FIELDS = {
   "chapter-move": ["op", "chapter", "after"], "chapter-rename": ["op", "chapter", "title"],
   "chapter-trim": ["op", "chapter", "inSec", "outSec"], "chapter-take": ["op", "chapter", "take"],
-  "chapter-say": ["op", "chapter", "say"],
+  "chapter-say": ["op", "chapter", "say"], "chapter-drop": ["op", "chapter"],
 };
-/** Fold the ops in order, each against the chapters the previous one left; a bad op throws and nothing has moved.
- *  A take is any file in the cut's own takes inventory (.mp4 included) and resets that chapter's trim to the whole take. */
+/** An op's refusal names the op's field and why, so a caller can say which change failed and how. */
+const refuse = (field, reason) => { throw new CutError("invalid_body", field, 400, { reason }); };
+const takeOf = (cut, chapter) => (Object.hasOwn(cut.takes ?? {}, chapter.id) ? cut.takes[chapter.id].find((t) => t.file === chapter.take) : undefined);
+/**
+ * Fold the ops in order, each against the chapters the previous one left; a bad op throws and nothing has moved. Each
+ * op checks only what it touches (a recorder's long label elsewhere never refuses it). A take is any file in the cut's
+ * own takes inventory (.mp4 included) and resets that chapter's trim to the whole take; a trim must stay inside the
+ * chapter's take as folded so far. A drop removes the chapter from the cut and keeps its takes (a restore brings it
+ * back); the last chapter can't be dropped. Refusals: `reason` is unknown | dropped | self | last_chapter |
+ * out_of_take | too_short | format.
+ */
 export function foldOps(cut, ops) {
   if (!Array.isArray(ops) || ops.length < 1 || ops.length > MAX_OPS) bad("ops");
   const chapters = cut.chapters.map((c) => ({ ...c }));
+  const dropped = new Set();
+  const find = (id, field) => {
+    if (typeof id !== "string") refuse(field, "format");
+    const at = chapters.findIndex((c) => c.id === id);
+    if (at < 0) refuse(field, dropped.has(id) ? "dropped" : "unknown");
+    return at;
+  };
   ops.forEach((op, i) => {
     const field = `ops.${i}`;
     if (!object(op) || !Object.hasOwn(OP_FIELDS, op.op)) bad(`${field}.op`);
     closed(op, OP_FIELDS[op.op], field);
-    const at = chapters.findIndex((c) => c.id === op.chapter);
-    if (typeof op.chapter !== "string" || at < 0) bad(`${field}.chapter`);
+    const at = find(op.chapter, `${field}.chapter`);
     const chapter = chapters[at];
     switch (op.op) {
       case "chapter-move": {
-        if (op.after !== null && (typeof op.after !== "string" || op.after === op.chapter || !chapters.some((c) => c.id === op.after))) bad(`${field}.after`);
+        if (op.after !== null) {
+          if (op.after === op.chapter) refuse(`${field}.after`, "self");
+          find(op.after, `${field}.after`);
+        }
         chapters.splice(at, 1);
         chapters.splice(op.after === null ? 0 : chapters.findIndex((c) => c.id === op.after) + 1, 0, chapter);
         break;
       }
-      case "chapter-rename": text(op.title, `${field}.title`); chapter.title = op.title; break;
-      case "chapter-trim":
-        if (!Number.isFinite(op.inSec)) bad(`${field}.inSec`);
-        if (!Number.isFinite(op.outSec)) bad(`${field}.outSec`);
+      case "chapter-rename":
+        if (typeof op.title !== "string" || op.title.length > 80 || /[\r\n]/.test(op.title)) refuse(`${field}.title`, "format");
+        chapter.title = op.title;
+        break;
+      case "chapter-trim": {
+        if (!Number.isFinite(op.inSec)) refuse(`${field}.inSec`, "format");
+        if (!Number.isFinite(op.outSec)) refuse(`${field}.outSec`, "format");
+        const take = takeOf(cut, chapter);
+        if (op.inSec < 0) refuse(`${field}.inSec`, "out_of_take");
+        if (!take || op.outSec > take.durationSec) refuse(`${field}.outSec`, "out_of_take");
+        if (op.outSec - op.inSec < 0.5 - Number.EPSILON * 8) refuse(`${field}.outSec`, "too_short");
         chapter.inSec = op.inSec; chapter.outSec = op.outSec;
         break;
+      }
       case "chapter-take": {
-        const take = Object.hasOwn(cut.takes ?? {}, chapter.id) ? cut.takes[chapter.id].find((t) => t.file === op.take) : undefined;
-        if (typeof op.take !== "string" || !take) bad(`${field}.take`);
+        if (typeof op.take !== "string") refuse(`${field}.take`, "format");
+        const take = takeOf(cut, { ...chapter, take: op.take });
+        if (!take) refuse(`${field}.take`, "unknown");
         chapter.take = take.file; chapter.inSec = 0; chapter.outSec = take.durationSec;
         break;
       }
-      default: say(op.say, `${field}.say`); chapter.say = op.say;
+      case "chapter-drop":
+        if (chapters.length === 1) refuse(`${field}.chapter`, "last_chapter");
+        chapters.splice(at, 1);
+        dropped.add(chapter.id);
+        break;
+      default:
+        if (typeof op.say !== "string" || op.say.length > MAX_SAY || /[\r\n]/.test(op.say)) refuse(`${field}.say`, "format");
+        chapter.say = op.say;
     }
   });
+  // Every chapter left must still name a take the cut holds (the render reads it).
+  chapters.forEach((c, i) => { if (!takeOf(cut, c)) bad(`chapters.${i}.take`); });
   return chapters;
 }
 
@@ -314,8 +351,7 @@ export async function recutCut(dir, body, opts = {}) {
   const cut = loadCut(dir);
   checkHead(dir, body.expect_head);
   const chapters = foldOps(cut, body.ops);
-  const folded = validateRecut(cut, { rev: cut.rev, chapters }, { allowSay: true });
-  return renderCut(dir, folded, { ...opts, ...(requestId === undefined ? {} : { requestId }) });
+  return renderCut(dir, { ...cut, chapters }, { ...opts, ...(requestId === undefined ? {} : { requestId }) });
 }
 
 // One runner per binary in production; one probe per runner, including injected fakes.
@@ -529,9 +565,12 @@ export async function renderCut(dir, cut, opts = {}) {
   // edits it follows the snapshot.
   atomicWrite(join(dir, cutSnapshotFile(version)), body);
   published("snapshot");
-  if (!first || hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  if (!first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   saveManifest(dir, landed);
   published("manifest");
+  // An old-style cut (a marker, no cut version yet) is read from its marker until a cut version lands: its new marker
+  // goes only after the manifest commits, so a crash in between still reads the old cut, never none.
+  if (first && hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
   opts.emit?.("wicked.interactive.version.created", versionCreated({ version, parent, kind: "demo" }));
   return { rev: saved.rev, version, parent };
@@ -540,7 +579,14 @@ export async function renderCut(dir, cut, opts = {}) {
 /** Extract frame-accurate chapter takes from the SAME caption-free browser run. */
 export async function extractTakes(dir, recording, steps, duration, meta, opts = {}) {
   const ctx = ffmpegContext(opts), rec = join(dir, RECORDINGS_DIR);
-  const existing = currentCut(dir);
+  // "Record it again" is the remedy for an unverified history: a full take starts a new cut from the steps (its rev
+  // keeps counting up from the marker's); one chapter re-taken needs a cut it can trust.
+  let existing, unverified = null;
+  try { existing = currentCut(dir); } catch (e) {
+    if (e.payload?.error !== "cut_unverified" || opts.chapter !== undefined) throw e;
+    existing = null;
+    unverified = JSON.parse(readFileSync(join(dir, CUT_FILE), "utf8"));
+  }
   if (opts.chapter !== undefined && !existing?.chapters.some((c) => c.id === opts.chapter)) bad("chapter");
   const ids = chapterIds(steps.map((s) => s.label));
   const changed = existing !== null && (ids.length !== existing.chapters.length || ids.some((id) => !existing.chapters.some((c) => c.id === id)));
@@ -548,7 +594,7 @@ export async function extractTakes(dir, recording, steps, duration, meta, opts =
   // chapters and takes), keeping the style and the rev sequence.
   if (changed && opts.chapter !== undefined) bad("chapters");
   const fresh = existing && !changed ? structuredClone(existing)
-    : { rev: existing?.rev ?? 0, version: existing?.version ?? null, chapters: [], takes: {},
+    : { rev: existing?.rev ?? (Number.isInteger(unverified?.rev) ? unverified.rev : 0), version: existing?.version ?? null, chapters: [], takes: {},
         style: existing?.style ?? defaultStyle(meta.title || opts.documentId || "Demo") };
   // The recorded app's address, kept for every later re-cut's storyboard link.
   const cut = { ...fresh, url: String(meta.url ?? fresh.url ?? "") };

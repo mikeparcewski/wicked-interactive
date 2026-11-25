@@ -177,9 +177,13 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   app.get("/api/demo/cut", async (req, res) => {
     try {
       // Does a version carry this request_id? (crew's launcher finds a recut it already sent.)
+      // The answer echoes the id (an older service ignores the query and answers the whole cut); a recut still queued
+      // or rendering is 202 pending, so a caller that lost its answer neither re-decides nor reads it as gone.
       if (req.query?.request_id !== undefined) {
-        const found = findRequest(dir, readRequestId(req.query.request_id));
-        return found ? res.json({ version: found.version }) : res.status(404).json({ error: "not_found" });
+        const id = readRequestId(req.query.request_id);
+        const found = findRequest(dir, id);
+        if (found) return res.json({ request_id: id, version: found.version });
+        return pendingRecuts.has(id) ? res.status(202).json({ request_id: id, pending: true }) : res.status(404).json({ error: "not_found" });
       }
       const asked = req.query?.version;
       // A GET never writes: the legacy snapshot backfill belongs to the queue's mutations.
@@ -190,7 +194,8 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       const start = new Map(timeline({ ...cut, style }).map((c) => [c.id, c]));
       const chapters = cut.chapters.map((c) => ({ ...c, startSec: start.get(c.id).at, durationSec: start.get(c.id).end - start.get(c.id).at }));
       const render = loadManifest(dir).versions.find((v) => v.version === cut.version)?.render ?? null;
-      res.json({ ...cut, chapters, render, style, ffmpeg: await ffmpegCapabilities(demoCut),
+      // `head`: the document's head, the token every cut mutation's expect_head names (a page version can sit over the cut).
+      res.json({ ...cut, head: loadManifest(dir).head, chapters, render, style, ffmpeg: await ffmpegCapabilities(demoCut),
         skin: skin && { source: skin.source, theme: skin.theme, palette: skin.palette },
         resolvedTheme: effectiveTheme(style.theme, skin) });
     } catch (e) { cutFailure(res, e); }
@@ -273,11 +278,16 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       return { rev, version };
     }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
+  // A recut's request_id is pending from the moment it is queued until its task settles (the read above says so).
+  const pendingRecuts = new Map();
   app.post("/api/demo/recut", (req, res) => {
+    const id = typeof req.body?.request_id === "string" && req.body.request_id.length <= 128 ? req.body.request_id : null;
+    if (id !== null) pendingRecuts.set(id, (pendingRecuts.get(id) ?? 0) + 1);
+    const settle = () => { if (id !== null) { const n = pendingRecuts.get(id) - 1; if (n > 0) pendingRecuts.set(id, n); else pendingRecuts.delete(id); } };
     enqueue(async () => {
       const { rev, version, replayed } = await recutCut(dir, req.body, cutOptions());
       return { rev, version, ...(replayed ? { replayed } : {}) };
-    }).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
+    }).finally(settle).then((r) => res.json(r)).catch((e) => cutFailure(res, e));
   });
   // Restore: the cut as it was at an earlier version, rendered as a new version (history kept, nothing removed).
   app.post("/api/demo/restore", (req, res) => {
