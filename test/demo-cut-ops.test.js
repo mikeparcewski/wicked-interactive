@@ -6,11 +6,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { initWorkspace, loadManifest } from "../src/service/workspace.js";
+import { initWorkspace, loadManifest, rethemeHead } from "../src/service/workspace.js";
 import { createServer } from "../src/service/server.js";
 import { materializeFeedback, materializeEdit, materializeDraft, materializeDemo, materializeDeckOp } from "../src/service/handlers.js";
 import { defaultStyle, renderCut, recutCut, importCut, restoreCut, loadCut, loadCutVersion, currentCut, cutExists, isCut,
-  findRequest, cutSnapshotFile, CUT_FILE } from "../src/service/demo-cut.js";
+  findRequest, cutSnapshotFile, extractTakes, CUT_FILE } from "../src/service/demo-cut.js";
 
 function fixture(t, { html = "<h1>Tour</h1>" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "wi-cut-ops-"));
@@ -87,7 +87,7 @@ test("a bad middle op refuses the whole batch and nothing moves", async (t) => {
     { op: "chapter-rename", chapter: "two", title: "Also" },
   ] }, rec.opts), refused("ops.1.take"));
   for (const [ops, field] of [
-    [[{ op: "chapter-trim", chapter: "one", inSec: 0, outSec: 99 }], "chapters.0.outSec"],
+    [[{ op: "chapter-trim", chapter: "one", inSec: 0, outSec: 99 }], "ops.0.outSec"],
     [[{ op: "chapter-move", chapter: "one", after: "one" }], "ops.0.after"],
     [[{ op: "chapter-move", chapter: "one", after: "nope" }], "ops.0.after"],
     [[{ op: "chapter-rename", chapter: "nope", title: "x" }], "ops.0.chapter"],
@@ -341,7 +341,7 @@ test("routes: ops recut, request_id read, head_moved on style and takes, cut_doc
   const done = await req("POST", "/api/demo/recut", { expect_head: v1.version, request_id: "r-1", ops: [{ op: "chapter-trim", chapter: "two", inSec: 1, outSec: 3 }] });
   assert.equal(done.status, 200);
   assert.equal(done.body.version, v1.version + 1);
-  assert.deepEqual(await req("GET", "/api/demo/cut?request_id=r-1"), { status: 200, body: { version: done.body.version } });
+  assert.deepEqual(await req("GET", "/api/demo/cut?request_id=r-1"), { status: 200, body: { request_id: "r-1", version: done.body.version } });
   assert.equal((await req("GET", "/api/demo/cut?request_id=nope")).status, 404);
   assert.equal((await req("GET", `/api/demo/cut?request_id=${"x".repeat(129)}`)).status, 400);
   const replay = await req("POST", "/api/demo/recut", { expect_head: v1.version, request_id: "r-1", ops: [{ op: "chapter-trim", chapter: "two", inSec: 1, outSec: 3 }] });
@@ -376,4 +376,153 @@ test("an old-style cut keeps its demo-cut.json when a render fails, and gets the
   const marker = JSON.parse(readFileSync(join(dir, CUT_FILE), "utf8"));
   assert.deepEqual([marker.rev, marker.version], [6, out.version]);
   assert.equal(loadCut(dir).rev, 6);
+});
+
+// ── the chat's route (studio#1140 option (a), lane b7-video): fixes from the 13 Nov review and the DES-1140A delta ──
+
+test("F3: an op validates only what it touches; a recorder's long title or multi-line narration elsewhere does not refuse it", async (t) => {
+  const dir = fixture(t), rec = recorder();
+  const legacy = cut();
+  legacy.chapters[0].title = "A recorder label that is much longer than the eighty characters a hand rename may set ok";
+  legacy.chapters[1].say = "First line\nsecond line";
+  const v1 = await renderCut(dir, legacy, rec.opts);
+  const out = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-trim", chapter: "three", inSec: 1, outSec: 3 }] }, rec.opts);
+  const saved = loadCutVersion(dir, out.version);
+  assert.equal(saved.chapters[0].title, legacy.chapters[0].title, "untouched title kept");
+  assert.equal(saved.chapters[1].say, "First line\nsecond line", "untouched narration kept");
+  await assert.rejects(recutCut(dir, { expect_head: out.version, ops: [{ op: "chapter-rename", chapter: "one", title: "x".repeat(81) }] }, rec.opts), refused("ops.0.title"));
+  const renamed = await recutCut(dir, { expect_head: out.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Short now" }] }, rec.opts);
+  assert.equal(loadCutVersion(dir, renamed.version).chapters[0].title, "Short now");
+});
+
+test("F2: Record it again works on an unverified history: a full take starts a verified cut", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  rmSync(join(dir, cutSnapshotFile(v1.version)));
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), version: 0, rev: 4 }));
+  writeFileSync(join(dir, "recordings", "run.webm"), "raw");
+  const steps = [{ label: "One", at: 0, say: "First" }, { label: "Two", at: 2, say: "Second" }];
+  const out = await extractTakes(dir, "run.webm", steps, 5, { title: "Tour" }, rec.opts);
+  assert.equal(head(dir), out.version);
+  const now = loadCut(dir);
+  assert.equal(now.version, out.version);
+  assert.deepEqual(now.chapters.map((c) => c.id), ["one", "two"]);
+  assert.ok(now.rev > 4, "the rev keeps counting up from the old marker");
+  await assert.rejects(extractTakes(dir, "run.webm", steps, 5, { title: "Tour" }, { ...rec.opts, chapter: "nope" }), refused("chapter"));
+});
+
+test("F1: an old-style cut killed at any publication step reads a whole cut, never none", async (t) => {
+  for (const step of ["snapshot", "manifest", "marker"]) {
+    const dir = fixture(t), rec = recorder();
+    writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), rev: 5, version: 0 }));
+    await assert.rejects(renderCut(dir, loadCut(dir), { ...rec.opts, ...killAt(step) }), /killed/);
+    const now = currentCut(dir);
+    assert.ok(now !== null, `killed after ${step}: still a cut`);
+    if (step === "snapshot") assert.deepEqual([now.rev, now.version], [5, 0], "the previous commit stands");
+    else assert.deepEqual([now.rev, now.version], [6, head(dir)], "committed by the manifest");
+    const out = await renderCut(dir, loadCut(dir), rec.opts);
+    assert.equal(loadCut(dir).version, out.version, `killed after ${step}: a retry succeeds`);
+  }
+});
+
+test("F5: an intact earlier version reads back even when the head's history is unverified", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const v2 = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Two" }] }, rec.opts);
+  rmSync(join(dir, cutSnapshotFile(v2.version)));
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), version: 0, rev: 9 }));
+  assert.equal(loadCutVersion(dir, v1.version, { write: false }).chapters[0].title, "One");
+  assert.throws(() => loadCut(dir, { write: false }), (e) => e.payload.error === "cut_unverified");
+});
+
+test("F6: a restore with a stale rev and a stale head answers head_moved", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const v2 = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Two" }] }, rec.opts);
+  await assert.rejects(restoreCut(dir, { rev: 0, from: v1.version, expect_head: v1.version }, rec.opts),
+    (e) => e.status === 409 && e.payload.error === "head_moved" && e.payload.head === v2.version);
+});
+
+test("a trim is checked per op, against its take as folded so far, and the refusal names the op", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const trim = (ops) => recutCut(dir, { expect_head: v1.version, ops }, rec.opts);
+  await assert.rejects(trim([{ op: "chapter-take", chapter: "one", take: "_take-one-1.mp4" }, { op: "chapter-trim", chapter: "one", inSec: 0, outSec: 5 }]), refused("ops.1.outSec"));
+  await assert.rejects(trim([{ op: "chapter-rename", chapter: "two", title: "x" }, { op: "chapter-trim", chapter: "two", inSec: -1, outSec: 2 }]), refused("ops.1.inSec"));
+  await assert.rejects(trim([{ op: "chapter-trim", chapter: "two", inSec: 1, outSec: 1.2 }]), refused("ops.0.outSec"));
+  await assert.rejects(trim([{ op: "chapter-trim", chapter: "one", inSec: 0, outSec: 99 }]), refused("ops.0.outSec"));
+  assert.equal(head(dir), v1.version, "nothing rendered");
+  const ok = await trim([{ op: "chapter-take", chapter: "one", take: "_take-one-2.mp4" }, { op: "chapter-trim", chapter: "one", inSec: 0, outSec: 5.5 }]);
+  assert.equal(loadCutVersion(dir, ok.version).chapters[0].outSec, 5.5);
+});
+
+test("chapter-drop removes a chapter, keeps its takes, refuses the last one and a later op on it; Undo brings it back", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "two" }, { op: "chapter-rename", chapter: "two", title: "x" }] }, rec.opts), refused("ops.1.chapter"));
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "one" }, { op: "chapter-drop", chapter: "two" }, { op: "chapter-drop", chapter: "three" }] }, rec.opts), refused("ops.2.chapter"));
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "two", extra: true }] }, rec.opts), refused("ops.0.extra"));
+  assert.equal(head(dir), v1.version);
+  const dropped = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "two" }, { op: "chapter-move", chapter: "three", after: null }] }, rec.opts);
+  const now = loadCut(dir);
+  assert.deepEqual(now.chapters.map((c) => c.id), ["three", "one"]);
+  assert.ok(now.takes.two.length > 0, "the dropped chapter's takes stay in the inventory");
+  assert.ok(!readFileSync(join(dir, "recordings", `_v${dropped.version}.vtt`), "utf8").includes("Second"), "its caption is gone from the video");
+  // A hand edit in the old body after the drop sends the chapters the cut has.
+  const hand = await recutCut(dir, { rev: now.rev, chapters: [{ id: "three" }, { id: "one", title: "First" }] }, rec.opts);
+  await assert.rejects(recutCut(dir, { rev: loadCut(dir).rev, chapters: [{ id: "three" }, { id: "one" }, { id: "two" }] }, rec.opts), refused("chapters"));
+  const undo = await restoreCut(dir, { from: v1.version, expect_head: hand.version }, rec.opts);
+  assert.deepEqual(loadCutVersion(dir, undo.version).chapters.map((c) => c.id), ["one", "two", "three"]);
+});
+
+test("routes: GET cut says the manifest head; the request_id read echoes the id", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const svc = createServer({ dir, documentId: "tour", demoCut: rec.opts, themeCheck: async () => ({ changed: true }) });
+  const port = await svc.start(0), base = `http://localhost:${port}`;
+  t.after(() => svc.stop());
+  const get = async (path) => { const r = await fetch(base + path); return { status: r.status, body: await r.json() }; };
+  const post = async (path, body) => { const r = await fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; };
+  const read = await get("/api/demo/cut");
+  assert.deepEqual([read.body.head, read.body.version], [v1.version, v1.version]);
+  const done = await post("/api/demo/recut", { expect_head: v1.version, request_id: "chat-1", ops: [{ op: "chapter-drop", chapter: "two" }] });
+  assert.equal(done.status, 200);
+  assert.deepEqual(await get("/api/demo/cut?request_id=chat-1"), { status: 200, body: { request_id: "chat-1", version: done.body.version } });
+  const themed = rethemeHead(dir, { colors: { primary: "#123456" } });
+  const after = await get("/api/demo/cut");
+  assert.deepEqual([after.body.head, after.body.version], [themed.version, done.body.version], "a page version over the cut: head is not the cut's version");
+});
+
+test("an op's refusal says why: unknown, dropped, self, last_chapter, out_of_take, too_short, format", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const why = (field, reason) => (e) => e.status === 400 && e.payload.error === "invalid_body" && e.payload.field === field && e.payload.reason === reason;
+  for (const [ops, field, reason] of [
+    [[{ op: "chapter-rename", chapter: "nope", title: "x" }], "ops.0.chapter", "unknown"],
+    [[{ op: "chapter-move", chapter: "one", after: "nope" }], "ops.0.after", "unknown"],
+    [[{ op: "chapter-drop", chapter: "two" }, { op: "chapter-rename", chapter: "two", title: "x" }], "ops.1.chapter", "dropped"],
+    [[{ op: "chapter-drop", chapter: "two" }, { op: "chapter-move", chapter: "one", after: "two" }], "ops.1.after", "dropped"],
+    [[{ op: "chapter-drop", chapter: "two" }, { op: "chapter-drop", chapter: "two" }], "ops.1.chapter", "dropped"],
+    [[{ op: "chapter-move", chapter: "one", after: "one" }], "ops.0.after", "self"],
+    [[{ op: "chapter-drop", chapter: "one" }, { op: "chapter-drop", chapter: "two" }, { op: "chapter-drop", chapter: "three" }], "ops.2.chapter", "last_chapter"],
+    [[{ op: "chapter-trim", chapter: "two", inSec: 0, outSec: 9 }], "ops.0.outSec", "out_of_take"],
+    [[{ op: "chapter-trim", chapter: "two", inSec: -1, outSec: 2 }], "ops.0.inSec", "out_of_take"],
+    [[{ op: "chapter-trim", chapter: "two", inSec: 1, outSec: 1.2 }], "ops.0.outSec", "too_short"],
+    [[{ op: "chapter-rename", chapter: "one", title: "x".repeat(81) }], "ops.0.title", "format"],
+    [[{ op: "chapter-say", chapter: "one", say: "a\nb" }], "ops.0.say", "format"],
+  ]) await assert.rejects(recutCut(dir, { expect_head: v1.version, ops }, rec.opts), why(field, reason), JSON.stringify(ops));
+  assert.equal(head(dir), v1.version);
+});
+
+test("routes: a request_id that is queued or rendering reads 202 pending, then 200 once committed", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const slow = async (args) => { if (!args.includes("-filters")) await gate; return rec.opts.runner(args); };
+  const svc = createServer({ dir, documentId: "tour", demoCut: { ...rec.opts, runner: slow }, themeCheck: async () => ({ changed: true }) });
+  const port = await svc.start(0), base = `http://localhost:${port}`;
+  t.after(() => svc.stop());
+  const get = async (path) => { const r = await fetch(base + path); return { status: r.status, body: await r.json() }; };
+  const posted = fetch(base + "/api/demo/recut", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ expect_head: v1.version, request_id: "chat-2", ops: [{ op: "chapter-rename", chapter: "one", title: "Hi" }] }) });
+  try {
+    for (let i = 0; i < 50 && (await get("/api/demo/cut?request_id=chat-2")).status === 404; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(await get("/api/demo/cut?request_id=chat-2"), { status: 202, body: { request_id: "chat-2", pending: true } });
+  } finally { release(); }
+  const done = await (await posted).json();
+  assert.deepEqual(await get("/api/demo/cut?request_id=chat-2"), { status: 200, body: { request_id: "chat-2", version: done.version } });
+  assert.equal((await get("/api/demo/cut?request_id=other")).status, 404);
 });
