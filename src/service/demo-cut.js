@@ -279,6 +279,7 @@ export function foldOps(cut, ops) {
   ops.forEach((op, i) => {
     const field = `ops.${i}`;
     if (!object(op)) refuse(field, "format");
+    if (typeof op.op !== "string") refuse(`${field}.op`, "format");
     if (!Object.hasOwn(OP_FIELDS, op.op)) refuse(`${field}.op`, "unsupported");
     for (const key of Object.keys(op)) if (!OP_FIELDS[op.op].includes(key)) refuse(`${field}.${key}`, "format");
     const at = find(op.chapter, `${field}.chapter`);
@@ -584,7 +585,8 @@ export async function renderCut(dir, cut, opts = {}) {
 /** An unverified history's style, as its marker kept it (a bad one reads as the default). */
 function markerStyle(marker, title) {
   if (!marker?.style) return defaultStyle(title);
-  try { return validateStyle({}, title, marker.style); } catch { return defaultStyle(title); }
+  // Validated as input over the defaults: a malformed or partial one never reaches the render.
+  try { return validateStyle(marker.style, title); } catch { return defaultStyle(title); }
 }
 
 /** Extract frame-accurate chapter takes from the SAME caption-free browser run. */
@@ -600,9 +602,10 @@ export async function extractTakes(dir, recording, steps, duration, meta, opts =
   }
   if (opts.chapter !== undefined && !existing?.chapters.some((c) => c.id === opts.chapter)) bad("chapter");
   const ids = chapterIds(steps.map((s) => s.label));
-  // The cut's chapters, a dropped one included (its takes stay in the inventory): an unchanged spec is not re-authored.
+  // The spec is re-authored when it names a chapter the cut never had, or leaves out one the cut has. A chapter the cut
+  // had and lost (dropped, or left out by a restore) keeps its takes in the inventory, so naming it again is no change.
   const known = existing === null ? null : new Set([...existing.chapters.map((c) => c.id), ...Object.keys(existing.takes ?? {})]);
-  const changed = known !== null && (ids.length !== known.size || ids.some((id) => !known.has(id)));
+  const changed = known !== null && (ids.some((id) => !known.has(id)) || existing.chapters.some((c) => !ids.includes(c.id)));
   // One chapter re-taken needs the same chapters; a full take of a re-authored spec starts a new cut (its
   // chapters and takes), keeping the style and the rev sequence.
   if (changed && opts.chapter !== undefined) bad("chapters");
@@ -714,7 +717,7 @@ export async function importCut(dir, body, opts = {}) {
     durations.push(seconds);
   }
   const cut = { rev: 0, version: null, chapters: [], takes: {}, style: defaultStyle(title), url: body.url ?? "" };
-  const moved = [];
+  const moved = [], before = newestCutVersion(loadManifest(dir))?.version ?? null;
   try {
     for (const [i, c] of named.entries()) {
       const file = `_take-${c.id}-1.mp4`;
@@ -729,7 +732,7 @@ export async function importCut(dir, body, opts = {}) {
     return await renderCut(dir, cut, opts);
   } catch (e) {
     // Only an import that did not commit gives its files back (a cut version in the manifest names these takes).
-    if (newestCutVersion(loadManifest(dir)) === null) {
+    if ((newestCutVersion(loadManifest(dir))?.version ?? null) === before) {
       for (const [id, file] of moved) renameSync(join(dir, RECORDINGS_DIR, file), importStagePath(dir, id));
     }
     throw e;

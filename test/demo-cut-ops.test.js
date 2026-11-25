@@ -3,7 +3,7 @@
 // manifest write; no other writer lands a page version on a cut (studio#1140, ask 1, part A).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, renameSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initWorkspace, loadManifest, rethemeHead } from "../src/service/workspace.js";
@@ -593,17 +593,19 @@ test("malformed ops say why; an older version without a snapshot is no_snapshot 
 
 test("routes: GET cut never pairs a cut with a newer head; pending holds while queued, ends on a refusal, never for a bad id", async (t) => {
   const { dir, rec, v1 } = await seeded(t);
-  let hold = null, skinCalls = 0, unblock;
+  let hold = null, skinCalls = 0, unblock, entered;
   const skinGate = new Promise((r) => { unblock = r; });
+  const inSkin = new Promise((r) => { entered = r; });
   const slow = async (args) => { if (hold !== null && !args.includes("-filters") && args.some((a) => String(a).includes("_v"))) await hold; return rec.opts.runner(args); };
-  const fetchSkin = async () => { if (++skinCalls === 1) await skinGate; return null; };
+  const fetchSkin = async () => { if (++skinCalls === 1) { entered(); await skinGate; } return null; };
+  t.after(() => unblock());
   const svc = createServer({ dir, documentId: "tour", demoCut: { ...rec.opts, runner: slow, fetchSkin }, themeCheck: async () => ({ changed: true }) });
   const port = await svc.start(0), base = `http://localhost:${port}`;
   t.after(() => svc.stop());
   const get = async (path) => { const r = await fetch(base + path); return { status: r.status, body: await r.json() }; };
   const post = (body) => fetch(base + "/api/demo/recut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
   const reading = get("/api/demo/cut"); // held at its skin read
-  await new Promise((r) => setTimeout(r, 20));
+  await inSkin;
   const landed = await post({ expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Landed" }] });
   unblock();
   const read = await reading;
@@ -624,4 +626,76 @@ test("routes: GET cut never pairs a cut with a newer head; pending holds while q
     assert.equal((await bad).status, 400);
     assert.equal((await get("/api/demo/cut?request_id=b")).status, 404, "a refused request is not pending once it settles");
   } finally { release(); hold = null; }
+});
+
+test("routes: two requests sharing an id stay pending until the last one settles", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  // The first new version's encodes wait on one gate, every later version's on another.
+  let first = null, later = false, releaseFirst, releaseLater;
+  const firstGate = new Promise((r) => { releaseFirst = r; }), laterGate = new Promise((r) => { releaseLater = r; });
+  const slow = async (args) => {
+    const n = Number(args.map(String).join(" ").match(/_v(\d+)/)?.[1] ?? NaN);
+    if (n > v1.version) { first ??= n; if (n !== first) later = true; await (n === first ? firstGate : laterGate); }
+    return rec.opts.runner(args);
+  };
+  const svc = createServer({ dir, documentId: "tour", demoCut: { ...rec.opts, runner: slow }, themeCheck: async () => ({ changed: true }) });
+  const port = await svc.start(0), base = `http://localhost:${port}`;
+  t.after(() => svc.stop());
+  const until = async (ok) => { for (let i = 0; i < 500 && !(await ok()); i++) await new Promise((r) => setTimeout(r, 10)); };
+  const pending = async () => (await fetch(base + "/api/demo/cut?request_id=r")).status;
+  const post = (body) => fetch(base + "/api/demo/recut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.status);
+  try {
+    const held = post({ expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Held" }] });
+    await until(() => first !== null);
+    assert.ok(first > v1.version, "the first render is held");
+    // Behind it, a refused request, then a good one, share the id "r" (the refused one is queued first).
+    const refused = post({ expect_head: first, request_id: "r", ops: [{ op: "chapter-explode", chapter: "one" }] });
+    await until(async () => (await pending()) === 202);
+    const good = post({ expect_head: first, request_id: "r", ops: [{ op: "chapter-rename", chapter: "two", title: "Good" }] });
+    await new Promise((r) => setTimeout(r, 200));
+    releaseFirst();
+    assert.equal(await held, 200);
+    assert.equal(await refused, 400);
+    await until(() => later);
+    assert.equal(await pending(), 202, "the good one still renders");
+    releaseLater();
+    assert.equal(await good, 200);
+    assert.equal(await pending(), 200);
+  } finally { releaseFirst(); releaseLater(); }
+});
+
+test("op names that are not strings are refused with a reason; a malformed marker style recovers with the defaults", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: { toString: null }, chapter: "one" }] }, rec.opts),
+    (e) => e.payload?.error === "invalid_body" && e.payload.field === "ops.0.op" && e.payload.reason === "format");
+  rmSync(join(dir, cutSnapshotFile(v1.version)));
+  const style = defaultStyle("Tour");
+  style.theme.endCard = null;
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), style, version: 0, rev: 4 }));
+  writeFileSync(join(dir, "recordings", "run.webm"), "raw");
+  await extractTakes(dir, "run.webm", [{ label: "One", at: 0, say: "First" }], 3, { title: "Tour" }, rec.opts);
+  assert.equal(loadCut(dir).style.theme.endCard.on, true, "the defaults");
+});
+
+test("a recording after a restore that merged another spec's takes is not read as a new spec", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  writeFileSync(join(dir, "recordings", "run.webm"), "raw");
+  await extractTakes(dir, "run.webm", [{ label: "Four", at: 0, say: "x" }], 3, { title: "Tour" }, rec.opts);
+  const back = await restoreCut(dir, { from: v1.version, expect_head: head(dir) }, rec.opts);
+  assert.ok(loadCut(dir).takes.four, "the restore kept the other spec's takes");
+  const steps = [{ label: "One", at: 0, say: "First" }, { label: "Two", at: 2, say: "Second" }, { label: "Three", at: 4, say: "Third" }];
+  await extractTakes(dir, "run.webm", steps, 6, { title: "Tour" }, { ...rec.opts, chapter: "one" });
+  assert.ok(head(dir) > back.version);
+  assert.deepEqual(loadCut(dir).chapters.map((c) => c.id), ["one", "two", "three"]);
+});
+
+test("an old-style cut whose marker write fails after the commit still lands the version, read from its snapshot", async (t) => {
+  const dir = fixture(t), rec = recorder();
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), rev: 5, version: 0 }));
+  // The document folder turns read-only once the manifest has committed, so the marker's atomic write fails.
+  const out = await renderCut(dir, { ...loadCut(dir), chapters: cut().chapters.map((c) => ({ ...c, title: `${c.title}!` })) },
+    { ...rec.opts, onPublish: (step) => { if (step === "manifest") chmodSync(dir, 0o555); } }).finally(() => chmodSync(dir, 0o755));
+  assert.equal(head(dir), out.version);
+  assert.equal(JSON.parse(readFileSync(join(dir, CUT_FILE), "utf8")).rev, 5, "the old marker stayed");
+  assert.equal(loadCut(dir).chapters[0].title, "One!", "the committed version's snapshot is the state");
 });
