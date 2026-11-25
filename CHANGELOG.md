@@ -4,6 +4,37 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+### Added
+- **One route, one writer for a demo cut (studio#1140, part A).** `POST /api/demo/recut` takes `{expect_head, ops[], request_id?}`:
+  at most 20 chapter ops (`chapter-move`, `-rename`, `-trim`, `-take`, `-say`), folded in order inside the document's
+  queue, validated as a whole and rendered once; a bad op refuses the batch and nothing moves. A `chapter-take` resets
+  that chapter's trim to the whole take and may name any take in the cut's inventory (`.mp4` included); `say` is one line
+  of at most 2000 characters. A `request_id` (≤ 128 characters) is kept on the version; a replay returns that version
+  and renders nothing. `GET /api/demo/cut?request_id=<id>` answers `{request_id, version}` once committed, 202
+  `{request_id, pending: true}` while that recut is queued or rendering, or 404.
+- **`chapter-drop`** removes a chapter from the cut; its takes stay in the inventory, so a restore brings it back. The
+  last chapter can't be dropped.
+- An op's refusal (400 `invalid_body`) names the op's field (`ops.<i>.outSec`) and a `reason`: `unknown`, `dropped`,
+  `self`, `last_chapter`, `out_of_take`, `too_short`, `format` or `unsupported`. A trim is checked against its chapter's take as folded
+  so far; an op checks only what it touches, so a recorder's long label or multi-line narration elsewhere never refuses it.
+- `GET /api/demo/cut` says the document's `head` beside the cut's `version` (they differ when a page version sits over the cut).
+- `expect_head` (the manifest head) guards recut, `PUT /api/demo/style`, `POST /api/demo/restore` and `POST /api/demo/takes`:
+  a moved head is 409 `head_moved {head}`. The old bodies (`rev`, no `expect_head`) work unchanged.
+- `GET /api/demo/cut` returns each chapter's `startSec` and `durationSec`, and the `render` entry of the version read.
+
+### Changed
+- **A cut's state is the snapshot of its newest cut version** (a manifest version with a `render` entry), committed by the
+  manifest write; `demo-cut.json` stays as the marker and for older readers (written before the manifest, except on an
+  old-style cut, where it follows it). A crash before
+  the manifest write leaves the previous commit in force. A legacy cut with no snapshot is verified once against the
+  marker's `version` and backfilled, otherwise edits answer 409 `cut_unverified`; a full "Record it again" then starts
+  a verified cut, and an intact earlier version still reads back. An old-style cut (a marker, no cut version yet) gets
+  its new marker only after the manifest commits, and an import that committed keeps its takes even if a later step
+  fails. A restore with `expect_head` checks the head before the rev. A dropped chapter stays dropped when its chapters
+  are recorded again (the new take joins the inventory).
+- Every other writer refuses a demo cut with 409 `cut_document`: the head re-theme, deck ops, and the feedback, edit,
+  draft and demo bus handlers (a non-retryable `status.posted`), as fork already did.
+
 ## [0.16.2] — 2026-11-12
 
 Patch: a demo recording streams when the documents live under a dot directory (#349). Spawned by wicked-crew

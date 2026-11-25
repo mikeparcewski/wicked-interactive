@@ -23,6 +23,7 @@ import { recordDemo } from "./demo.js";
 import { ensureRecorderBrowser, classifyRecorderError, recorderErrorPayload, stripAnsi, RecorderError } from "./recorder-preflight.js";
 import { grabUrlToPdf } from "./theme-grab.js";
 import { resolveLearnedTheme } from "./theme-source.js";
+import { isCut } from "./demo-cut.js";
 
 /** Append a line to the doc's conversation transcript (ADR-0014). Best-effort. */
 export function appendConversation(dir, entry) {
@@ -54,6 +55,7 @@ function themeOpts(ctx, dir) {
  */
 export async function materializeFeedback(dir, payload, ctx) {
   const { items, author } = payload;
+  if (isCut(dir)) return refuseCut(ctx, "feedback");
   // Optional `expect_head` (I-D1, C5): the head the batch was made against. A head that moved is
   // refused with nothing written, said on the doc thread as a typed error.
   if (Number.isInteger(payload.expect_head)) {
@@ -116,6 +118,7 @@ export function deckOpProblem(op) {
  * version (`unchanged`); one the version cannot take (an unknown slide) is `refused` with its reason.
  */
 export async function materializeDeckOp(dir, { expect_head: expectHead, op, author }, ctx) {
+  if (isCut(dir)) return { cutDocument: true };
   const manifest = loadManifest(dir);
   if (!isDeckManifest(manifest)) return { notDeck: true };
   if (manifest.head !== expectHead) return { headMoved: true, head: manifest.head };
@@ -141,13 +144,16 @@ export async function materializeDeckOp(dir, { expect_head: expectHead, op, auth
  * the bus does not retry a deterministic refusal. The announce is awaited: if it can't be published
  * the command fails and is retried, and the retry refuses (and announces) again.
  */
-async function refuseLanding(ctx, type, problem) {
+async function refuseLanding(ctx, type, problem, code = "invalid_landing") {
   await ctx.emit("wicked.interactive.status.posted", {
-    state: "error", code: "invalid_landing", retryable: false,
+    state: "error", code, retryable: false,
     message: `The ${type} was not landed: ${problem}. Nothing was changed.`,
   });
   return { refused: problem };
 }
+
+/** A demo cut changes only through the cut module (its recut route): no other writer lands a page version on it. */
+const refuseCut = (ctx, type) => refuseLanding(ctx, type, "this document is a demo cut", "cut_document");
 
 /**
  * Agent structural results → follow-on version (INV-2 gate). An optional `run_id` (the run that
@@ -155,6 +161,7 @@ async function refuseLanding(ctx, type, problem) {
  */
 export async function materializeEdit(dir, payload, ctx) {
   const { version, results } = payload;
+  if (isCut(dir)) return refuseCut(ctx, "edit");
   const run = readRunId(payload.run_id);
   if (run.problem) return refuseLanding(ctx, "edit", run.problem);
   const out = await applyStructuralResults(dir, { version, results, runId: run.runId }, themeOpts(ctx, dir));
@@ -180,6 +187,7 @@ export async function materializeEdit(dir, payload, ctx) {
  * Without them, a draft lands exactly as before I1 (on the current head, `run_id: null`).
  */
 export async function materializeDraft(dir, payload, ctx) {
+  if (isCut(dir)) return refuseCut(ctx, "draft");
   const run = readRunId(payload.run_id);
   if (run.problem) return refuseLanding(ctx, "draft", run.problem);
   const expect = readExpectHead(payload.expect_head);
@@ -232,6 +240,8 @@ export async function materializeDraft(dir, payload, ctx) {
  * surface exposes (`GET /d/:doc/api/demo/status`) so a button can follow the wire.
  */
 export async function materializeDemo(dir, payload, ctx, { record = recordDemo, ensureBrowser = ensureRecorderBrowser } = {}) {
+  // This recorder lands a storyboard page version, never takes; takes are POST /api/demo/takes.
+  if (isCut(dir)) return refuseCut(ctx, "demo");
   const headless = payload.headless !== false;
   const recorder = ctx.recorder || {};
   const onState = typeof recorder.onState === "function" ? recorder.onState : () => {};
