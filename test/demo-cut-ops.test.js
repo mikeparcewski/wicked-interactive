@@ -689,7 +689,8 @@ test("a recording after a restore that merged another spec's takes is not read a
   assert.deepEqual(loadCut(dir).chapters.map((c) => c.id), ["one", "two", "three"]);
 });
 
-test("an old-style cut whose marker write fails after the commit still lands the version, read from its snapshot", async (t) => {
+// A read-only folder is how the write is made to fail; Windows ignores a directory's mode, so the test runs elsewhere.
+test("an old-style cut whose marker write fails after the commit still lands the version, read from its snapshot", { skip: process.platform === "win32" }, async (t) => {
   const dir = fixture(t), rec = recorder();
   writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), rev: 5, version: 0 }));
   // The document folder turns read-only once the manifest has committed, so the marker's atomic write fails.
