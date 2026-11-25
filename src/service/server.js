@@ -189,13 +189,15 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
       // A GET never writes: the legacy snapshot backfill belongs to the queue's mutations.
       const cut = asked === undefined ? loadCut(dir, { write: false })
         : loadCutVersion(dir, typeof asked === "string" && /^\d{1,9}$/.test(asked) ? Number(asked) : NaN, { write: false });
+      // Read with the cut, before any await: a recut that lands meanwhile never pairs this cut with a newer head.
+      const manifest = loadManifest(dir);
       const style = validateStyle({}, "Demo", cut.style);
       const skin = style.theme.palette === "custom" ? null : await (demoCut.fetchSkin ?? fetchSkin)();
       const start = new Map(timeline({ ...cut, style }).map((c) => [c.id, c]));
       const chapters = cut.chapters.map((c) => ({ ...c, startSec: start.get(c.id).at, durationSec: start.get(c.id).end - start.get(c.id).at }));
-      const render = loadManifest(dir).versions.find((v) => v.version === cut.version)?.render ?? null;
+      const render = manifest.versions.find((v) => v.version === cut.version)?.render ?? null;
       // `head`: the document's head, the token every cut mutation's expect_head names (a page version can sit over the cut).
-      res.json({ ...cut, head: loadManifest(dir).head, chapters, render, style, ffmpeg: await ffmpegCapabilities(demoCut),
+      res.json({ ...cut, head: manifest.head, chapters, render, style, ffmpeg: await ffmpegCapabilities(demoCut),
         skin: skin && { source: skin.source, theme: skin.theme, palette: skin.palette },
         resolvedTheme: effectiveTheme(style.theme, skin) });
     } catch (e) { cutFailure(res, e); }
@@ -281,7 +283,9 @@ export function createServer({ dir, documentId = "doc", emit = () => {}, fronten
   // A recut's request_id is pending from the moment it is queued until its task settles (the read above says so).
   const pendingRecuts = new Map();
   app.post("/api/demo/recut", (req, res) => {
-    const id = typeof req.body?.request_id === "string" && req.body.request_id.length <= 128 ? req.body.request_id : null;
+    // Keyed exactly as the read and the version entry key it (readRequestId); an id it refuses is never pending.
+    let id = null;
+    try { id = req.body?.request_id === undefined ? null : readRequestId(req.body.request_id); } catch { id = null; }
     if (id !== null) pendingRecuts.set(id, (pendingRecuts.get(id) ?? 0) + 1);
     const settle = () => { if (id !== null) { const n = pendingRecuts.get(id) - 1; if (n > 0) pendingRecuts.set(id, n); else pendingRecuts.delete(id); } };
     enqueue(async () => {

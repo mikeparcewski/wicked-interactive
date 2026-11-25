@@ -526,3 +526,102 @@ test("routes: a request_id that is queued or rendering reads 202 pending, then 2
   assert.deepEqual(await get("/api/demo/cut?request_id=chat-2"), { status: 200, body: { request_id: "chat-2", version: done.version } });
   assert.equal((await get("/api/demo/cut?request_id=other")).status, 404);
 });
+
+// ── round-1 review folds (codex + pi on the local diff) ──────────────────────────────────────────────────────────
+
+test("a dropped chapter stays dropped when one chapter or all of them are recorded again", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "two" }] }, rec.opts);
+  writeFileSync(join(dir, "recordings", "run.webm"), "raw");
+  const steps = [{ label: "One", at: 0, say: "First" }, { label: "Two", at: 2, say: "Second" }, { label: "Three", at: 4, say: "Third" }];
+  await extractTakes(dir, "run.webm", steps, 6, { title: "Tour" }, { ...rec.opts, chapter: "one" });
+  assert.deepEqual(loadCut(dir).chapters.map((c) => c.id), ["one", "three"]);
+  const full = await extractTakes(dir, "run.webm", steps, 6, { title: "Tour" }, rec.opts);
+  const now = loadCut(dir);
+  assert.deepEqual(now.chapters.map((c) => c.id), ["one", "three"], "a full take keeps the drop");
+  assert.ok(now.takes.two.some((x) => x.file === full.takes.find((a) => a.chapter === "two").file), "its new take joins the inventory");
+});
+
+test("F2 recovery keeps the marker's style; a one-chapter take is still refused before it", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  rmSync(join(dir, cutSnapshotFile(v1.version)));
+  const style = defaultStyle("Tour");
+  style.captions.on = false;
+  style.theme.endCard.title = "See you";
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), style, version: 0, rev: 4 }));
+  writeFileSync(join(dir, "recordings", "run.webm"), "raw");
+  const steps = [{ label: "One", at: 0, say: "First" }, { label: "Two", at: 2, say: "Second" }];
+  await assert.rejects(extractTakes(dir, "run.webm", steps, 5, { title: "Tour" }, { ...rec.opts, chapter: "one" }), (e) => e.payload?.error === "cut_unverified");
+  assert.equal(head(dir), v1.version, "nothing extracted");
+  await extractTakes(dir, "run.webm", steps, 5, { title: "Tour" }, rec.opts);
+  const now = loadCut(dir);
+  assert.equal(now.rev, 5);
+  assert.equal(now.style.captions.on, false);
+  assert.equal(now.style.theme.endCard.title, "See you");
+});
+
+test("an import that committed keeps its takes when the step after the manifest fails", async (t) => {
+  const dir = fixture(t);
+  const runner = (args) => {
+    if (args.includes("-filters")) return { status: 0, stderr: " ... ass V->V Render ASS subtitles\n" };
+    if (args.includes("-i") && args.length === 3) return { status: 1, stderr: "  Duration: 00:00:04.00, start: 0.0, bitrate: 1 kb/s\n  Stream #0:0: Video: h264\n" };
+    writeFileSync(args.at(-1), "encoded");
+    return { status: 0, stderr: "" };
+  };
+  const opts = { runner, skin: null, fetchSkin: async () => null };
+  writeFileSync(join(dir, "recordings", "_import-one.mp4"), "bytes");
+  await assert.rejects(importCut(dir, { chapters: [{ id: "one", title: "One" }] }, { ...opts, ...killAt("snapshot") }), /killed/);
+  assert.ok(existsSync(join(dir, "recordings", "_import-one.mp4")), "uncommitted: the staged file came back");
+  await assert.rejects(importCut(dir, { chapters: [{ id: "one", title: "One" }] }, { ...opts, ...killAt("marker") }), /killed/);
+  assert.ok(existsSync(join(dir, "recordings", "_take-one-1.mp4")), "committed: the take stays where the cut names it");
+  assert.equal(loadCut(dir).chapters[0].take, "_take-one-1.mp4");
+});
+
+test("malformed ops say why; an older version without a snapshot is no_snapshot under an unverified head", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  const why = (field, reason) => (e) => e.payload?.field === field && e.payload?.reason === reason;
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [7] }, rec.opts), why("ops.0", "format"));
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-explode", chapter: "one" }] }, rec.opts), why("ops.0.op", "unsupported"));
+  await assert.rejects(recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-drop", chapter: "two", extra: true }] }, rec.opts), why("ops.0.extra", "format"));
+  const v2 = await recutCut(dir, { expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Two" }] }, rec.opts);
+  rmSync(join(dir, cutSnapshotFile(v1.version)));
+  rmSync(join(dir, cutSnapshotFile(v2.version)));
+  writeFileSync(join(dir, CUT_FILE), JSON.stringify({ ...cut(), version: 0, rev: 9 }));
+  assert.throws(() => loadCutVersion(dir, v1.version, { write: false }), (e) => e.payload?.error === "no_snapshot");
+  assert.throws(() => loadCutVersion(dir, v2.version, { write: false }), (e) => e.payload?.error === "cut_unverified");
+});
+
+test("routes: GET cut never pairs a cut with a newer head; pending holds while queued, ends on a refusal, never for a bad id", async (t) => {
+  const { dir, rec, v1 } = await seeded(t);
+  let hold = null, skinCalls = 0, unblock;
+  const skinGate = new Promise((r) => { unblock = r; });
+  const slow = async (args) => { if (hold !== null && !args.includes("-filters") && args.some((a) => String(a).includes("_v"))) await hold; return rec.opts.runner(args); };
+  const fetchSkin = async () => { if (++skinCalls === 1) await skinGate; return null; };
+  const svc = createServer({ dir, documentId: "tour", demoCut: { ...rec.opts, runner: slow, fetchSkin }, themeCheck: async () => ({ changed: true }) });
+  const port = await svc.start(0), base = `http://localhost:${port}`;
+  t.after(() => svc.stop());
+  const get = async (path) => { const r = await fetch(base + path); return { status: r.status, body: await r.json() }; };
+  const post = (body) => fetch(base + "/api/demo/recut", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const reading = get("/api/demo/cut"); // held at its skin read
+  await new Promise((r) => setTimeout(r, 20));
+  const landed = await post({ expect_head: v1.version, ops: [{ op: "chapter-rename", chapter: "one", title: "Landed" }] });
+  unblock();
+  const read = await reading;
+  assert.deepEqual([read.body.head, read.body.version, read.body.chapters[0].title], [v1.version, v1.version, "One"], "the cut and its head are one read");
+  // A request queued behind a held render is pending; a refused one is not once it settles; a bad id never is.
+  let release;
+  hold = new Promise((r) => { release = r; });
+  try {
+    const held = post({ expect_head: landed.body.version, request_id: "a", ops: [{ op: "chapter-rename", chapter: "one", title: "A" }] });
+    const queued = post({ expect_head: landed.body.version, request_id: "b", ops: [{ op: "chapter-explode", chapter: "one" }] });
+    const bad = post({ expect_head: landed.body.version, request_id: "x".repeat(129), ops: [{ op: "chapter-rename", chapter: "one", title: "B" }] });
+    for (let i = 0; i < 50 && (await get("/api/demo/cut?request_id=b")).status !== 202; i++) await new Promise((r) => setTimeout(r, 10));
+    assert.equal((await get("/api/demo/cut?request_id=a")).status, 202, "the held render is pending");
+    assert.equal((await get("/api/demo/cut?request_id=b")).status, 202, "queued behind it is pending");
+    release();
+    assert.equal((await held).status, 200);
+    assert.equal((await queued).status, 409, "refused (the held one moved the head)");
+    assert.equal((await bad).status, 400);
+    assert.equal((await get("/api/demo/cut?request_id=b")).status, 404, "a refused request is not pending once it settles");
+  } finally { release(); hold = null; }
+});

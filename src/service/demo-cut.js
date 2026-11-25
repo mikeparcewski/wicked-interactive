@@ -167,7 +167,8 @@ export function loadCutVersion(dir, version, opts) {
   const path = join(dir, cutSnapshotFile(version));
   // A legacy head not yet backfilled (a read does not write) is its marker, which `currentCut` verified.
   if (entry?.render && !existsSync(path) && current?.version === version) return current;
-  if (entry?.render && !existsSync(path) && unverified) throw unverified;
+  // Only the newest cut version falls back to its marker; an older one without a snapshot has none (no_snapshot below).
+  if (entry?.render && !existsSync(path) && unverified && newestCutVersion(loadManifest(dir))?.version === version) throw unverified;
   if (!entry?.render || !existsSync(path)) throw new CutError("no_snapshot", "version", 404);
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -263,7 +264,7 @@ const takeOf = (cut, chapter) => (Object.hasOwn(cut.takes ?? {}, chapter.id) ? c
  * own takes inventory (.mp4 included) and resets that chapter's trim to the whole take; a trim must stay inside the
  * chapter's take as folded so far. A drop removes the chapter from the cut and keeps its takes (a restore brings it
  * back); the last chapter can't be dropped. Refusals: `reason` is unknown | dropped | self | last_chapter |
- * out_of_take | too_short | format.
+ * out_of_take | too_short | format | unsupported (an op name this service doesn't know).
  */
 export function foldOps(cut, ops) {
   if (!Array.isArray(ops) || ops.length < 1 || ops.length > MAX_OPS) bad("ops");
@@ -277,8 +278,9 @@ export function foldOps(cut, ops) {
   };
   ops.forEach((op, i) => {
     const field = `ops.${i}`;
-    if (!object(op) || !Object.hasOwn(OP_FIELDS, op.op)) bad(`${field}.op`);
-    closed(op, OP_FIELDS[op.op], field);
+    if (!object(op)) refuse(field, "format");
+    if (!Object.hasOwn(OP_FIELDS, op.op)) refuse(`${field}.op`, "unsupported");
+    for (const key of Object.keys(op)) if (!OP_FIELDS[op.op].includes(key)) refuse(`${field}.${key}`, "format");
     const at = find(op.chapter, `${field}.chapter`);
     const chapter = chapters[at];
     switch (op.op) {
@@ -322,8 +324,6 @@ export function foldOps(cut, ops) {
         chapter.say = op.say;
     }
   });
-  // Every chapter left must still name a take the cut holds (the render reads it).
-  chapters.forEach((c, i) => { if (!takeOf(cut, c)) bad(`chapters.${i}.take`); });
   return chapters;
 }
 
@@ -559,10 +559,11 @@ export async function renderCut(dir, cut, opts = {}) {
     palette: { source: skin === null ? "custom" : skin.source, theme: skin?.theme ?? null, background: cut.style.theme.background,
       foreground: cut.style.theme.foreground, accent: cut.style.theme.accent, font: cut.style.theme.font } };
   if (Number.isInteger(opts.restoredFrom)) landed.versions.at(-1).restored_from = opts.restoredFrom;
-  // Publication. The manifest is the commit point and is always last: a crash before it leaves the previous commit in
-  // force (the next load ignores the orphan snapshot and marker), and a version in the manifest always has its cut. On
-  // a first creation the marker went first (above, before any output file), so a document with any cut state is already classified as a cut; on later
-  // edits it follows the snapshot.
+  // Publication. The manifest write is the commit point: a crash before it leaves the previous commit in force (the
+  // next load ignores the orphan snapshot and marker), and a version in the manifest always has its cut. On a first
+  // creation the marker went first (above, before any output file), so a document with any cut state is already
+  // classified as a cut; on later edits it follows the snapshot, before the manifest; on an old-style cut (a marker and
+  // no cut version yet) it follows the manifest, because that marker is still the state until a cut version lands.
   atomicWrite(join(dir, cutSnapshotFile(version)), body);
   published("snapshot");
   if (!first) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
@@ -570,10 +571,20 @@ export async function renderCut(dir, cut, opts = {}) {
   published("manifest");
   // An old-style cut (a marker, no cut version yet) is read from its marker until a cut version lands: its new marker
   // goes only after the manifest commits, so a crash in between still reads the old cut, never none.
-  if (first && hadMarker) { atomicWrite(join(dir, CUT_FILE), body); published("marker"); }
+  // The version is committed by then: a failed marker write is not a failed render (the snapshot is the state).
+  if (first && hadMarker) {
+    try { atomicWrite(join(dir, CUT_FILE), body); } catch { /* the next render writes it */ }
+    published("marker");
+  }
   // The bus's own vocabulary (the fork and theme routes announce a version the same way).
   opts.emit?.("wicked.interactive.version.created", versionCreated({ version, parent, kind: "demo" }));
   return { rev: saved.rev, version, parent };
+}
+
+/** An unverified history's style, as its marker kept it (a bad one reads as the default). */
+function markerStyle(marker, title) {
+  if (!marker?.style) return defaultStyle(title);
+  try { return validateStyle({}, title, marker.style); } catch { return defaultStyle(title); }
 }
 
 /** Extract frame-accurate chapter takes from the SAME caption-free browser run. */
@@ -589,13 +600,15 @@ export async function extractTakes(dir, recording, steps, duration, meta, opts =
   }
   if (opts.chapter !== undefined && !existing?.chapters.some((c) => c.id === opts.chapter)) bad("chapter");
   const ids = chapterIds(steps.map((s) => s.label));
-  const changed = existing !== null && (ids.length !== existing.chapters.length || ids.some((id) => !existing.chapters.some((c) => c.id === id)));
+  // The cut's chapters, a dropped one included (its takes stay in the inventory): an unchanged spec is not re-authored.
+  const known = existing === null ? null : new Set([...existing.chapters.map((c) => c.id), ...Object.keys(existing.takes ?? {})]);
+  const changed = known !== null && (ids.length !== known.size || ids.some((id) => !known.has(id)));
   // One chapter re-taken needs the same chapters; a full take of a re-authored spec starts a new cut (its
   // chapters and takes), keeping the style and the rev sequence.
   if (changed && opts.chapter !== undefined) bad("chapters");
   const fresh = existing && !changed ? structuredClone(existing)
     : { rev: existing?.rev ?? (Number.isInteger(unverified?.rev) ? unverified.rev : 0), version: existing?.version ?? null, chapters: [], takes: {},
-        style: existing?.style ?? defaultStyle(meta.title || opts.documentId || "Demo") };
+        style: existing?.style ?? markerStyle(unverified, meta.title || opts.documentId || "Demo") };
   // The recorded app's address, kept for every later re-cut's storyboard link.
   const cut = { ...fresh, url: String(meta.url ?? fresh.url ?? "") };
   // Every take is checked before the first encode, so a bad step leaves no files behind.
@@ -621,7 +634,8 @@ export async function extractTakes(dir, recording, steps, duration, meta, opts =
     const chapter = cut.chapters.find((c) => c.id === id);
     const fields = { take: file, inSec: 0, outSec: seconds, say: s.say || "" };
     if (chapter) Object.assign(chapter, fields);
-    else cut.chapters.push({ id, title: s.label, ...fields });
+    // A chapter the person dropped stays dropped: its new take joins the inventory only (Undo or a restore uses it).
+    else if (changed || existing === null) cut.chapters.push({ id, title: s.label, ...fields });
     added.push({ chapter: id, file, durationSec: seconds });
   }
   const result = await renderCut(dir, cut, opts);
@@ -714,7 +728,10 @@ export async function importCut(dir, body, opts = {}) {
     }
     return await renderCut(dir, cut, opts);
   } catch (e) {
-    for (const [id, file] of moved) renameSync(join(dir, RECORDINGS_DIR, file), importStagePath(dir, id));
+    // Only an import that did not commit gives its files back (a cut version in the manifest names these takes).
+    if (newestCutVersion(loadManifest(dir)) === null) {
+      for (const [id, file] of moved) renameSync(join(dir, RECORDINGS_DIR, file), importStagePath(dir, id));
+    }
     throw e;
   }
 }
