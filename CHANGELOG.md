@@ -4,6 +4,8 @@ All notable changes to `wicked-interactive`. Versions follow [SemVer](https://se
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-11-25
+
 ### Added
 - **One route, one writer for a demo cut (studio#1140, part A).** `POST /api/demo/recut` takes `{expect_head, ops[], request_id?}`:
   at most 20 chapter ops (`chapter-move`, `-rename`, `-trim`, `-take`, `-say`), folded in order inside the document's
